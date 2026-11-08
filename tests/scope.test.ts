@@ -49,8 +49,8 @@ describe('server-side source scope',()=>{
     run=await updateAction(run.id,{action:'graph_review',edgeId,decision:'confirmed'});
     expect(run.graphEvents).toHaveLength(initialCount+1);expect(run.graphEvents!.at(-1)!.edge.status).toBe('confirmed');
     run=await updateAction(run.id,{action:'scope',selectedIds:[selectedIds[0]]});expect(run.graphEvents).toHaveLength(0);expect((await readGraph(run.id)).edges).toHaveLength(0);
-    const raw=await (await database()).query<{payload:{graphEvents:unknown[]}}>('SELECT payload FROM runs WHERE id = $1',[run.id]);
-    expect(raw.rows[0].payload.graphEvents).toHaveLength(initialCount+1);
+    const raw=await (await database()).query('SELECT event FROM graph_events WHERE run_id = $1',[run.id]);
+    expect(raw.rows).toHaveLength(initialCount+1);
     run=await updateAction(run.id,{action:'scope',selectedIds});expect((await readGraph(run.id)).edges).toHaveLength(0);
     await deleteRun(run.id);
   });

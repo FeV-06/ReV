@@ -21,6 +21,15 @@ async function open(): Promise<PGlite> {
     revision INTEGER NOT NULL, approved_at TIMESTAMPTZ NOT NULL,
     payload JSONB NOT NULL, PRIMARY KEY (run_id, revision)
   );
+  CREATE TABLE IF NOT EXISTS graph_events (
+    seq BIGSERIAL PRIMARY KEY, run_id UUID NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    event_id UUID NOT NULL UNIQUE, event JSONB NOT NULL
+  );
+  INSERT INTO graph_events (run_id,event_id,event)
+    SELECT r.id,(e.value->>'id')::uuid,e.value
+    FROM runs r CROSS JOIN LATERAL jsonb_array_elements(COALESCE(r.payload->'graphEvents','[]'::jsonb)) e(value)
+    ON CONFLICT (event_id) DO NOTHING;
+  UPDATE runs SET payload = payload - 'graphEvents' WHERE payload ? 'graphEvents';
   UPDATE runs SET payload = jsonb_set(jsonb_set(payload, '{state}', '"failed"'::jsonb), '{warnings}', COALESCE(payload->'warnings','[]'::jsonb) || '["Run was interrupted by a server restart; retry generation or import."]'::jsonb), version = version + 1
   WHERE payload->>'state' IN ('importing','reconstructing');`);
   return db;
@@ -31,7 +40,7 @@ export async function createRun(run: Run): Promise<void> {
 }
 export async function getVersionedRun(id: string): Promise<{run: Run; version: number} | null> {
   const db = await database();
-  const result = await db.query<{payload: Run; version: string|number}>('SELECT payload, version FROM runs WHERE id = $1', [id]);
+  const result = await db.query<{payload: Run; version: string|number}>(`SELECT r.payload || jsonb_build_object('graphEvents', COALESCE((SELECT jsonb_agg(g.event ORDER BY g.seq) FROM graph_events g WHERE g.run_id=r.id),'[]'::jsonb)) AS payload, r.version FROM runs r WHERE r.id = $1`, [id]);
   const row = result.rows[0];
   return row ? {run: row.payload, version: Number(row.version)} : null;
 }
@@ -44,14 +53,19 @@ export async function listRuns(): Promise<Pick<Run, 'id'|'createdAt'|'recipient'
 
 export async function compareAndUpdate(run: Run, expectedVersion: number): Promise<number> {
   const db = await database();
-  const result = await db.query<{version: string|number}>('UPDATE runs SET payload = $2::jsonb, version = version + 1 WHERE id = $1 AND version = $3 RETURNING version', [run.id, JSON.stringify(run), expectedVersion]);
-  if (!result.rows[0]) throw new Error('Run changed in another request. Reload before continuing.');
-  return Number(result.rows[0].version);
+  return db.transaction(async tx=>{
+    const {graphEvents,...payload}=run;
+    const result = await tx.query<{version: string|number}>('UPDATE runs SET payload = $2::jsonb, version = version + 1 WHERE id = $1 AND version = $3 RETURNING version', [run.id, JSON.stringify(payload), expectedVersion]);
+    if (!result.rows[0]) throw new Error('Run changed in another request. Reload before continuing.');
+    for(const event of graphEvents||[]) await tx.query('INSERT INTO graph_events (run_id,event_id,event) VALUES ($1,$2,$3::jsonb) ON CONFLICT (event_id) DO NOTHING',[run.id,event.id,JSON.stringify(event)]);
+    return Number(result.rows[0].version);
+  });
 }
 export async function approveRun(run: Run, expectedVersion: number): Promise<void> {
   const db = await database();
   await db.transaction(async tx => {
-    const result = await tx.query('UPDATE runs SET payload = $2::jsonb, version = version + 1 WHERE id = $1 AND version = $3 RETURNING version', [run.id, JSON.stringify(run), expectedVersion]);
+    const {graphEvents,...payload}=run;
+    const result = await tx.query('UPDATE runs SET payload = $2::jsonb, version = version + 1 WHERE id = $1 AND version = $3 RETURNING version', [run.id, JSON.stringify(payload), expectedVersion]);
     if (!result.rows.length) throw new Error('Run changed in another request. Reload before continuing.');
     await tx.query('INSERT INTO approved_revisions (run_id, revision, approved_at, payload) VALUES ($1, $2, $3, $4::jsonb)', [run.id, run.revision, new Date().toISOString(), JSON.stringify(run)]);
   });

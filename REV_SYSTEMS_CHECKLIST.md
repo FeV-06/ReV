@@ -175,7 +175,7 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 - [x] Define evidence-linked `supports`, `implements`, `supersedes` and candidate `contradicts` relationships, each proposed and reviewable.
 - [ ] **PARTIAL:** Choose and implement the graph representation/storage. A TypeScript graph projection from per-run events exists; persistent project-level graph storage remains open.
 - [ ] **PARTIAL:** Enforce or otherwise handle DAG invariants, cycles, duplicate nodes and graph migrations. Confirmed causal edges reject cycles/duplicates; migration and complete node invariants remain open.
-- [ ] **PARTIAL:** Define an actual append-only event log and replay/rebuild semantics before calling the architecture event-sourced. Per-run relationship events replay under a scope epoch, but are stored in the mutable run payload rather than a standalone append-only event log.
+- [ ] **PARTIAL:** Define an actual append-only event log and replay/rebuild semantics before calling the architecture event-sourced. Relationship events now live in a separate append-only `graph_events` table and replay under a scope epoch; full project event sourcing and migration/restart coverage remain open (`tests/graph-store.test.ts`).
 
 ## 5.2 Graph construction & browsing
 
