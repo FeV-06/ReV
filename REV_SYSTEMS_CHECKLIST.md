@@ -274,7 +274,7 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 - [x] Mark an edited claim unverified and remove its prior citations rather than silently claiming the edit is supported.
 - [x] Save a review and require explicit approval of the current revision.
 - [x] Store approved snapshots and invalidate the current approval when review changes.
-- [ ] Allow the reviewer to attach or repair citations for an edited item through the UI.
+- [ ] **PARTIAL:** Allow the reviewer to attach or repair citations for an edited item through the UI. A server action validates exact selected-source quotes and invalidates approval (`tests/citation-flow.test.ts`); no UI control exists yet.
 - [ ] Add distinct confirm/reject/redact states and granular redaction, rather than only excluding an item.
 - [ ] Add reviewer identity, audit history and collaborative review after authentication is designed.
 

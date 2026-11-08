@@ -6,6 +6,7 @@ import { artifactSchema, draftSchema, importSchema, itemSchema, graphEdgeTypeSch
 import { callCore } from '@/lib/server/core';
 import { appendEdge, buildGraph, reviewEdge, suggestEvidenceEdges } from '@/lib/server/graph';
 import { detectGaps } from '@/lib/server/gaps';
+import { attachVerifiedCitations } from '@/lib/server/citations';
 import { approveRun, compareAndUpdate, createRun, deleteRun, getRun, getVersionedRun, listRuns } from '@/lib/server/store';
 
 const idSchema = z.string().uuid();
@@ -18,6 +19,7 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('graph_review'), edgeId:idSchema, decision:z.enum(['confirmed','rejected']) }),
   z.object({ action: z.literal('detect_gaps') }),
   z.object({ action: z.literal('detect_divergence'), selectedIds:z.array(idSchema).min(2).max(500),confirmRemote:z.literal(true) }),
+  z.object({ action: z.literal('attach_citations'), itemId:idSchema, selectedIds:z.array(idSchema).min(1).max(500), references:z.array(z.object({sourceId:idSchema,quote:z.string().min(1).max(4000)})).min(1).max(10) }),
   z.object({ action: z.literal('answer_gap'), gapId:idSchema, answer:z.string().trim().min(1).max(4000), selectedIds:z.array(idSchema).min(1).max(500) }),
   z.object({ action: z.literal('approve'), confirmAuthorisation: z.literal(true) }),
 ]);
@@ -138,6 +140,12 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
     run.items=[...run.items,...candidates];
     run.graphEvents=[...(run.graphEvents||[]),...suggestEvidenceEdges({...run,items:candidates})];
     run.state='needs_review';run.revision++;run.approvedRevision=null;
+  } else if (args.action === 'attach_citations') {
+    if(!['needs_review','approved'].includes(run.state))throw new Error('Generate a draft before reviewing citations');
+    if(args.selectedIds.slice().sort().join(',')!==run.selectedIds.slice().sort().join(','))throw new Error('Source scope changed; reload before attaching citations');
+    const repaired=attachVerifiedCitations(run,args.itemId,args.references);
+    run.items=run.items.map(i=>i.id===args.itemId?repaired:i);run.graphEpoch=randomUUID();
+    run.graphEvents=[...(run.graphEvents||[]),...suggestEvidenceEdges(run)];run.state='needs_review';run.revision++;run.approvedRevision=null;
   } else if (args.action === 'detect_gaps') {
     if(!['needs_review','approved'].includes(run.state))throw new Error('Generate a draft before detecting gaps');
     const detected=detectGaps(run);const answered=(run.gaps||[]).filter(g=>g.status==='answered');
