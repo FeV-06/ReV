@@ -39,3 +39,18 @@ test('synthetic source selection, review, approval and scoped export', async ({p
   await expect.poll(()=>page.evaluate(async(id)=>(await fetch(`/api/runs/${id}/export`,{headers:{'X-Rev-Request':'1'}})).status,run.id)).toBe(400);
   const cross=await page.request.get('http://127.0.0.1:3077/api/runs',{headers:{origin:'https://evil.example','X-Rev-Request':'1'}}); expect(cross.status()).toBe(403);
 });
+
+test('gap answer becomes a new unselected source and invalidates approval', async({page})=>{
+  await page.goto('http://127.0.0.1:3077/');
+  const result=await page.evaluate(async()=>{
+    const headers={'X-Rev-Request':'1','Content-Type':'application/json'};
+    async function call(id:string,body:object){const r=await fetch(`/api/runs/${id}`,{method:'PATCH',headers,body:JSON.stringify(body)});const data=await r.json();if(!r.ok)throw new Error(data.error);return data.run;}
+    let run=(await (await fetch('/api/runs',{method:'POST',headers,body:JSON.stringify({recipient:'Gap test',fixture:true})})).json()).run;
+    const selectedIds=[run.artifacts[0].id];run=await call(run.id,{action:'scope',selectedIds});run=await call(run.id,{action:'generate',selectedIds,acceptPartial:false,confirmAuthorisation:true,fixture:true});
+    run=await call(run.id,{action:'save',items:run.items.map((item:object)=>({...item,needsClarification:true}))});run=await call(run.id,{action:'detect_gaps'});run=await call(run.id,{action:'approve',confirmAuthorisation:true});
+    const gapId=run.gaps[0].id;run=await call(run.id,{action:'answer_gap',gapId,answer:'Ari owns cache recovery.',selectedIds});
+    const response=await fetch(`/api/runs/${run.id}/export`,{headers});
+    return {state:run.state,selected:run.selectedIds.length,answer:run.artifacts.some((a:{kind:string;text:string})=>a.kind==='review_answer'&&a.text==='Ari owns cache recovery.'),status:response.status};
+  });
+  expect(result).toEqual({state:'awaiting_scope_confirmation',selected:0,answer:true,status:400});
+});

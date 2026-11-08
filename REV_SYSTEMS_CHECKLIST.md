@@ -200,10 +200,10 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 ## 6.2 Gap interrogator
 
 - [x] Allow a reviewer to mark a generated handover item as needing clarification.
-- [ ] Detect missing explanations, orphaned decisions or unsupported code changes from available evidence.
-- [ ] Generate a small targeted set of exit questions for the departing person.
-- [ ] Capture answers through a reviewable interface and store them as new, cited source material.
-- [ ] Re-run review and approval after answers or source scope change.
+- [ ] **PARTIAL:** Detect missing explanations, orphaned decisions or unsupported code changes. `detect_gaps` currently identifies reviewer-flagged or unverified items; orphaned code/decision detection remains open.
+- [ ] **PARTIAL:** Generate targeted exit questions. `detect_gaps` generates deterministic questions for flagged items; relevance and quality are not benchmarked.
+- [ ] **PARTIAL:** Capture answers through a reviewable interface and store them as new, cited source material. Backend action creates an unselected reviewer-answer artifact; frontend answer UI and end-to-end citation verification remain open.
+- [x] Invalidate current review and approval when a gap answer changes the source set, requiring the operator to reselect scope and regenerate (`tests/gaps.test.ts`).
 - [ ] **LATER:** Add an optional Slack delivery channel/bot after access and security design.
 
 ---

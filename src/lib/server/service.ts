@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { artifactSchema, draftSchema, importSchema, itemSchema, graphEdgeTypeSchema, type Artifact, type Item, type Run } from '@/lib/contracts';
 import { callCore } from '@/lib/server/core';
 import { appendEdge, buildGraph, reviewEdge, suggestEvidenceEdges } from '@/lib/server/graph';
+import { detectGaps } from '@/lib/server/gaps';
 import { approveRun, compareAndUpdate, createRun, deleteRun, getRun, getVersionedRun, listRuns } from '@/lib/server/store';
 
 const idSchema = z.string().uuid();
@@ -15,6 +16,8 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('save'), items: z.array(itemSchema).max(100) }),
   z.object({ action: z.literal('graph_propose'), fromId:idSchema, toId:idSchema, type:graphEdgeTypeSchema, evidenceSourceIds:z.array(idSchema).min(1).max(50) }),
   z.object({ action: z.literal('graph_review'), edgeId:idSchema, decision:z.enum(['confirmed','rejected']) }),
+  z.object({ action: z.literal('detect_gaps') }),
+  z.object({ action: z.literal('answer_gap'), gapId:idSchema, answer:z.string().trim().min(1).max(4000), selectedIds:z.array(idSchema).min(1).max(500) }),
   z.object({ action: z.literal('approve'), confirmAuthorisation: z.literal(true) }),
 ]);
 
@@ -124,6 +127,19 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
     if (!['needs_review','approved'].includes(run.state)) throw new Error('Generate a draft before editing relationships');
     const event=args.action==='graph_propose'?appendEdge(run,{fromId:args.fromId,toId:args.toId,type:args.type,evidenceSourceIds:args.evidenceSourceIds}):reviewEdge(run,args.edgeId,args.decision);
     run.graphEvents=[...(run.graphEvents||[]),event];run.state='needs_review';run.revision++;run.approvedRevision=null;
+  } else if (args.action === 'detect_gaps') {
+    if(!['needs_review','approved'].includes(run.state))throw new Error('Generate a draft before detecting gaps');
+    const detected=detectGaps(run);const answered=(run.gaps||[]).filter(g=>g.status==='answered');
+    run.gaps=[...answered,...detected];run.state='needs_review';run.revision++;run.approvedRevision=null;
+  } else if (args.action === 'answer_gap') {
+    if(!['needs_review','approved'].includes(run.state))throw new Error('Generate a draft before answering gaps');
+    const gap=(run.gaps||[]).find(g=>g.id===args.gapId&&g.status==='open');
+    if(!gap||!run.items.some(i=>i.id===gap.itemId&&!i.excluded))throw new Error('Open gap not found');
+    if(args.selectedIds.slice().sort().join(',')!==run.selectedIds.slice().sort().join(','))throw new Error('Source scope changed; reload before answering');
+    const now=new Date().toISOString();const sourceId=randomUUID();
+    run.artifacts.push({id:sourceId,kind:'review_answer',externalId:sourceId,text:args.answer,author:'Reviewer',timestamp:now,url:null,sourceRef:`Reviewer answer ${sourceId}`});
+    run.gaps=(run.gaps||[]).map(g=>g.id===gap.id?{...g,status:'answered',answerSourceId:sourceId}:g);
+    run.selectedIds=[];run.items=[];run.graphEpoch=randomUUID();run.state='awaiting_scope_confirmation';run.revision++;run.approvedRevision=null;
   } else {
     if (run.state !== 'needs_review') throw new Error('Only a reviewed draft can be approved');
     run.state = 'approved'; run.approvedRevision = run.revision;
@@ -133,7 +149,8 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
 }
 async function readRawRun(id:string):Promise<Run> { idSchema.parse(id); const run=await getRun(id); if(!run) throw new Error('Run not found'); return run; }
 function publicRun(run:Run):Run {
-  return {...run,graphEvents:(run.graphEvents||[]).filter(e=>!run.graphEpoch||e.epoch===run.graphEpoch)};
+  const visibleIds=new Set(run.items.filter(i=>!i.excluded).map(i=>i.id));
+  return {...run,graphEvents:(run.graphEvents||[]).filter(e=>!run.graphEpoch||e.epoch===run.graphEpoch),gaps:(run.gaps||[]).filter(g=>visibleIds.has(g.itemId))};
 }
 export async function readRun(id: string): Promise<Run> { return publicRun(await readRawRun(id)); }
 export async function readGraph(id: string) { return buildGraph(await readRawRun(id)); }
