@@ -58,7 +58,7 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 
 # 2. Source connection, ingestion & normalization
 
-**MVP evidence:** `crates/rev-core/src/main.rs` (`github_import`, `normalize_github`, `slack_import`), `src/lib/server/service.ts`, `fixtures/`, Rust tests. `VERIFICATION.md` records one read-only public GitHub smoke test.
+**MVP evidence:** `crates/rev-core/src/github.rs`, `crates/rev-core/src/main.rs` (`normalize_github`, `slack_import`), `src/lib/server/service.ts`, `fixtures/`, Rust tests. A live `octocat/Hello-World` read returned 3 commits, 200 PRs, 200 review comments, 200 discussion comments and 3 commit patches, with explicit pagination warnings.
 
 ## 2.1 GitHub connector
 
@@ -66,10 +66,10 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 - [x] Import commit messages/metadata and pull-request titles, bodies and metadata through the GitHub REST API.
 - [x] Support an optional server-configured GitHub token for repositories it can access; avoid storing the token in a run.
 - [x] Preserve commit/PR IDs, available author/time and GitHub source references.
-- [x] Report GitHub API errors and when additional pages exist beyond the first 100 commits or PRs.
-- [ ] Fetch complete paginated history with explicit limits, resume/retry and rate-limit handling.
-- [ ] Import actual repository contents, changed files, commit diffs and branch state.
-- [ ] Import PR review comments, discussion threads, issues and task/ownership data.
+- [x] Report GitHub API errors and when additional pages exist beyond the configured 200-record category limit.
+- [ ] **PARTIAL:** Fetch complete paginated history with explicit limits, resume/retry and rate-limit handling. Two pages per category and explicit cap/rate-limit warnings work; resume and bounded retries remain open.
+- [ ] **PARTIAL:** Import actual repository contents, changed files, commit diffs and branch state. Bounded GitHub commit patches are now imported; full files and branch state remain open. See `crates/rev-core/src/github.rs` and `github::tests`.
+- [ ] **PARTIAL:** Import PR review comments, discussion threads, issues and task/ownership data. GitHub review and issue comments are now imported; full issue records and task/ownership data remain open.
 - [ ] Provide GitHub App/OAuth authorization and source-permission mapping; token input alone is not recipient authorization.
 - [ ] **VERIFY:** Test private-repository access, expired tokens, empty repositories and realistic rate-limit/error cases with authorized data.
 

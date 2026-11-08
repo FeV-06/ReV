@@ -8,6 +8,8 @@ use std::io::{Cursor, Read, Write};
 use std::time::Duration;
 use uuid::Uuid;
 
+mod github;
+
 const MAX_ZIP: usize = 10 * 1024 * 1024;
 const MAX_EXPANDED: u64 = 40 * 1024 * 1024;
 const MAX_FILES: usize = 2_000;
@@ -123,72 +125,6 @@ fn valid_repo(repo: &str) -> bool {
                 && p.bytes()
                     .all(|c| c.is_ascii_alphanumeric() || b"-_.".contains(&c))
         })
-}
-
-pub async fn github_import(repo: &str, token: Option<&str>) -> Result<ImportResult> {
-    if !valid_repo(repo) {
-        bail!("Repository must be owner/name using letters, numbers, dash, underscore or dot");
-    }
-    let client = reqwest::Client::builder()
-        .user_agent("ReV-handover/0.1")
-        .timeout(Duration::from_secs(25))
-        .redirect(reqwest::redirect::Policy::none())
-        .build()?;
-    let mut data: Vec<Vec<Value>> = Vec::new();
-    let mut warnings = Vec::new();
-    for (category, query) in [
-        ("commits", "per_page=100"),
-        ("pulls", "state=all&per_page=100"),
-    ] {
-        let url = format!("https://api.github.com/repos/{repo}/{category}?{query}");
-        let mut req = client
-            .get(url)
-            .header("Accept", "application/vnd.github+json");
-        if let Some(t) = token.filter(|s| !s.is_empty()) {
-            req = req.bearer_auth(t);
-        }
-        match req.send().await {
-            Ok(resp) if resp.status().is_success() => {
-                if resp
-                    .headers()
-                    .get("link")
-                    .and_then(|v| v.to_str().ok())
-                    .is_some_and(|v| v.contains("rel=\"next\""))
-                {
-                    warnings.push(format!(
-                        "{category}: limited to the first 100 records; more are available"
-                    ));
-                }
-                match resp.json::<Vec<Value>>().await {
-                    Ok(v) => data.push(v),
-                    Err(_) => {
-                        warnings.push(format!("{category}: GitHub returned invalid data"));
-                        data.push(Vec::new());
-                    }
-                }
-            }
-            Ok(resp) => {
-                warnings.push(format!(
-                    "{category}: GitHub returned HTTP {} (check access and rate limits)",
-                    resp.status().as_u16()
-                ));
-                data.push(Vec::new());
-            }
-            Err(_) => {
-                warnings.push(format!("{category}: GitHub request failed or timed out"));
-                data.push(Vec::new());
-            }
-        }
-    }
-    let mut result = normalize_github(repo, &data[0], &data[1]);
-    result.warnings.extend(warnings);
-    if result.artifacts.is_empty() {
-        bail!(
-            "No GitHub activity imported. {}",
-            result.warnings.join("; ")
-        );
-    }
-    Ok(result)
 }
 
 pub fn slack_import(bytes: &[u8]) -> Result<ImportResult> {
@@ -436,9 +372,10 @@ pub async fn generate(
 pub async fn handle(input: Value) -> Result<Value> {
     match input.get("op").and_then(Value::as_str).unwrap_or("") {
         "github" => Ok(serde_json::to_value(
-            github_import(
+            github::import(
                 input.get("repo").and_then(Value::as_str).unwrap_or(""),
                 std::env::var("REV_GITHUB_TOKEN").ok().as_deref(),
+                &github::GitHubConfig::default(),
             )
             .await?,
         )?),
@@ -472,7 +409,27 @@ pub async fn handle(input: Value) -> Result<Value> {
             if !valid_repo(repo) {
                 bail!("Invalid fixture repo");
             }
-            Ok(serde_json::to_value(normalize_github(repo, commits, prs))?)
+            let mut normalized = normalize_github(repo, commits, prs);
+            let empty = Vec::new();
+            let reviews = input
+                .get("reviewComments")
+                .and_then(Value::as_array)
+                .unwrap_or(&empty);
+            let discussions = input
+                .get("discussionComments")
+                .and_then(Value::as_array)
+                .unwrap_or(&empty);
+            let mut comments = github::normalize_discussions(repo, reviews, discussions);
+            normalized.artifacts.append(&mut comments.artifacts);
+            normalized.warnings.append(&mut comments.warnings);
+            if let Some(details) = input.get("commitDetails").and_then(Value::as_array) {
+                for detail in details {
+                    let mut patches = github::normalize_commit_details(repo, detail);
+                    normalized.artifacts.append(&mut patches.artifacts);
+                    normalized.warnings.append(&mut patches.warnings);
+                }
+            }
+            Ok(serde_json::to_value(normalized)?)
         }
         "generate" => {
             let sources: Vec<Artifact> =

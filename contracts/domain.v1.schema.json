@@ -17,6 +17,9 @@
           "enum": [
             "github_commit",
             "github_pr",
+            "github_review_comment",
+            "github_discussion_comment",
+            "github_commit_patch",
             "slack_message"
           ]
         },
@@ -208,6 +211,9 @@
                 "enum": [
                   "github_commit",
                   "github_pr",
+                  "github_review_comment",
+                  "github_discussion_comment",
+                  "github_commit_patch",
                   "slack_message"
                 ]
               },
@@ -419,6 +425,9 @@
                 "enum": [
                   "github_commit",
                   "github_pr",
+                  "github_review_comment",
+                  "github_discussion_comment",
+                  "github_commit_patch",
                   "slack_message"
                 ]
               },

@@ -3,9 +3,9 @@ import { test, expect } from '@playwright/test';
 test('synthetic source selection, review, approval and scoped export', async ({page}) => {
   await page.goto('http://127.0.0.1:3077/');
   await page.getByRole('button', {name:'Try synthetic example'}).click();
-  const sources=page.locator('label.source'); await expect(sources).toHaveCount(6);
-  await sources.nth(0).locator('input').check();
-  await sources.nth(3).locator('input').check();
+  const sources=page.locator('label.source'); await expect(sources).toHaveCount(9);
+  await sources.filter({hasText:'Add Redis session cache and fallback'}).locator('input').check();
+  await sources.filter({hasText:'Decision: use Redis for sessions. The fallback still needs tests.'}).locator('input').check();
   await page.getByLabel('I confirm the recipient may receive all selected material.').check();
   await page.getByRole('button', {name:'Generate draft'}).click();
   await expect(page.getByRole('heading',{name:'Make it yours'})).toBeVisible();
@@ -25,7 +25,7 @@ test('synthetic source selection, review, approval and scoped export', async ({p
   await expect(page.getByRole('button',{name:/Incoming engineer.*approved/}).first()).toBeVisible();
   await page.getByRole('button',{name:/Incoming engineer.*approved/}).first().click();
   await expect(page.getByRole('button',{name:'Download Markdown'})).toBeEnabled();
-  await page.locator('label.source').nth(3).locator('input').uncheck();
+  await sources.filter({hasText:'Decision: use Redis for sessions. The fallback still needs tests.'}).locator('input').uncheck();
   await expect(page.getByRole('heading',{name:'Make it yours'})).toHaveCount(0);
   await expect.poll(()=>page.evaluate(async(id)=>(await fetch(`/api/runs/${id}/export`,{headers:{'X-Rev-Request':'1'}})).status,run.id)).toBe(400);
   const cross=await page.request.get('http://127.0.0.1:3077/api/runs',{headers:{origin:'https://evil.example','X-Rev-Request':'1'}}); expect(cross.status()).toBe(403);

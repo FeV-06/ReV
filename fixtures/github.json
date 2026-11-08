@@ -6,5 +6,14 @@
   ],
   "prs": [
     {"number":42,"title":"Add session cache","body":"Redis stores sessions; fallback tests remain incomplete.","state":"open","user":{"login":"maya"},"created_at":"2026-11-02T09:00:00Z"}
+  ],
+  "reviewComments": [
+    {"id":4201,"body":"Decision: use Redis for sessions because it supports shared storage. Fallback tests are still needed.","html_url":"https://github.com/fictional-labs/session-service/pull/42#discussion_r4201","user":{"login":"maya"},"created_at":"2026-11-02T09:10:00Z"}
+  ],
+  "discussionComments": [
+    {"id":4202,"body":"Open work: add tests for cache outage recovery before launch.","html_url":"https://github.com/fictional-labs/session-service/issues/42#issuecomment-4202","user":{"login":"ari"},"created_at":"2026-11-02T09:20:00Z"}
+  ],
+  "commitDetails": [
+    {"sha":"aaa1111111111111111111111111111111111111","commit":{"author":{"name":"Maya","date":"2026-11-01T09:00:00Z"}},"files":[{"filename":"src/session.ts","status":"modified","patch":"@@ -1 +1,2 @@\n-import { MemoryStore } from './memory';\n+import { RedisStore } from './redis';\n+export const sessions = new RedisStore();"}]}
   ]
 }

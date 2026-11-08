@@ -34,7 +34,7 @@ Copy `.env.example` to `.env.local`, then configure:
 
 Restart ReV after changing the environment. The operator must explicitly consent before selected text is sent to the configured provider. Only configure endpoints you trust. The app does not send source data to a model until the recipient scope is selected and confirmed.
 
-GitHub import covers up to the first 100 commits and 100 PRs; it reports pagination/partial failures. Slack accepts standard channel/day JSON exports in a ZIP (10 MiB compressed, 40 MiB declared expanded, 500 messages). Source code, diffs, PR comments, Slack APIs, graph building, automated ACL mapping and continuous monitoring are not implemented. Model inputs are limited to 120 KB; select fewer sources if exceeded. A source quote match validates a reference, not the truth of a claim. Human review is required.
+GitHub import covers up to 200 commits, PRs, review comments and issue comments per category, plus available patches for up to the first 10 commits; it reports pagination, missing patches and partial failures. Slack accepts standard channel/day JSON exports in a ZIP (10 MiB compressed, 40 MiB declared expanded, 500 messages). Full source files, full history, live Slack APIs, graph building, automated ACL mapping and continuous monitoring are not implemented. Model inputs are limited to 120 KB; select fewer sources if exceeded. A source quote match validates a reference, not the truth of a claim. Human review is required.
 
 ## Verify
 

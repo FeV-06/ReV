@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const artifactSchema = z.object({
-  id: z.string().uuid(), kind: z.enum(['github_commit', 'github_pr', 'slack_message']),
+  id: z.string().uuid(), kind: z.enum(['github_commit', 'github_pr', 'github_review_comment', 'github_discussion_comment', 'github_commit_patch', 'slack_message']),
   externalId: z.string(), text: z.string(), author: z.string().nullable(),
   timestamp: z.string().nullable(), url: z.string().url().nullable(), sourceRef: z.string(),
 });
