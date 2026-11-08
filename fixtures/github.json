@@ -1,0 +1,10 @@
+{
+  "repo": "fictional-labs/session-service",
+  "commits": [
+    {"sha":"aaa1111111111111111111111111111111111111","commit":{"message":"Add Redis session cache and fallback","author":{"name":"Maya","date":"2026-11-01T09:00:00Z"}}},
+    {"sha":"bbb2222222222222222222222222222222222222","commit":{"message":"Document cache recovery procedure","author":{"name":"Maya","date":"2026-11-03T08:00:00Z"}}}
+  ],
+  "prs": [
+    {"number":42,"title":"Add session cache","body":"Redis stores sessions; fallback tests remain incomplete.","state":"open","user":{"login":"maya"},"created_at":"2026-11-02T09:00:00Z"}
+  ]
+}

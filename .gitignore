@@ -1,0 +1,14 @@
+node_modules/
+.next/
+target/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.rev-data/
+*.zip
+!fixtures/slack-fixture.zip
+.DS_Store

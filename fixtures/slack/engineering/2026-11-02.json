@@ -1,0 +1,1 @@
+[{"user":"U_MAYA","ts":"1793610000.000001","text":"Decision: use Redis for sessions. The fallback still needs tests."},{"user":"U_ARI","ts":"1793610100.000002","thread_ts":"1793610000.000001","text":"Open question: who owns recovery if the cache is unavailable?"}]

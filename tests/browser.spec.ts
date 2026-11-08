@@ -1,0 +1,27 @@
+import { test, expect } from '@playwright/test';
+
+test('synthetic source selection, review, approval and scoped export', async ({page}) => {
+  await page.goto('http://127.0.0.1:3077/');
+  await page.getByRole('button', {name:'Try synthetic example'}).click();
+  const sources=page.locator('label.source'); await expect(sources).toHaveCount(6);
+  await sources.nth(0).locator('input').check();
+  await sources.nth(3).locator('input').check();
+  await page.getByLabel('I confirm the recipient may receive all selected material.').check();
+  await page.getByRole('button', {name:'Generate draft'}).click();
+  await expect(page.getByRole('heading',{name:'Make it yours'})).toBeVisible();
+  await expect(page.locator('.review-item')).toHaveCount(2);
+  await page.locator('.review-item').nth(0).getByLabel('Exclude').check();
+  await page.getByRole('button',{name:'Save review'}).click();
+  await expect(page.getByRole('button',{name:'Approve current revision'})).toBeDisabled();
+  await page.getByLabel('I confirm the selected sources are authorised for this recipient.').check();
+  await page.getByRole('button',{name:'Approve current revision'}).click();
+  await expect(page.getByRole('button',{name:'Download Markdown'})).toBeEnabled();
+  const run=await page.evaluate(async()=>{ const list=await (await fetch('/api/runs',{headers:{'X-Rev-Request':'1'}})).json(); return list.runs[0]; });
+  const output=await page.evaluate(async(id)=>await (await fetch(`/api/runs/${id}/export`,{headers:{'X-Rev-Request':'1'}})).text(),run.id);
+  expect(output).toContain('Decision: use Redis for sessions');
+  expect(output).not.toContain('RESTRICTED_FIXTURE');
+  expect(output).not.toContain('Add Redis session cache and fallback');
+  await page.reload();
+  await expect(page.getByRole('button',{name:/Incoming engineer.*approved/}).first()).toBeVisible();
+  const cross=await page.request.get('http://127.0.0.1:3077/api/runs',{headers:{origin:'https://evil.example','X-Rev-Request':'1'}}); expect(cross.status()).toBe(403);
+});

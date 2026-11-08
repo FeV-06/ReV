@@ -1,0 +1,32 @@
+{
+  "name": "rev-handover",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.15.1",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1 --port 3077",
+    "build": "next build",
+    "start": "next start --hostname 127.0.0.1 --port 3077",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:rust": "cargo test --workspace",
+    "verify": "pnpm typecheck && pnpm test && pnpm test:rust && pnpm build"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.15",
+    "next": "16.4.5",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "5.1.0"
+  }
+}

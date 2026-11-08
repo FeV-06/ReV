@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rev.local/schemas/import-result.v1.json",
+  "title": "ReV import result version 1",
+  "type": "object",
+  "required": ["artifacts", "warnings"],
+  "properties": {
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "artifacts": { "type": "array", "items": { "$ref": "#/$defs/artifact" } }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": ["id", "kind", "externalId", "text", "author", "timestamp", "url", "sourceRef"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "kind": { "enum": ["github_commit", "github_pr", "slack_message"] },
+        "externalId": { "type": "string" },
+        "text": { "type": "string" },
+        "author": { "type": ["string", "null"] },
+        "timestamp": { "type": ["string", "null"] },
+        "url": { "type": ["string", "null"] },
+        "sourceRef": { "type": "string" }
+      }
+    }
+  }
+}
