@@ -10,8 +10,9 @@ export function detectGaps(run:Run):Gap[] {
   return run.items.filter(item=>!item.excluded&&visible.has(item.id)).flatMap((item:Item)=>{
     const flagged=item.needsClarification||item.verification==='unverified'||item.citations.length===0;
     if(!flagged)return [];
-    const prior=existing.find(g=>g.itemId===item.id&&g.status==='open');if(prior)return [prior];
     const sourceIds=item.citations.map(c=>c.sourceId).filter(id=>scope.has(id));
-    return [{id:randomUUID(),itemId:item.id,sourceIds,question:`What is the missing context or supporting evidence for: ${item.text.slice(0,240)}?`,status:'open' as const}];
+    const question=`What is the missing context or supporting evidence for: ${item.text.slice(0,240)}?`;
+    const prior=existing.find(g=>g.itemId===item.id&&g.status==='open'&&g.question===question&&g.sourceIds.slice().sort().join(',')===sourceIds.slice().sort().join(','));if(prior)return [prior];
+    return [{id:randomUUID(),itemId:item.id,sourceIds,question,status:'open' as const}];
   });
 }

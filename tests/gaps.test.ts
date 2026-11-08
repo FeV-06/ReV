@@ -9,6 +9,9 @@ describe('reviewer gap workflow',()=>{
   run=await updateAction(run.id,{action:'scope',selectedIds});run=await updateAction(run.id,{action:'generate',selectedIds,acceptPartial:false,confirmAuthorisation:true,fixture:true});
   run=await updateAction(run.id,{action:'save',items:run.items.map(item=>({...item,needsClarification:true}))});
   run=await updateAction(run.id,{action:'detect_gaps'});expect(run.gaps).toHaveLength(1);
+  const oldQuestion=run.gaps![0].question;
+  run=await updateAction(run.id,{action:'save',items:run.items.map(item=>({...item,text:'Edited question context',needsClarification:true}))});
+  run=await updateAction(run.id,{action:'detect_gaps'});expect(run.gaps![0].question).not.toBe(oldQuestion);expect(run.gaps![0].question).toContain('Edited question context');
   await expect(updateAction(run.id,{action:'answer_gap',gapId:run.gaps![0].id,answer:'x',selectedIds:[run.artifacts[1].id]})).rejects.toThrow('scope changed');
   run=await updateAction(run.id,{action:'approve',confirmAuthorisation:true});expect(exportMarkdown(run)).toContain('clarification needed');
   const gapId=run.gaps![0].id;

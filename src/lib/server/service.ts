@@ -149,8 +149,8 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
 }
 async function readRawRun(id:string):Promise<Run> { idSchema.parse(id); const run=await getRun(id); if(!run) throw new Error('Run not found'); return run; }
 function publicRun(run:Run):Run {
-  const visibleIds=new Set(run.items.filter(i=>!i.excluded).map(i=>i.id));
-  return {...run,graphEvents:(run.graphEvents||[]).filter(e=>!run.graphEpoch||e.epoch===run.graphEpoch),gaps:(run.gaps||[]).filter(g=>visibleIds.has(g.itemId))};
+  const visibleIds=new Set(run.items.filter(i=>!i.excluded).map(i=>i.id));const scope=new Set(run.selectedIds);
+  return {...run,graphEvents:(run.graphEvents||[]).filter(e=>(!run.graphEpoch||e.epoch===run.graphEpoch)&&e.edge.evidenceSourceIds.every(id=>scope.has(id))),gaps:(run.gaps||[]).filter(g=>visibleIds.has(g.itemId)&&g.sourceIds.every(id=>scope.has(id)))};
 }
 export async function readRun(id: string): Promise<Run> { return publicRun(await readRawRun(id)); }
 export async function readGraph(id: string) { return buildGraph(await readRawRun(id)); }
