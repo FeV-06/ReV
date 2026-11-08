@@ -9,6 +9,7 @@ use std::time::Duration;
 use uuid::Uuid;
 
 mod github;
+mod risk;
 
 const MAX_ZIP: usize = 10 * 1024 * 1024;
 const MAX_EXPANDED: u64 = 40 * 1024 * 1024;
@@ -391,6 +392,24 @@ pub async fn handle(input: Value) -> Result<Value> {
                 &STANDARD
                     .decode(encoded)
                     .context("Invalid archive encoding")?,
+            )?)?)
+        }
+        "analyze_local_risk" => {
+            let repo = input
+                .get("path")
+                .and_then(Value::as_str)
+                .context("Missing local repository path")?;
+            let emails: Vec<String> = serde_json::from_value(
+                input
+                    .get("emails")
+                    .cloned()
+                    .context("Missing author emails")?,
+            )?;
+            let max_files = input.get("maxFiles").and_then(Value::as_u64).unwrap_or(100) as usize;
+            Ok(serde_json::to_value(risk::analyze(
+                std::path::Path::new(repo),
+                &emails,
+                max_files,
             )?)?)
         }
         "normalize_fixture" => {

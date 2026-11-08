@@ -210,14 +210,14 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 
 # 7. Ownership, risk & bus-factor intelligence
 
-**Status:** Candidate categories for risks/dependencies exist; the ownership/blast-radius engine and heatmap do not. Original spec §3.
+**Status:** An experimental local-repository blame/churn analyzer exists in `crates/rev-core/src/risk.rs` and is exercised by `tests/risk.test.ts`; it is not yet connected to the web handover or heatmap. Original spec §3.
 
 ## 7.1 Repository ownership analysis
 
-- [ ] Calculate contributor ownership from Git history/blame with documented limitations and author alias handling.
-- [ ] Measure recent churn and available test coverage without inventing missing data.
-- [ ] Define and validate a transparent fragility/bus-factor metric; the original formula requires coverage data not currently ingested.
-- [ ] Identify modules where departing-person knowledge or ownership is concentrated.
+- [ ] **PARTIAL:** Calculate contributor ownership from Git blame with documented limitations and manually supplied email aliases; renamed-file and binary handling require further tests.
+- [ ] **PARTIAL:** Measure recent churn and available test coverage without inventing missing data. The local analyzer computes 90-day churn and reports coverage as unknown; coverage ingestion remains open.
+- [ ] **PARTIAL:** Define and validate a transparent fragility/bus-factor metric. An ownership × logarithmic churn heuristic is unit-tested but not calibrated against real incidents.
+- [ ] **PARTIAL:** Identify files where departing-person ownership is concentrated; connect the tested local analyzer to the selected-source handover workflow.
 
 ## 7.2 Handover risk presentation
 
