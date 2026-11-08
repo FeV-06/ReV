@@ -188,12 +188,12 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 
 # 6. Divergence, uncertainty & knowledge gaps
 
-**Status:** Basic unverified/clarification flags exist; automated semantic divergence and gap analysis do not. Original spec §3 and `ROUND2.md`.
+**Status:** Basic unverified/clarification flags and an opt-in, model-assisted divergence candidate action exist. The divergence path is tested with a local fake provider, not a validated real-world accuracy benchmark. Original spec §3 and `ROUND2.md`.
 
 ## 6.1 Divergence detection
 
-- [ ] Identify candidate disagreements between documented decisions, later discussions and implementation.
-- [ ] Attach both sides' source evidence and make ambiguity visible.
+- [ ] **PARTIAL:** Identify candidate disagreements between documented decisions, discussions and implementation. An opt-in model action proposes possible conflicts from selected sources; its quality and recall are unmeasured.
+- [x] Require at least two distinct matching source references for returned model divergence candidates and mark them for clarification (`tests/provider.test.ts`, `tests/divergence.test.ts`).
 - [ ] Have a human confirm, reject or clarify a proposed contradiction; do not automatically declare a semantic conflict as fact.
 - [ ] Evaluate precision and recall on examples with real contradictions, benign changes and incomplete context.
 

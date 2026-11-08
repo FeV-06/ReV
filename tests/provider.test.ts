@@ -44,4 +44,14 @@ describe('provider protocol and failure paths (local fake server, not live infer
     const r=await core({op:'generate',sources:[source]},{REV_MODEL_PROVIDER:'openai',REV_MODEL_BASE_URL:'http://127.0.0.1:1/v1',REV_MODEL_NAME:'test-model'});
     expect(r.ok).toBe(false);expect(r.error).toContain('failed');
   });
+  it('only returns divergence candidates with two distinct valid source references',async()=>{
+    const second={...source,id:randomUUID(),externalId:'2',text:'Decision: use memory cache'};
+    await withProvider(()=>({choices:[{message:{content:JSON.stringify({items:[
+      {category:'risk',text:'Possible conflict',evidence:[{sourceId:source.id,quote:'Decision: Redis'},{sourceId:second.id,quote:'Decision: use memory cache'}]},
+      {category:'risk',text:'Unsupported conflict',evidence:[{sourceId:source.id,quote:'Decision: Redis'},{sourceId:second.id,quote:'fabricated'}]},
+    ]})}}]}),async base=>{
+      const r=await core({op:'detect_divergence',sources:[source,second]},{REV_MODEL_PROVIDER:'openai',REV_MODEL_BASE_URL:base,REV_MODEL_NAME:'test-model'});
+      expect(r.ok).toBe(true);expect(r.data.items).toHaveLength(1);expect(r.data.items[0].citations).toHaveLength(2);
+    });
+  });
 });
