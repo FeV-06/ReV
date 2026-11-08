@@ -1,0 +1,42 @@
+{
+  "metadata": {
+    "name": "ReV synthetic classification pilot",
+    "purpose": "Safety and performance pilot only; not representative of real projects, not training data, and not an independent human-labeled benchmark.",
+    "labels": ["decision", "open_work", "risk", "other"],
+    "notes": "Synthetic examples written for this evaluation. Some multi-label inputs are intentionally ambiguous; labels represent a primary category only."
+  },
+  "examples": [
+    {"id":"s01","text":"Decision: use Redis for session storage because it is shared across nodes.","label":"decision"},
+    {"id":"s02","text":"We agreed to switch to PostgreSQL after comparing the alternatives.","label":"decision"},
+    {"id":"s03","text":"The team chose JWT tokens rather than cookie sessions.","label":"decision"},
+    {"id":"s04","text":"For now, authentication will remain in the gateway.","label":"decision"},
+    {"id":"s05","text":"Approved: deploy the worker as a separate service.","label":"decision"},
+    {"id":"s06","text":"We rejected Redis and retained the existing memory cache.","label":"decision"},
+    {"id":"s07","text":"TODO: add recovery tests before deployment.","label":"open_work"},
+    {"id":"s08","text":"Please document how to rotate the signing key.","label":"open_work"},
+    {"id":"s09","text":"The migration is unfinished; someone must backfill historical rows.","label":"open_work"},
+    {"id":"s10","text":"Follow up: assign a maintainer to the billing module.","label":"open_work"},
+    {"id":"s11","text":"Create a rollback script for the new schema next sprint.","label":"open_work"},
+    {"id":"s12","text":"Outstanding: the payment timeout still needs a regression test.","label":"open_work"},
+    {"id":"s13","text":"Risk: a cache outage can log out all users.","label":"risk"},
+    {"id":"s14","text":"The untested migration might corrupt historical account records.","label":"risk"},
+    {"id":"s15","text":"If the key expires, production authentication will stop working.","label":"risk"},
+    {"id":"s16","text":"The service has no failover and a single node failure blocks checkout.","label":"risk"},
+    {"id":"s17","text":"We may lose queued events during a restart.","label":"risk"},
+    {"id":"s18","text":"The rate limiter has an unverified bypass that could affect the API.","label":"risk"},
+    {"id":"s19","text":"Thanks everyone, see you at the meeting tomorrow.","label":"other"},
+    {"id":"s20","text":"The build completed at 10:30.","label":"other"},
+    {"id":"s21","text":"Hello, is anyone available?","label":"other"},
+    {"id":"s22","text":"The project is called Atlas.","label":"other"},
+    {"id":"s23","text":"Meeting moved from Tuesday to Wednesday.","label":"other"},
+    {"id":"s24","text":"Here is the repository link: https://example.invalid/repo","label":"other"},
+    {"id":"s25","text":"Should we use Redis? No decision has been made.","label":"other"},
+    {"id":"s26","text":"Do not deploy yet; the migration can break logins.","label":"risk"},
+    {"id":"s27","text":"Tests are complete; no further action is required.","label":"other"},
+    {"id":"s28","text":"We decided not to migrate the database this quarter.","label":"decision"},
+    {"id":"s29","text":"Please check whether the backup job is enabled.","label":"open_work"},
+    {"id":"s30","text":"A hypothetical outage could affect the system, but we have no evidence of a current defect.","label":"risk"},
+    {"id":"s31","text":"The comments say decision, but this message only quotes the word decision.","label":"other"},
+    {"id":"s32","text":"No known risk remains after the recovery test passed.","label":"other"}
+  ]
+}

@@ -132,9 +132,9 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 
 ## 3.3 Laya / alternative classifier research — not a selected implementation
 
-- [ ] **DECIDE:** Define which ReV decisions actually benefit from classification: e.g. evidence category, importance or escalation to deeper analysis.
+- [ ] **PARTIAL / DECIDE:** Candidate use is classification of decision, open work, risk and other. A 32-example synthetic pilot ran against Laya and a keyword baseline (`evals/classification/PILOT.md`); real usefulness remains undecided.
 - [ ] Build a representative, permission-safe labeled dataset and a held-out evaluation split.
-- [ ] Measure unmodified Laya and relevant alternative classifiers against simple baselines on per-label quality, calibration, latency, language and long-input/truncation behavior.
+- [ ] **PARTIAL:** Measure unmodified Laya and alternatives against baselines on representative held-out data. A small self-labeled synthetic CPU pilot measured the base checkpoint and keyword rules, but is not representative and does not establish calibration, multilingual or long-input quality.
 - [ ] **DECIDE:** Choose whether Laya, another model, a hybrid, or no dedicated classifier is justified by results.
 - [ ] **LATER:** Fine-tune or train a classifier only if the baseline evaluation and available labeled data justify it; re-evaluate on held-out data.
 - [ ] If adopted, expose a replaceable classifier interface and model/version settings. Classifiers must not grant source access or certify claims as true.
