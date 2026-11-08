@@ -246,7 +246,7 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 - [ ] Add authenticated users, workspaces and recipient identities.
 - [ ] Map actual GitHub/Slack source permissions to recipient access; handle permission changes and revocation.
 - [ ] Design role/clearance policies and server-side authorization for every read, preview, search, graph and export path.
-- [ ] Propagate restrictions to derived claims, citations, graph edges and cached artifacts without leaking hidden material.
+- [ ] **PARTIAL:** Propagate restrictions to derived claims, citations, graph edges and cached artifacts. `access.ts` has a tested pure fail-closed projection, but it is not wired to authenticated routes or real source permissions and provides no current access control (`tests/access.test.ts`).
 - [ ] Implement and test graph pruning/projection and any re-bridging against inference or metadata leaks.
 - [ ] Build a role-policy simulator and audit log **after** actual access enforcement exists.
 - [ ] Conduct threat modeling and independent security testing before any multi-user or public-hosted deployment.
@@ -258,7 +258,7 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 - [x] Bound request body reads and model responses; sanitize exported text against active markup.
 - [x] Test invalid ZIP and traversal handling, cross-origin requests and selected output-escaping cases.
 - [ ] Add systematic prompt-injection/XSS, secret-leak, hostile archive, URL and resource-exhaustion tests.
-- [ ] Complete a security review; explicitly verify residual risks and unsupported deployment environments.
+- [ ] **PARTIAL:** Complete a security review; `docs/SECURITY_MODEL.md` records the current trust boundary and limitations, but no independent security audit has been performed.
 - [ ] Configure a real private vulnerability-reporting channel before inviting public vulnerability reports.
 
 ---
