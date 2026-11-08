@@ -1,17 +1,29 @@
-# MVP verification status
+# Round 2 MVP verification
 
-The implementation is an early local prototype, not yet fully compliant with the fundamental MVP specification. Verified locally: Next.js production build and TypeScript checks; Rust unit tests; synthetic Slack ZIP import and path traversal rejection; live read-only public GitHub import; browser flow through scope selection, fixture generation, review, approval and export; one configured OpenAI-compatible model generated evidence-linked items from a synthetic Slack export. The live model test is opt-in.
+**Verdict: runnable local MVP for a Round 2 demonstration; the full original specification is not complete.** The judge needs access to this repository or a packaged copy and their own Node/pnpm/Rust environment. The current app must not be exposed publicly: it is local and single-operator, not an authenticated hosted service.
 
-## Remaining release work
+## Evidence from local execution
 
-- Run state is stored as a JSON document in PGLite; approved revisions are snapshotted separately and writes use a versioned compare-and-swap. The persistence unit test checks stale-write rejection and snapshot retention. Full derivation provenance and additional multi-process/concurrent request tests are still needed.
-- Selection changes made in the browser are not persisted until generation. The browser disables export/approval if selection differs, but server-side scope change and invalidation are not independently modeled. Implement a server-enforced scope transition and concurrent transition tests.
-- Rust data structures and TypeScript Zod definitions are manually synchronized; the JSON Schema is only provided for import results. Add comprehensive shared contract generation/validation and tests for all domain types.
-- Provider implementation has been exercised with a live OpenAI-compatible endpoint; Anthropic-compatible request path has not been tested against a real Anthropic-compatible service.
-- The structured reconstruction may omit details or return unsupported material. There is no measured model quality benchmark, per-classifier evaluation, retry policy, or automatic semantic entailment verification.
-- Public CI configuration is written but has not run on GitHub. Fresh-clone reproducibility and second-contributor setup review are not yet verified.
-- A project license and a private security reporting contact have not been chosen. Do not publish as an open-source project until the owner selects a license and configures reporting.
-- GitHub/Slack adapters have limited coverage and no live Slack workspace permissions; classification/ACLs are not automated. Local machine/browser compromise and access to previously exported Markdown are outside the local operator boundary.
-- More work remains for strict resource caps on inbound HTTP bodies and archive decompression, concurrency and crash recovery, secure artifact deletion, real access controls, accessibility tests, and durable stage-level progress.
+- A clean local clone of commit `17b2efe` installed with `pnpm install --frozen-lockfile --ignore-scripts`, built the Rust core, and passed `pnpm verify` (TypeScript, generated-contract check, 18 TypeScript tests, 6 Rust tests and Next.js production build).
+- On that fresh clone, two Playwright checks passed: synthetic handover including scope-change invalidation, and a basic mobile/keyboard check. The live-model test was skipped in this credential-free run.
+- An approved synthetic handover was created in the fresh clone; after stopping and restarting its server, its Markdown export remained accessible with the same revision and evidence.
+- A separate live-model browser run against a configured OpenAI-compatible endpoint passed: a fictional Slack export yielded 2 reviewable items and an excluded synthetic leadership source was absent from the final export. No production project data was sent.
+- A read-only import from the public `octocat/Hello-World` GitHub repository returned 3 commits and 100 PRs, and correctly warned of additional PR pages.
+- Automated coverage includes server-side scope invalidation, derivation-source recording, stale/concurrent approval checks, source-span verification, bad ZIP/path traversal, bounded request bodies, invalid model JSON and unavailable providers. Both provider protocol shapes were tested against a local fake server; this is **not** a real Anthropic API test.
 
-The parent spec and its MVP release gate remain the source of truth for all missing acceptance criteria. No claim is made that the full gate passes.
+## What the MVP does
+
+On demand: import GitHub activity and/or a Slack export, select recipient-authorized sources, generate structured candidates using a configured model, validate quoted references, review/edit/exclude, approve, and export Markdown. PGLite persists local state and approved snapshots. Source selection changes invalidate the current draft and approval on the server.
+
+## Limitations and unverified acceptance criteria
+
+- **Access:** Source and recipient authorization are manual operator decisions. There are no authenticated recipient accounts, automated GitHub/Slack ACLs or source revocation checks. Existing downloaded exports cannot be revoked.
+- **Evidence and AI:** Matching an excerpt validates a reference, not whether a claim is supported. Generated output can omit information or be wrong. There is no classifier evaluation, fine-tuning or semantic-verification guarantee.
+- **Coverage:** Only the first 100 commits and PRs are imported; diffs, code contents, PR comments, Slack live APIs and other source types are not supported. Limits and partial coverage are surfaced.
+- **Security and robustness:** Untrusted text is not executed and the app has origin/header checks, bounded JSON reads, capped ZIP entries and citation checks; this is not a comprehensive security audit or a guarantee against prompt injection. Multi-process behavior, broader failure and accessibility cases, secure physical erasure, and every original acceptance criterion are not fully verified.
+- **Provider verification:** OpenAI-compatible inference was tested against a real configured service with synthetic input. Anthropic-compatible request/response handling was tested with a fake local server only.
+- **Distribution:** Fresh-clone checks were performed locally by the same operator; a second independent contributor and GitHub-hosted CI have not yet been verified. No GitHub repository has been pushed or submitted in this work.
+- **License:** Deferred at the user's direction for Round 2; none is included. No license grant should be assumed. A real private vulnerability reporting channel must be chosen before public distribution.
+- **Future scope:** Causal graph, automated divergence detection, bus-factor heatmap, exit interrogator, continuous processing, Supabase sync and Laya/classifier integration are not implemented.
+
+See `ROUND2.md` for a truthful demonstration script and proposed, not yet submitted, Round 3 improvements. The larger acceptance criteria remain in `~/REV_FUNDAMENTAL_MVP_SPEC.md`.
