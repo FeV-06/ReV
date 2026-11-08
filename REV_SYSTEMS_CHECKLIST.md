@@ -167,19 +167,19 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 
 # 5. Causal knowledge graph & decision history
 
-**Status:** **Not implemented in the MVP.** Current typed candidates and citations are a foundation, not an event-sourced DAG. Original spec §§2–3 and `ROADMAP.md`.
+**Status:** An initial scope-filtered graph is implemented after the MVP. It replays per-run relationship events and requires review; it is not yet the full original event-sourced project graph. Evidence: `src/lib/server/graph.ts`, `src/app/api/runs/[id]/graph/route.ts`, `tests/graph.test.ts`, `tests/scope.test.ts`, `tests/browser.spec.ts`.
 
 ## 5.1 Graph data model
 
-- [ ] Define source, decision, blocker/debt, contact, ownership and dependency node types.
-- [ ] Define evidence-supported relationship types such as `PRODUCES`, `IMPLEMENTS`, `SUPERSEDES` and candidate `CONTRADICTS`.
-- [ ] Choose and implement the graph representation/storage; `petgraph` was proposed but is not present in the current core.
-- [ ] Enforce or otherwise explicitly handle DAG invariants, cycles, duplicate nodes and graph migrations.
-- [ ] Define an actual append-only event log and replay/rebuild semantics before calling the architecture event-sourced.
+- [ ] **PARTIAL:** Define source, decision, blocker/debt, contact, ownership and dependency node types. Source and generated-item category nodes exist; richer ownership/debt entities remain.
+- [x] Define evidence-linked `supports`, `implements`, `supersedes` and candidate `contradicts` relationships, each proposed and reviewable.
+- [ ] **PARTIAL:** Choose and implement the graph representation/storage. A TypeScript graph projection from per-run events exists; persistent project-level graph storage remains open.
+- [ ] **PARTIAL:** Enforce or otherwise handle DAG invariants, cycles, duplicate nodes and graph migrations. Confirmed causal edges reject cycles/duplicates; migration and complete node invariants remain open.
+- [ ] **PARTIAL:** Define an actual append-only event log and replay/rebuild semantics before calling the architecture event-sourced. Per-run relationship events replay under a scope epoch, but are stored in the mutable run payload rather than a standalone append-only event log.
 
 ## 5.2 Graph construction & browsing
 
-- [ ] Correlate discussions, decisions and code with inspectable evidence; distinguish known links from model-suggested links.
+- [ ] **PARTIAL:** Correlate discussions, decisions and code with inspectable evidence; distinguish known links from model-suggested links. Citation-based support edges are proposed automatically; semantic multi-source relationships remain open.
 - [ ] Track decision history, supersession, unresolved discussions and project-state changes.
 - [ ] Render an interactive timeline/graph with node selection, path traversal and evidence previews (`@xyflow/react` was proposed).
 - [ ] Test ambiguous associations, conflicting claims, missing sources and graph rebuilds; never infer causality merely from timestamps.

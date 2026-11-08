@@ -10,6 +10,15 @@ test('synthetic source selection, review, approval and scoped export', async ({p
   await page.getByRole('button', {name:'Generate draft'}).click();
   await expect(page.getByRole('heading',{name:'Make it yours'})).toBeVisible();
   await expect(page.locator('.review-item')).toHaveCount(2);
+  const graphResult=await page.evaluate(async()=>{
+    const headers={'X-Rev-Request':'1','Content-Type':'application/json'};
+    const list=await (await fetch('/api/runs',{headers})).json();const id=list.runs[0].id;
+    const graph=await (await fetch(`/api/runs/${id}/graph`,{headers})).json();
+    const edge=graph.graph.edges[0];
+    const reviewed=await fetch(`/api/runs/${id}`,{method:'PATCH',headers,body:JSON.stringify({action:'graph_review',edgeId:edge.id,decision:'confirmed'})});
+    return {id,edges:graph.graph.edges.length,status:reviewed.status};
+  });
+  expect(graphResult.edges).toBeGreaterThan(0);expect(graphResult.status).toBe(200);
   await page.locator('.review-item').nth(0).getByLabel('Exclude').check();
   await page.getByRole('button',{name:'Save review'}).click();
   await expect(page.getByRole('button',{name:'Approve current revision'})).toBeDisabled();

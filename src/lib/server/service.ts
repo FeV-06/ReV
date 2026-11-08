@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { artifactSchema, draftSchema, importSchema, itemSchema, type Artifact, type Item, type Run } from '@/lib/contracts';
+import { artifactSchema, draftSchema, importSchema, itemSchema, graphEdgeTypeSchema, type Artifact, type Item, type Run } from '@/lib/contracts';
 import { callCore } from '@/lib/server/core';
+import { appendEdge, buildGraph, reviewEdge, suggestEvidenceEdges } from '@/lib/server/graph';
 import { approveRun, compareAndUpdate, createRun, deleteRun, getRun, getVersionedRun, listRuns } from '@/lib/server/store';
 
 const idSchema = z.string().uuid();
@@ -12,6 +13,8 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('scope'), selectedIds: z.array(idSchema).max(500) }),
   z.object({ action: z.literal('generate'), selectedIds: z.array(idSchema).min(1).max(500), acceptPartial: z.boolean(), confirmAuthorisation: z.literal(true), confirmRemote: z.boolean().default(false), fixture: z.boolean().default(false) }),
   z.object({ action: z.literal('save'), items: z.array(itemSchema).max(100) }),
+  z.object({ action: z.literal('graph_propose'), fromId:idSchema, toId:idSchema, type:graphEdgeTypeSchema, evidenceSourceIds:z.array(idSchema).min(1).max(50) }),
+  z.object({ action: z.literal('graph_review'), edgeId:idSchema, decision:z.enum(['confirmed','rejected']) }),
   z.object({ action: z.literal('approve'), confirmAuthorisation: z.literal(true) }),
 ]);
 
@@ -85,10 +88,10 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
     if (args.selectedIds.some(id => !validIds.has(id)) || args.selectedIds.length !== new Set(args.selectedIds).size) throw new Error('Invalid source selection');
     const changed = [...args.selectedIds].sort().join(',') !== [...run.selectedIds].sort().join(',');
     if (changed) {
-      run.selectedIds = args.selectedIds; run.items = []; run.approvedRevision = null; run.revision++; run.state = 'awaiting_scope_confirmation';
+      run.selectedIds = args.selectedIds; run.items = []; run.graphEpoch = randomUUID(); run.approvedRevision = null; run.revision++; run.state = 'awaiting_scope_confirmation';
       await compareAndUpdate(run, version);
     }
-    return run;
+    return publicRun(run);
   } else if (args.action === 'generate') {
     if (!['awaiting_scope_confirmation','needs_review','approved','failed'].includes(run.state)) throw new Error('Run is already processing');
     if (run.warnings.length && !args.acceptPartial) throw new Error('Acknowledge incomplete source coverage before continuing');
@@ -98,29 +101,41 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
     if (args.selectedIds.length !== new Set(args.selectedIds).size) throw new Error('Duplicate source selection');
     if (!args.fixture && !args.confirmRemote) throw new Error('Confirm the selected material may be sent to the configured provider');
     if (args.selectedIds.slice().sort().join(',') !== run.selectedIds.slice().sort().join(',')) throw new Error('Source scope changed; save it before generation');
-    run.items = []; run.approvedRevision = null; run.revision++; run.state = 'reconstructing'; run.acceptedPartial = args.acceptPartial; version = await compareAndUpdate(run, version);
+    run.items = []; run.graphEpoch = randomUUID(); run.approvedRevision = null; run.revision++; run.state = 'reconstructing'; run.acceptedPartial = args.acceptPartial; version = await compareAndUpdate(run, version);
     try {
       const sources = run.artifacts.filter(a => args.selectedIds.includes(a.id)).map(a => artifactSchema.parse(a));
       const result = draftSchema.parse(await callCore({op:args.fixture ? 'fixture_generate' : 'generate', sources}));
       run.items = result.items.map(item => ({...item, derivationSourceIds: [...run.selectedIds]})); run.mode = args.fixture ? 'fixture' : 'model'; run.state = 'needs_review';
+      run.graphEvents=[...(run.graphEvents||[]),...suggestEvidenceEdges(run)];
     } catch (error) { run.state = 'failed'; run.warnings.push(`Generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`); await compareAndUpdate(run, version); throw error; }
   } else if (args.action === 'save') {
     if (!['needs_review','approved'].includes(run.state)) throw new Error('Generate a draft before reviewing');
     if (args.items.length !== run.items.length || new Set(args.items.map(i => i.id)).size !== run.items.length) throw new Error('Review must contain every draft item exactly once');
     const original = new Map(run.items.map(i => [i.id, i]));
+    const semanticChanged = args.items.some(i=>{const old=original.get(i.id);return !old||i.text!==old.text||i.excluded!==old.excluded;});
     run.items = args.items.map(i => {
       const old = original.get(i.id); if (!old) throw new Error('Unknown item');
       const changed = i.text !== old.text;
       return {...old, text:i.text, excluded:i.excluded, needsClarification:i.needsClarification, citations: changed ? [] : old.citations, verification: changed ? 'unverified' : old.verification} as Item;
     });
+    if(semanticChanged) run.graphEpoch=randomUUID();
     run.state = 'needs_review'; run.revision++; run.approvedRevision = null;
+  } else if (args.action === 'graph_propose' || args.action === 'graph_review') {
+    if (!['needs_review','approved'].includes(run.state)) throw new Error('Generate a draft before editing relationships');
+    const event=args.action==='graph_propose'?appendEdge(run,{fromId:args.fromId,toId:args.toId,type:args.type,evidenceSourceIds:args.evidenceSourceIds}):reviewEdge(run,args.edgeId,args.decision);
+    run.graphEvents=[...(run.graphEvents||[]),event];run.state='needs_review';run.revision++;run.approvedRevision=null;
   } else {
     if (run.state !== 'needs_review') throw new Error('Only a reviewed draft can be approved');
     run.state = 'approved'; run.approvedRevision = run.revision;
-    await approveRun(run, version); return run;
+    await approveRun(run, version); return publicRun(run);
   }
-  await compareAndUpdate(run, version); return run;
+  await compareAndUpdate(run, version); return publicRun(run);
 }
-export async function readRun(id: string): Promise<Run> { idSchema.parse(id); const run = await getRun(id); if (!run) throw new Error('Run not found'); return run; }
+async function readRawRun(id:string):Promise<Run> { idSchema.parse(id); const run=await getRun(id); if(!run) throw new Error('Run not found'); return run; }
+function publicRun(run:Run):Run {
+  return {...run,graphEvents:(run.graphEvents||[]).filter(e=>!run.graphEpoch||e.epoch===run.graphEpoch)};
+}
+export async function readRun(id: string): Promise<Run> { return publicRun(await readRawRun(id)); }
+export async function readGraph(id: string) { return buildGraph(await readRawRun(id)); }
 export { listRuns, deleteRun };
 export function clientError(error: unknown): string { return error instanceof z.ZodError ? 'Invalid request data' : error instanceof Error ? error.message : 'Operation failed'; }
