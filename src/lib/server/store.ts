@@ -2,6 +2,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import type { Run } from '@/lib/contracts';
+import type { RunArchive } from '@/lib/server/archive';
 
 const globalDb = globalThis as typeof globalThis & { revDb?: Promise<PGlite> };
 export function database(): Promise<PGlite> {
@@ -73,4 +74,14 @@ export async function approveRun(run: Run, expectedVersion: number): Promise<voi
 export async function deleteRun(id: string): Promise<void> {
   const db = await database();
   await db.query('DELETE FROM runs WHERE id = $1', [id]);
+}
+
+export async function exportArchive():Promise<RunArchive>{
+  const db=await database();
+  return db.transaction(async tx=>{
+    const runs=await tx.query<{payload:Run}>('SELECT payload FROM runs ORDER BY created_at,id');
+    const approved=await tx.query<{run_id:string;revision:number;approved_at:Date|string;payload:Run}>('SELECT run_id,revision,approved_at,payload FROM approved_revisions ORDER BY run_id,revision');
+    const events=await tx.query<{run_id:string;event:RunArchive["events"][number]["event"]}>('SELECT run_id,event FROM graph_events ORDER BY seq');
+    return {version:1,runs:runs.rows.map(r=>r.payload),approved:approved.rows.map(r=>({runId:r.run_id,revision:r.revision,approvedAt:new Date(r.approved_at).toISOString(),payload:r.payload})),events:events.rows.map(r=>({runId:r.run_id,event:r.event}))};
+  });
 }

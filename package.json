@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.15.1",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1 --port 3077",
     "build": "next build",
@@ -19,6 +21,7 @@
   "dependencies": {
     "@electric-sql/pglite": "0.5.15",
     "next": "16.4.5",
+    "pg": "8.23.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "zod": "4.6.7"
@@ -26,6 +29,7 @@
   "devDependencies": {
     "@playwright/test": "1.65.0",
     "@types/node": "^22.0.0",
+    "@types/pg": "8.23.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "typescript": "^5.9.0",

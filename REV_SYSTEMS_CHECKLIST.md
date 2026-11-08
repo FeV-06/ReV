@@ -305,8 +305,8 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 
 ## 10.2 Supabase and collaboration — later
 
-- [ ] Implement a Supabase/PostgreSQL storage adapter and migrations.
-- [ ] Define and test PGLite↔Supabase data transfer, conflict handling and compatibility rather than assuming it.
+- [ ] **PARTIAL:** Implement a Supabase/PostgreSQL storage adapter and migrations. Explicit snapshot import into an empty PostgreSQL target exists (`src/lib/server/archive.ts`); the application does not use PostgreSQL as its runtime store, and real Supabase remains untested.
+- [ ] **PARTIAL:** Define and test PGLite↔Supabase data transfer, conflict handling and compatibility. A one-way snapshot import to PostgreSQL 17 was exercised with synthetic data and refuses nonempty targets (`tests/archive.test.ts`); reverse transfer, live sync and actual Supabase validation remain open.
 - [ ] Add multi-tenant RLS and real authenticated access boundaries.
 - [ ] Add realtime collaborative review and optional `pgvector` search with permission-aware indexing.
 
