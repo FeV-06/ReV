@@ -11,7 +11,9 @@ export async function callCore(op: object): Promise<unknown> {
     const timer = setTimeout(() => { child.kill(); finish(new Error('Core operation timed out')); }, 150_000);
     function finish(error?: Error, value?: unknown) { if (finished) return; finished = true; clearTimeout(timer); if (error) reject(error); else resolve(value); }
     child.on('error', () => finish(new Error('Rust core unavailable. Run cargo build first.')));
-    child.stdout.on('data', (chunk: Buffer) => { output += chunk.toString('utf8'); if (output.length > 20_000_000) { child.kill(); finish(new Error('Core response exceeded limit')); } });
+    child.stdin.on('error', () => finish(new Error('Rust core closed its input unexpectedly')));
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => { output += chunk; if (output.length > 20_000_000) { child.kill(); finish(new Error('Core response exceeded limit')); } });
     child.on('close', (code) => {
       if (code !== 0) return finish(new Error('Rust core failed'));
       try { const result = resultSchema.parse(JSON.parse(output)); if (!result.ok) return finish(new Error(result.error)); finish(undefined, result.data); }

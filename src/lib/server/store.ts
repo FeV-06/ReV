@@ -20,7 +20,9 @@ async function open(): Promise<PGlite> {
     run_id UUID NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
     revision INTEGER NOT NULL, approved_at TIMESTAMPTZ NOT NULL,
     payload JSONB NOT NULL, PRIMARY KEY (run_id, revision)
-  );`);
+  );
+  UPDATE runs SET payload = jsonb_set(jsonb_set(payload, '{state}', '"failed"'::jsonb), '{warnings}', COALESCE(payload->'warnings','[]'::jsonb) || '["Run was interrupted by a server restart; retry generation or import."]'::jsonb), version = version + 1
+  WHERE payload->>'state' IN ('importing','reconstructing');`);
   return db;
 }
 export async function createRun(run: Run): Promise<void> {
@@ -39,10 +41,7 @@ export async function listRuns(): Promise<Pick<Run, 'id'|'createdAt'|'recipient'
   const result = await db.query<{payload: Run}>('SELECT payload FROM runs ORDER BY created_at DESC LIMIT 50');
   return result.rows.map(({payload}) => ({ id: payload.id, createdAt: payload.createdAt, recipient: payload.recipient, state: payload.state }));
 }
-export async function updateRun(run: Run): Promise<void> {
-  const db = await database();
-  await db.query('UPDATE runs SET payload = $2::jsonb, version = version + 1 WHERE id = $1', [run.id, JSON.stringify(run)]);
-}
+
 export async function compareAndUpdate(run: Run, expectedVersion: number): Promise<number> {
   const db = await database();
   const result = await db.query<{version: string|number}>('UPDATE runs SET payload = $2::jsonb, version = version + 1 WHERE id = $1 AND version = $3 RETURNING version', [run.id, JSON.stringify(run), expectedVersion]);

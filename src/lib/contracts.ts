@@ -13,9 +13,15 @@ export const itemSchema = z.object({
   text: z.string().min(1).max(4000), citations: z.array(citationSchema),
   verification: z.enum(['validated_reference', 'unverified', 'needs_review']),
   excluded: z.boolean(), needsClarification: z.boolean(),
+  derivationSourceIds: z.array(z.string().uuid()).optional(),
 });
 export type Item = z.infer<typeof itemSchema>;
 export const importSchema = z.object({ artifacts: z.array(artifactSchema), warnings: z.array(z.string()) });
 export const draftSchema = z.object({ items: z.array(itemSchema), mode: z.string().optional() });
-export type RunState = 'importing' | 'awaiting_scope_confirmation' | 'reconstructing' | 'needs_review' | 'approved' | 'failed';
-export type Run = { id: string; recipient: string; createdAt: string; state: RunState; artifacts: Artifact[]; warnings: string[]; selectedIds: string[]; items: Item[]; mode: string | null; revision: number; approvedRevision: number | null; acceptedPartial: boolean };
+export const modelEvidenceSchema = z.object({sourceId:z.string().uuid(),quote:z.string()});
+export const modelCandidateSchema = z.object({category:itemSchema.shape.category,text:z.string().min(1).max(4000),evidence:z.array(modelEvidenceSchema).max(10)});
+export const modelResponseSchema = z.object({items:z.array(modelCandidateSchema).max(100)});
+export const runStateSchema = z.enum(['importing','awaiting_scope_confirmation','reconstructing','needs_review','approved','failed']);
+export const runSchema = z.object({ id:z.string().uuid(), recipient:z.string(), createdAt:z.string(), state:runStateSchema, artifacts:z.array(artifactSchema), warnings:z.array(z.string()), selectedIds:z.array(z.string().uuid()), items:z.array(itemSchema), mode:z.string().nullable(), revision:z.number().int().nonnegative(), approvedRevision:z.number().int().nonnegative().nullable(), acceptedPartial:z.boolean() });
+export type RunState = z.infer<typeof runStateSchema>;
+export type Run = z.infer<typeof runSchema>;

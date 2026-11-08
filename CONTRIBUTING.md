@@ -10,11 +10,11 @@ cargo build --workspace
 pnpm verify
 ```
 
-Run `pnpm dev` in one terminal and `pnpm exec playwright test` in another for the browser workflow. The example fixtures are synthetic. Do not present fixture-generated content as model inference.
+Run `pnpm exec playwright install chromium` once, then `pnpm dev` in one terminal and `pnpm exec playwright test` in another for the browser workflow. Set `REV_CHROMIUM_PATH` to use an existing Chromium executable. The example fixtures are synthetic. Do not present fixture-generated content as model inference.
 
 ## Extension boundaries
 
-- Source import and normalization: `crates/rev-core/src/main.rs` and `contracts/import-result.v1.schema.json`.
+- Source import and normalization: `crates/rev-core/src/main.rs` and `contracts/domain.v1.schema.json`. Zod definitions in `src/lib/contracts.ts` generate the schema with `pnpm contracts:generate`; Rust tests validate cross-language outputs against it.
 - Provider adapters and evidence validation: Rust core `generate` / `validate_candidates`.
 - Persistence and state transitions: `src/lib/server/store.ts` and `service.ts`.
 - UI: `src/components/HandoverWorkspace.tsx`.

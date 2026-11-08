@@ -19,14 +19,21 @@ export default function HandoverWorkspace() {
   async function refresh() { const data=await api('/api/runs'); setRuns(data.runs); }
   useEffect(()=> { refresh().catch(e=>setError(e.message)); },[]);
   function display(r:Run) { setRun(r); setSelected(r.selectedIds); setItems(r.items); setAuthorised(false); setRemote(false); setPartial(false); }
-  async function perform(fn:()=>Promise<void>) { setBusy(true); setError(''); try { await fn(); await refresh(); } catch(e) { setError(e instanceof Error ? e.message : 'Operation failed'); } finally { setBusy(false); } }
+  async function perform(fn:()=>Promise<void>) { setBusy(true); setError(''); try { await fn(); await refresh(); } catch(e) { setError(e instanceof Error ? e.message : 'Operation failed'); if (run) { try { const latest=await api(`/api/runs/${run.id}`); display(latest.run); await refresh(); } catch {} } } finally { setBusy(false); } }
   async function create(fixture:boolean) { await perform(async()=>{
     if (file && file.size > 10*1024*1024) throw new Error('Slack ZIP exceeds 10 MiB');
     const zipBase64=!fixture && file ? await fileAsBase64(file) : undefined;
     const result=await api('/api/runs',{method:'POST',body:JSON.stringify({recipient,repo:fixture?undefined:repo || undefined,zipBase64,fixture})}); display(result.run);
   }); }
   async function patch(body:object) { if(!run)return; await perform(async()=> { const d=await api(`/api/runs/${run.id}`,{method:'PATCH',body:JSON.stringify(body)}); display(d.run); }); }
-  function toggle(id:string) { setSelected(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id]); setAuthorised(false); }
+  async function toggle(id:string) {
+    if (!run || busy) return;
+    const next=selected.includes(id)?selected.filter(x=>x!==id):[...selected,id];
+    setSelected(next); setBusy(true); setError(''); setAuthorised(false);
+    try { const d=await api(`/api/runs/${run.id}`,{method:'PATCH',body:JSON.stringify({action:'scope',selectedIds:next})}); setRun(d.run); setSelected(d.run.selectedIds); setItems(d.run.items); await refresh(); }
+    catch(e) { setSelected(selected); setError(e instanceof Error ? e.message : 'Could not update source scope'); }
+    finally { setBusy(false); }
+  }
   function updateItem(id:string, changes:Partial<Item>) { setItems(old=>old.map(item=>item.id===id?{...item,...changes}:item)); }
   async function download() { if(!run)return; await perform(async()=> { const resp=await fetch(`/api/runs/${run.id}/export`,{headers:{'X-Rev-Request':'1'}}); if(!resp.ok) { const data=await resp.json(); throw new Error(data.error); } const url=URL.createObjectURL(await resp.blob()); const a=document.createElement('a'); a.href=url; a.download='rev-handover.md'; a.click(); URL.revokeObjectURL(url); }); }
   return <div className="shell">
@@ -45,7 +52,7 @@ export default function HandoverWorkspace() {
         {run && <section className="card"><div className="card-head"><div><div className="eyebrow">02 / SELECT SOURCES</div><h2>Choose what can be shared</h2><p>Imported sources start unselected. Nothing is sent to a model until you confirm the recipient’s access.</p></div><span className="count">{selected.length}/{run.artifacts.length}</span></div>
           {run.mode==='fixture' && <div className="notice">Synthetic fixture · generation uses deterministic example output, not an AI model.</div>}
           {run.warnings.length>0 && <div className="warning"><strong>Incomplete coverage</strong>{run.warnings.map((w,i)=><p key={i}>{w}</p>)}<label className="check"><input type="checkbox" checked={partial} onChange={e=>setPartial(e.target.checked)}/> I understand the source coverage is incomplete.</label></div>}
-          <div className="source-list">{run.artifacts.map(a=><label className="source" key={a.id}><input type="checkbox" checked={selected.includes(a.id)} onChange={()=>toggle(a.id)}/><span><b>{a.kind.replaceAll('_',' ')}</b><small>{a.sourceRef}</small><span className="source-text">{a.text}</span></span></label>)}</div>
+          <div className="source-list">{run.artifacts.map(a=><label className="source" key={a.id}><input type="checkbox" disabled={busy} checked={selected.includes(a.id)} onChange={()=>void toggle(a.id)}/><span><b>{a.kind.replaceAll('_',' ')}</b><small>{a.sourceRef}</small><span className="source-text">{a.text}</span></span></label>)}</div>
           <label className="check"><input type="checkbox" checked={authorised} onChange={e=>setAuthorised(e.target.checked)}/> I confirm the recipient may receive all selected material.</label>
           {run.mode!=='fixture' && <label className="check"><input type="checkbox" checked={remote} onChange={e=>setRemote(e.target.checked)}/> I consent to sending selected text to my configured model provider.</label>}
           <button disabled={busy || !selected.length || !authorised || (!!run.warnings.length && !partial) || (run.mode!=='fixture' && !remote)} onClick={()=>patch({action:'generate',selectedIds:selected,acceptPartial:partial,confirmAuthorisation:true,confirmRemote:remote,fixture:run.mode==='fixture'})}>Generate draft <span>→</span></button>

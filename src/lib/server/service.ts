@@ -4,17 +4,18 @@ import path from 'node:path';
 import { z } from 'zod';
 import { artifactSchema, draftSchema, importSchema, itemSchema, type Artifact, type Item, type Run } from '@/lib/contracts';
 import { callCore } from '@/lib/server/core';
-import { approveRun, compareAndUpdate, createRun, deleteRun, getRun, getVersionedRun, listRuns, updateRun } from '@/lib/server/store';
+import { approveRun, compareAndUpdate, createRun, deleteRun, getRun, getVersionedRun, listRuns } from '@/lib/server/store';
 
 const idSchema = z.string().uuid();
 const createSchema = z.object({ recipient: z.string().trim().min(1).max(120), repo: z.string().max(201).optional(), zipBase64: z.string().max(14_000_000).optional(), fixture: z.boolean().default(false) });
 const actionSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('scope'), selectedIds: z.array(idSchema).max(500) }),
   z.object({ action: z.literal('generate'), selectedIds: z.array(idSchema).min(1).max(500), acceptPartial: z.boolean(), confirmAuthorisation: z.literal(true), confirmRemote: z.boolean().default(false), fixture: z.boolean().default(false) }),
   z.object({ action: z.literal('save'), items: z.array(itemSchema).max(100) }),
   z.object({ action: z.literal('approve'), confirmAuthorisation: z.literal(true) }),
 ]);
 
-function safeText(s: string): string { return s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('[', '\\[').replaceAll(']', '\\]'); }
+function safeText(s: string): string { return s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replace(/([\\`*_{}\[\]()#+.!|~-])/g, '\\$1'); }
 function safeLink(url: string | null): string | null {
   if (!url) return null;
   try { const u = new URL(url); return u.protocol === 'https:' && u.hostname === 'github.com' ? u.toString() : null; } catch { return null; }
@@ -22,9 +23,12 @@ function safeLink(url: string | null): string | null {
 export function exportMarkdown(run: Run): string {
   if (run.state !== 'approved' || run.approvedRevision !== run.revision) throw new Error('Approve this revision before export');
   const selected = new Set(run.selectedIds);
+  for (const item of run.items.filter(i => !i.excluded)) {
+    if (!item.derivationSourceIds?.length || item.derivationSourceIds.some(id => !selected.has(id))) throw new Error('Item provenance is missing or outside the authorised scope; regenerate the draft');
+  }
   const sources = new Map(run.artifacts.filter(s => selected.has(s.id)).map(s => [s.id, s]));
   const lines = [`# Handover for ${safeText(run.recipient)}`, '', `Created: ${run.createdAt}`, `Mode: ${run.mode === 'fixture' ? 'synthetic fixture (not model inference)' : 'model-generated, human-reviewed'}`, '', '## Coverage and limitations', ''];
-  if (run.warnings.length) lines.push(...run.warnings.map(w => `- ${safeText(w)}`)); else lines.push('- No import warnings reported.');
+  if (run.warnings.length) lines.push('- Source coverage is incomplete; review import warnings in the workspace.'); else lines.push('- No import warnings reported.');
   lines.push('- Source references are validated; semantic accuracy requires human review.', '- Recipient permissions were manually confirmed by the operator.', '');
   const shown = run.items.filter(i => !i.excluded);
   if (!shown.length) lines.push('No items were approved for inclusion.');
@@ -68,14 +72,24 @@ export async function newRun(raw: unknown): Promise<Run> {
     catch (error) { run.warnings.push(`${label}: ${error instanceof Error ? error.message : 'Import failed'}`); }
   }
   run.state = run.artifacts.length ? 'awaiting_scope_confirmation' : 'failed';
-  await updateRun(run);
+  await compareAndUpdate(run, 0);
   return run;
 }
 export async function updateAction(id: string, raw: unknown): Promise<Run> {
   idSchema.parse(id); const stored = await getVersionedRun(id); if (!stored) throw new Error('Run not found');
   const {run} = stored; let version = stored.version;
   const args = actionSchema.parse(raw);
-  if (args.action === 'generate') {
+  if (args.action === 'scope') {
+    if (['importing','reconstructing'].includes(run.state)) throw new Error('Cannot change scope while the run is processing');
+    const validIds = new Set(run.artifacts.map(a => a.id));
+    if (args.selectedIds.some(id => !validIds.has(id)) || args.selectedIds.length !== new Set(args.selectedIds).size) throw new Error('Invalid source selection');
+    const changed = [...args.selectedIds].sort().join(',') !== [...run.selectedIds].sort().join(',');
+    if (changed) {
+      run.selectedIds = args.selectedIds; run.items = []; run.approvedRevision = null; run.revision++; run.state = 'awaiting_scope_confirmation';
+      await compareAndUpdate(run, version);
+    }
+    return run;
+  } else if (args.action === 'generate') {
     if (!['awaiting_scope_confirmation','needs_review','approved','failed'].includes(run.state)) throw new Error('Run is already processing');
     if (run.warnings.length && !args.acceptPartial) throw new Error('Acknowledge incomplete source coverage before continuing');
     if (args.fixture !== (run.mode === 'fixture')) throw new Error('Fixture mode is available only for the synthetic example');
@@ -83,12 +97,13 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
     if (args.selectedIds.some(id => !validIds.has(id))) throw new Error('Selected source is not in this run');
     if (args.selectedIds.length !== new Set(args.selectedIds).size) throw new Error('Duplicate source selection');
     if (!args.fixture && !args.confirmRemote) throw new Error('Confirm the selected material may be sent to the configured provider');
-    run.selectedIds = args.selectedIds; run.items = []; run.approvedRevision = null; run.revision++; run.state = 'reconstructing'; run.acceptedPartial = args.acceptPartial; version = await compareAndUpdate(run, version);
+    if (args.selectedIds.slice().sort().join(',') !== run.selectedIds.slice().sort().join(',')) throw new Error('Source scope changed; save it before generation');
+    run.items = []; run.approvedRevision = null; run.revision++; run.state = 'reconstructing'; run.acceptedPartial = args.acceptPartial; version = await compareAndUpdate(run, version);
     try {
       const sources = run.artifacts.filter(a => args.selectedIds.includes(a.id)).map(a => artifactSchema.parse(a));
       const result = draftSchema.parse(await callCore({op:args.fixture ? 'fixture_generate' : 'generate', sources}));
-      run.items = result.items; run.mode = args.fixture ? 'fixture' : 'model'; run.state = 'needs_review';
-    } catch (error) { run.state = 'failed'; await compareAndUpdate(run, version); throw error; }
+      run.items = result.items.map(item => ({...item, derivationSourceIds: [...run.selectedIds]})); run.mode = args.fixture ? 'fixture' : 'model'; run.state = 'needs_review';
+    } catch (error) { run.state = 'failed'; run.warnings.push(`Generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`); await compareAndUpdate(run, version); throw error; }
   } else if (args.action === 'save') {
     if (!['needs_review','approved'].includes(run.state)) throw new Error('Generate a draft before reviewing');
     if (args.items.length !== run.items.length || new Set(args.items.map(i => i.id)).size !== run.items.length) throw new Error('Review must contain every draft item exactly once');

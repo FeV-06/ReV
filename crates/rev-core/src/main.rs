@@ -227,8 +227,13 @@ pub fn slack_import(bytes: &[u8]) -> Result<ImportResult> {
         let channel = components[0].as_os_str().to_string_lossy().to_string();
         let file_ref = path.to_string_lossy().to_string();
         let mut text = String::new();
-        file.read_to_string(&mut text)
+        let actual_size = (&mut file)
+            .take(5 * 1024 * 1024 + 1)
+            .read_to_string(&mut text)
             .context("Slack JSON is not UTF-8")?;
+        if actual_size > 5 * 1024 * 1024 {
+            bail!("Slack ZIP entry exceeds uncompressed size limit");
+        }
         let messages: Vec<Value> = match serde_json::from_str(&text) {
             Ok(v) => v,
             Err(_) => {
@@ -387,16 +392,28 @@ pub async fn generate(
     } else if let Some(k) = key.filter(|s| !s.is_empty()) {
         request = request.bearer_auth(k);
     }
-    let resp = request
+    let mut resp = request
         .send()
         .await
         .map_err(|_| anyhow::anyhow!("Model request failed or timed out"))?;
     if !resp.status().is_success() {
         bail!("Model provider returned HTTP {}", resp.status().as_u16());
     }
-    let body: Value = resp
-        .json()
+    if resp.content_length().is_some_and(|size| size > 2_000_000) {
+        bail!("Model response exceeds size limit");
+    }
+    let mut body_bytes = Vec::new();
+    while let Some(chunk) = resp
+        .chunk()
         .await
+        .map_err(|_| anyhow::anyhow!("Model response could not be read"))?
+    {
+        if body_bytes.len().saturating_add(chunk.len()) > 2_000_000 {
+            bail!("Model response exceeds size limit");
+        }
+        body_bytes.extend_from_slice(&chunk);
+    }
+    let body: Value = serde_json::from_slice(&body_bytes)
         .map_err(|_| anyhow::anyhow!("Model provider returned invalid JSON"))?;
     let content = if provider == "anthropic" {
         field(&body, "/content/0/text")
@@ -572,6 +589,25 @@ mod tests {
             .artifacts
             .iter()
             .any(|a| a.text.contains("Decision: use Redis")));
+    }
+    #[test]
+    fn rust_outputs_match_shared_json_schemas() {
+        let doc: Value =
+            serde_json::from_str(include_str!("../../../contracts/domain.v1.schema.json")).unwrap();
+        let imported = slack_import(include_bytes!("../../../fixtures/slack-fixture.zip")).unwrap();
+        assert!(jsonschema::is_valid(
+            &doc["$defs"]["importResult"],
+            &serde_json::to_value(&imported).unwrap()
+        ));
+        let sample = json!({"items":[{"category":"decision","text":"Redis","evidence":[{"sourceId":imported.artifacts[0].id,"quote":"Redis"}]}]});
+        assert!(jsonschema::is_valid(
+            &doc["$defs"]["modelResponse"],
+            &sample
+        ));
+        let candidates: Vec<Candidate> = serde_json::from_value(sample["items"].clone()).unwrap();
+        let generated =
+            json!({"items":validate_candidates(candidates,&imported.artifacts).unwrap()});
+        assert!(jsonschema::is_valid(&doc["$defs"]["draft"], &generated));
     }
     #[test]
     fn rejects_path_traversal_in_slack_archive() {

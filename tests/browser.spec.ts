@@ -23,5 +23,10 @@ test('synthetic source selection, review, approval and scoped export', async ({p
   expect(output).not.toContain('Add Redis session cache and fallback');
   await page.reload();
   await expect(page.getByRole('button',{name:/Incoming engineer.*approved/}).first()).toBeVisible();
+  await page.getByRole('button',{name:/Incoming engineer.*approved/}).first().click();
+  await expect(page.getByRole('button',{name:'Download Markdown'})).toBeEnabled();
+  await page.locator('label.source').nth(3).locator('input').uncheck();
+  await expect(page.getByRole('heading',{name:'Make it yours'})).toHaveCount(0);
+  await expect.poll(()=>page.evaluate(async(id)=>(await fetch(`/api/runs/${id}/export`,{headers:{'X-Rev-Request':'1'}})).status,run.id)).toBe(400);
   const cross=await page.request.get('http://127.0.0.1:3077/api/runs',{headers:{origin:'https://evil.example','X-Rev-Request':'1'}}); expect(cross.status()).toBe(403);
 });

@@ -2,7 +2,7 @@
 
 ReV is a local, on-demand workspace for turning selected GitHub and Slack activity into an evidence-linked project handover. A reviewer selects what a recipient may receive, checks the draft, and approves a Markdown export.
 
-**Early prototype; release gate not yet met.** See `VERIFICATION.md` for outstanding work. This is not multi-user software and does not automatically verify GitHub/Slack recipient access. The local operator is responsible for authorisation and review. Never expose this development server to the internet or use real confidential data without permission.
+**Round 2 MVP candidate.** See `VERIFICATION.md` for verified capabilities and remaining limitations. This is not multi-user software and does not automatically verify GitHub/Slack recipient access. The local operator is responsible for authorisation and review. Never expose this server to the internet or use real confidential data without permission.
 
 ## Requirements
 
@@ -44,7 +44,7 @@ cargo build --workspace
 pnpm verify
 ```
 
-Browser test (requires Chromium and a running ReV server): `pnpm exec playwright test`. Set the Chromium executable in `playwright.config.ts` if it differs from `/usr/bin/chromium`. With an explicitly configured provider, opt into the live inference smoke test with `REV_TEST_LIVE=1 pnpm exec playwright test tests/live-provider.spec.ts`; it sends only the synthetic fixture to that provider.
+Browser test (requires Chromium and a running ReV server): `pnpm exec playwright install chromium` followed by `pnpm exec playwright test`. To use an existing Chromium executable instead, set `REV_CHROMIUM_PATH` to its path. With an explicitly configured provider, opt into the live inference smoke test with `REV_TEST_LIVE=1 pnpm exec playwright test tests/live-provider.spec.ts`; it sends only the synthetic fixture to that provider.
 
 ## Data and privacy
 
@@ -59,4 +59,4 @@ Runs are stored in `.rev-data/` by default; `REV_DATA_DIR` changes the local sto
 - `fixtures/`: fictional data; fixture generation is not real AI inference.
 - `tests/`: unit and browser checks.
 
-See `CONTRIBUTING.md` and `ROADMAP.md`. License choice and security reporting contact are pending owner decisions; do not assume a license has been granted.
+See `CONTRIBUTING.md` and `ROADMAP.md`. A license has not been chosen; do not assume a license has been granted. A private security reporting contact remains to be configured before public distribution.

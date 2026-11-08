@@ -10,9 +10,11 @@
     "build": "next build",
     "start": "next start --hostname 127.0.0.1 --port 3077",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "contracts:generate": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/contracts.ts",
+    "contracts:check": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/contracts.ts --check",
+    "test": "cargo build --workspace && vitest run",
     "test:rust": "cargo test --workspace",
-    "verify": "pnpm typecheck && pnpm test && pnpm test:rust && pnpm build"
+    "verify": "pnpm typecheck && pnpm contracts:check && pnpm test && pnpm test:rust && pnpm build"
   },
   "dependencies": {
     "@electric-sql/pglite": "0.5.15",
