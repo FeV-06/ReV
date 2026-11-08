@@ -75,7 +75,11 @@ pub fn analyze(repo: &Path, emails: &[String], max_files: usize) -> Result<RiskA
         bail!("Path is not a Git worktree");
     }
     let revision = git(repo, &["rev-parse", "HEAD"], 1024)?.trim().to_owned();
-    let files = git(repo, &["ls-files", "-z"], 4_000_000)?;
+    let files = git(
+        repo,
+        &["ls-tree", "-r", "--name-only", "-z", &revision],
+        4_000_000,
+    )?;
     let paths: Vec<_> = files.split('\0').filter(|x| !x.is_empty()).collect();
     if paths.len() > max_files {
         bail!("Repository has {} tracked files, exceeding selected limit {max_files}; narrow the input repository",paths.len());
@@ -89,6 +93,7 @@ pub fn analyze(repo: &Path, emails: &[String], max_files: usize) -> Result<RiskA
             "--numstat",
             "--format=",
             "--no-renames",
+            &revision,
             "--",
         ],
         8_000_000,
@@ -108,7 +113,7 @@ pub fn analyze(repo: &Path, emails: &[String], max_files: usize) -> Result<RiskA
     for path in paths {
         let blame = match git(
             repo,
-            &["blame", "--line-porcelain", "HEAD", "--", path],
+            &["blame", "--line-porcelain", &revision, "--", path],
             8_000_000,
         ) {
             Ok(v) => v,
