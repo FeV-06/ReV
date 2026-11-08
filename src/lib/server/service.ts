@@ -7,6 +7,7 @@ import { callCore } from '@/lib/server/core';
 import { appendEdge, buildGraph, reviewEdge, suggestEvidenceEdges } from '@/lib/server/graph';
 import { detectGaps } from '@/lib/server/gaps';
 import { attachVerifiedCitations } from '@/lib/server/citations';
+import { applyRefresh } from '@/lib/server/refresh';
 import { approveRun, compareAndUpdate, createRun, deleteRun, getRun, getVersionedRun, listRuns } from '@/lib/server/store';
 
 const idSchema = z.string().uuid();
@@ -173,5 +174,10 @@ function publicRun(run:Run):Run {
 }
 export async function readRun(id: string): Promise<Run> { return publicRun(await readRawRun(id)); }
 export async function readGraph(id: string) { return buildGraph(await readRawRun(id)); }
+export async function refreshRun(id:string,raw:unknown):Promise<Run>{
+  const args=z.object({sources:z.array(artifactSchema).max(1000),revokedIds:z.array(idSchema).max(1000),expectedRevision:z.number().int().nonnegative()}).parse(raw);
+  const prior=await readRawRun(id);if(prior.revision!==args.expectedRevision)throw new Error('Run changed; reload before refreshing');
+  const next=applyRefresh(prior,args.sources,args.revokedIds);await createRun(next);return publicRun(next);
+}
 export { listRuns, deleteRun };
 export function clientError(error: unknown): string { return error instanceof z.ZodError ? 'Invalid request data' : error instanceof Error ? error.message : 'Operation failed'; }

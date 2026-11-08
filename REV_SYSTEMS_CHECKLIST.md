@@ -314,8 +314,8 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 
 - [x] Establish the user-approved sequence: **on-demand first, continuous processing later**.
 - [ ] **DECIDE:** Choose whether source updates arrive through webhooks, polling, scheduled sync or another mechanism.
-- [ ] Implement incremental ingestion, deduplication, versioning, retry and source revocation handling.
-- [ ] Recompute affected claims/graph paths and invalidate affected approvals when sources or permissions change.
+- [ ] **PARTIAL:** Implement incremental ingestion, deduplication, versioning, retry and source revocation handling. A bounded snapshot-diff/refresh API exists and defaults new content to unselected; it rejects changes or revocations affecting previously selected sources until atomic prior-approval invalidation is implemented (`tests/refresh.test.ts`, `tests/refresh-flow.test.ts`). No scheduler or live connector is wired.
+- [ ] Recompute affected claims/graph paths and atomically invalidate prior approvals when sources or permissions change; the current refresh implementation fails closed instead of making unsafe updates.
 - [ ] Test idempotency, missed events, downtime recovery and consistency across local/cloud modes.
 
 ---
