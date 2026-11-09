@@ -41,6 +41,13 @@ async function open(): Promise<PGlite> {
     github_username TEXT NOT NULL, git_common_dir TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL, paused BOOLEAN NOT NULL DEFAULT FALSE
   );
+  ALTER TABLE projects ADD COLUMN IF NOT EXISTS git_dir TEXT;
+  CREATE TABLE IF NOT EXISTS project_snapshots (
+    id UUID PRIMARY KEY, project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    observed_at TIMESTAMPTZ NOT NULL, fingerprint TEXT NOT NULL,
+    payload JSONB NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS project_snapshots_latest ON project_snapshots(project_id, observed_at DESC);
   INSERT INTO graph_events (run_id,event_id,event)
     SELECT r.id,(e.value->>'id')::uuid,e.value
     FROM runs r CROSS JOIN LATERAL jsonb_array_elements(COALESCE(r.payload->'graphEvents','[]'::jsonb)) e(value)
