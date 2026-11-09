@@ -7,7 +7,8 @@ import { z } from 'zod';
 import { readJsonLimited } from '@/lib/server/body';
 import { newRun, updateAction, readRun, readGraph, exportMarkdown, refreshRun, deleteRun, listRuns, clientError } from '@/lib/server/service';
 import { closeDatabase, database } from '@/lib/server/store';
-import { listProjects, registerProject, removeProject, setProjectPaused } from '@/lib/server/projects';
+import { getProject, listProjects, registerProject, removeProject, setProjectPaused } from '@/lib/server/projects';
+import { listProjectSnapshots, readLatestSnapshot, scanProject } from '@/lib/server/capture';
 import { connectedSources } from '@/lib/server/sources';
 
 const host='127.0.0.1';
@@ -73,15 +74,32 @@ async function route(req:IncomingMessage,res:ServerResponse):Promise<void> {
     if(req.method==='GET'&&url.pathname==='/v1/health'){json(res,200,{status:'ok',protocol:1});return;}
     if(req.method==='POST'&&url.pathname==='/v1/shutdown'){json(res,200,{ok:true});setImmediate(()=>void shutdown());return;}
     if(url.pathname==='/v1/projects'){
-      if(req.method==='GET'){json(res,200,{projects:await listProjects()});return;}
+      if(req.method==='GET'){
+        const projects=await listProjects();
+        const enriched=await Promise.all(projects.map(async p=>({...p,snapshot:await readLatestSnapshot(p.id)})));
+        json(res,200,{projects:enriched});
+        return;
+      }
       if(req.method==='POST'){json(res,201,{project:await registerProject(await body(req,32_000))});return;}
     }
-    const projectMatch=/^\/v1\/projects\/([0-9a-fA-F-]+)$/.exec(url.pathname);
+    const projectMatch=/^\/v1\/projects\/([0-9a-fA-F-]+)(?:\/(scan|snapshots))?$/.exec(url.pathname);
     if(projectMatch){
       const id=uuid(projectMatch[1]);
-      if(req.method==='PATCH'){const args=z.object({paused:z.boolean()}).strict().parse(await body(req,4_000));json(res,200,{project:await setProjectPaused(id,args.paused)});return;}
-      if(req.method==='DELETE'){await removeProject(id);json(res,200,{ok:true});return;}
-      json(res,405,{error:'Method not allowed'});return;
+      const sub=projectMatch[2];
+      if(!sub){
+        if(req.method==='GET'){json(res,200,{project:await getProject(id),snapshot:await readLatestSnapshot(id)});return;}
+        if(req.method==='PATCH'){const args=z.object({paused:z.boolean()}).strict().parse(await body(req,4_000));json(res,200,{project:await setProjectPaused(id,args.paused)});return;}
+        if(req.method==='DELETE'){await removeProject(id);json(res,200,{ok:true});return;}
+        json(res,405,{error:'Method not allowed'});return;
+      }
+      if(sub==='scan'){
+        if(req.method==='POST'){json(res,200,{snapshot:await scanProject(id)});return;}
+        json(res,405,{error:'Method not allowed'});return;
+      }
+      if(sub==='snapshots'){
+        if(req.method==='GET'){json(res,200,{snapshots:await listProjectSnapshots(id)});return;}
+        json(res,405,{error:'Method not allowed'});return;
+      }
     }
     if(url.pathname==='/v1/runs'){
       if(req.method==='GET'){json(res,200,{runs:await listRuns(),sources:await connectedSources()});return;}
@@ -104,8 +122,32 @@ async function route(req:IncomingMessage,res:ServerResponse):Promise<void> {
 const server=createServer((req,res)=>{void route(req,res);});
 server.requestTimeout=160_000;server.headersTimeout=15_000;
 
+const captureIntervalMs=Number(process.env.REV_CAPTURE_INTERVAL_MS ?? '5000');
+let captureTimer:NodeJS.Timeout|null=null;
+let capturing=false;
+async function tickCapture():Promise<void> {
+  if(capturing||closing)return;capturing=true;
+  try {
+    const projects=await listProjects();
+    for(const p of projects){
+      if(p.paused||closing)continue;
+      try {await scanProject(p.id);}
+      catch(err){process.stderr.write(`[capture] Scan failed for ${p.root}: ${err instanceof Error?err.message:'unknown error'}\n`);}
+    }
+  } catch {}
+  finally {capturing=false;}
+}
+function startCaptureLoop():void {
+  if(captureTimer||captureIntervalMs<=0)return;
+  captureTimer=setInterval(()=>void tickCapture(),captureIntervalMs);
+}
+function stopCaptureLoop():void {
+  if(captureTimer){clearInterval(captureTimer);captureTimer=null;}
+}
+
 async function shutdown():Promise<void> {
   if(closing)return;closing=true;
+  stopCaptureLoop();
   try {
     await new Promise<void>(resolve=>server.close(()=>resolve()));
     await closeDatabase();
@@ -125,8 +167,10 @@ async function main():Promise<void> {
     const tokenHash=createHash('sha256').update(token).digest('hex');
     const temporary=`${statePath}.${launchNonce}.tmp`;await writeFile(temporary,JSON.stringify({protocol:1,port:activePort,pid:process.pid,tokenHash})+'\n',{mode:0o600,flag:'wx'});await rename(temporary,statePath);
     process.stdout.write(`REV_DAEMON_READY ${activePort}\n`);
+    startCaptureLoop();
     process.once('SIGTERM',()=>void shutdown());process.once('SIGINT',()=>void shutdown());
   } catch(error){
+    stopCaptureLoop();
     if(server.listening)await new Promise<void>(resolve=>server.close(()=>resolve()));
     if(databaseOpened)await closeDatabase();if(lockOwned){await Promise.all([rm(statePath,{force:true}),rm(tokenPath,{force:true})]);try {await releaseLock();} catch { /* leave uncertain ownership for inspection */ }}throw error;
   }

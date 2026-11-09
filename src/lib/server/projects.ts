@@ -10,8 +10,8 @@ import { database } from '@/lib/server/store';
 const execFileAsync=promisify(execFile);
 const registerSchema=z.object({root:z.string().min(1).max(4096),githubUsername:githubUsernameSchema,confirmWatch:z.literal(true)});
 type ProjectRow={id:string;root:string;root_key:string;github_username:string;git_common_dir:string;git_dir:string|null;created_at:string|Date;paused:boolean};
-export type Project={id:string;root:string;githubUsername:string;gitCommonDir:string;gitDir:string|null;createdAt:string;paused:boolean;captureStatus:'not_implemented'};
-function project(row:ProjectRow):Project{return {id:row.id,root:row.root,githubUsername:row.github_username,gitCommonDir:row.git_common_dir,gitDir:row.git_dir,createdAt:new Date(row.created_at).toISOString(),paused:row.paused,captureStatus:'not_implemented'};}
+export type Project={id:string;root:string;githubUsername:string;gitCommonDir:string;gitDir:string|null;createdAt:string;paused:boolean;captureStatus:'active'|'not_implemented'};
+function project(row:ProjectRow):Project{return {id:row.id,root:row.root,githubUsername:row.github_username,gitCommonDir:row.git_common_dir,gitDir:row.git_dir,createdAt:new Date(row.created_at).toISOString(),paused:row.paused,captureStatus:row.paused?'not_implemented':'active'};}
 function key(root:string):string {const normalized=path.normalize(root);return process.platform==='win32'?normalized.toLowerCase():normalized;}
 function contains(parent:string,child:string):boolean {const rel=path.relative(parent,child);return rel===''||(!rel.startsWith(`..${path.sep}`)&&rel!=='..'&&!path.isAbsolute(rel));}
 export async function inspectRoot(input:string):Promise<{root:string;common:string;gitDir:string}> {
@@ -43,7 +43,7 @@ export async function getProject(id:string):Promise<Project>{
  z.string().uuid().parse(id);const result=await (await database()).query<ProjectRow>('SELECT * FROM projects WHERE id=$1',[id]);if(!result.rows.length)throw new Error('Project not found');return project(result.rows[0]);
 }
 export async function setProjectPaused(id:string,paused:boolean):Promise<Project>{
- z.string().uuid().parse(id);z.boolean().parse(paused);if(!paused)throw new Error('Project capture is not implemented; cannot resume');const result=await (await database()).query<ProjectRow>('UPDATE projects SET paused=$2 WHERE id=$1 RETURNING *',[id,paused]);
+ z.string().uuid().parse(id);z.boolean().parse(paused);const result=await (await database()).query<ProjectRow>('UPDATE projects SET paused=$2 WHERE id=$1 RETURNING *',[id,paused]);
  if(!result.rows.length)throw new Error('Project not found');return project(result.rows[0]);
 }
 export async function removeProject(id:string):Promise<void>{

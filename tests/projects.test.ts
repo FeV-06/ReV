@@ -17,7 +17,7 @@ describe('project registry',()=>{
    await expect(registerProject({root,githubUsername:'FeV-06',confirmWatch:true})).rejects.toThrow('already');
    await expect(registerProject({root:nested,githubUsername:'FeV-06',confirmWatch:true})).rejects.toThrow('root');
    await expect(registerProject({root,githubUsername:'FeV-06',confirmWatch:false})).rejects.toThrow();
-   await expect(setProjectPaused(project.id,false)).rejects.toThrow('not implemented');
+   const unpaused=await setProjectPaused(project.id,false);expect(unpaused.paused).toBe(false);expect(unpaused.captureStatus).toBe('active');
    await setProjectPaused(project.id,true);expect((await listProjects()).find(p=>p.id===project.id)?.paused).toBe(true);
    await closeDatabase();expect((await listProjects()).find(p=>p.id===project.id)?.paused).toBe(true);
    await removeProject(project.id);expect((await listProjects()).some(p=>p.id===project.id)).toBe(false);

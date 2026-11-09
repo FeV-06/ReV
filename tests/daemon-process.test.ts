@@ -59,6 +59,32 @@ describe('daemon API over a real child process',()=>{
    expect((await request(`/v1/projects/${project.id}`,'DELETE')).status).toBe(200);
   } finally {await rm(projectRoot,{recursive:true,force:true});}
  });
+ it('supports on-demand project scanning and snapshot history via daemon endpoints',async()=>{
+  const projectRoot=await mkdtemp(path.join(tmpdir(),'rev-daemon-scan-'));
+  const {execFileSync}=await import('node:child_process');execFileSync('git',['init','-q',projectRoot]);
+  const appFile=path.join(projectRoot,'index.ts');await writeFile(appFile,'console.log("hello");\n');
+  execFileSync('git',['-C',projectRoot,'add','.']);
+  execFileSync('git',['-C',projectRoot,'-c','user.name=FeV','-c','user.email=fev@example.invalid','commit','-qm','initial']);
+  try {
+   const registerResp=await request('/v1/projects','POST',{root:projectRoot,githubUsername:'FeV-06',confirmWatch:true});
+   expect(registerResp.status).toBe(201);
+   const project=(await registerResp.json()).project;
+   const scanResp=await request(`/v1/projects/${project.id}/scan`,'POST');
+   expect(scanResp.status).toBe(200);
+   const snapshot=(await scanResp.json()).snapshot;
+   expect(snapshot.baseline).toBe(true);
+   expect(snapshot.commitId).toBeDefined();
+   const snapshotsResp=await request(`/v1/projects/${project.id}/snapshots`);
+   expect(snapshotsResp.status).toBe(200);
+   const snapshots=(await snapshotsResp.json()).snapshots;
+   expect(snapshots.length).toBe(1);
+   expect(snapshots[0].id).toBe(snapshot.id);
+   const unpauseResp=await request(`/v1/projects/${project.id}`,'PATCH',{paused:false});
+   expect(unpauseResp.status).toBe(200);
+   expect((await unpauseResp.json()).project.paused).toBe(false);
+   await request(`/v1/projects/${project.id}`,'DELETE');
+  } finally {await rm(projectRoot,{recursive:true,force:true});}
+ });
  it('supports reviewed fixture workflow, invalidation, restart persistence and isolated second instance',async()=>{
   const create=await request('/v1/runs','POST',{recipient:'Engineer',githubUsername:'FeV-06',targetRole:'Backend engineer',fixture:true});expect(create.status).toBe(201);let run=(await create.json()).run;
   expect(run.githubUsername).toBe('FeV-06');const selectedIds=[run.artifacts[0].id];

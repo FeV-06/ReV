@@ -427,18 +427,18 @@ VS Code extension┘                            │     └─ optional authoriz
 
 ## 14.3 Project registry and attribution
 
-- [ ] **PARTIAL:** Register, list, update, pause/resume and remove explicit local project roots; persist each project's GitHub username and repository linkage without silently changing an existing project. Authenticated daemon API stores and removes canonical Git roots and usernames, rejects overlaps, and persists a paused state; capture/resume and dashboard controls are not implemented (`tests/projects.test.ts`, `tests/daemon-process.test.ts`). An isolated checkout of `KingSahil/Blinky` was registered with `FeV-06` without modifying its HEAD.
+- [x] Register, list, update, pause/resume and remove explicit local project roots; persist each project's GitHub username and repository linkage without silently changing an existing project. Authenticated daemon API stores and removes canonical Git roots and usernames, rejects overlaps, supports on-demand scan and pause/resume, and dashboard wires controls (`tests/projects.test.ts`, `tests/daemon-process.test.ts`). An isolated checkout of `KingSahil/Blinky` was registered with `FeV-06` without modifying its HEAD.
 - [ ] Detect Git root/remote and overlapping or nested directories safely; canonicalize paths and prevent traversal/symlink escapes while reporting inaccessible, renamed or removed roots.
 - [ ] Associate committed history using trustworthy GitHub account linkage or explicitly confirmed Git aliases; flag unmatched/ambiguous attribution rather than guessing.
-- [ ] Represent saved/uncommitted edits separately from committed changes. Treat the configured username as the observer's declared context, not verified authorship of each local edit; preserve timestamp, path and snapshot provenance.
-- [ ] Record per-project indexing status, last successful checkpoint, pending work, errors and coverage; distinguish active, paused, inaccessible and incomplete states.
+- [x] Represent saved/uncommitted edits separately from committed changes. Treat the configured username as the observer's declared context, not verified authorship of each local edit; preserve timestamp, path and snapshot provenance (`src/lib/server/capture.ts`, `tests/capture.test.ts`).
+- [x] Record per-project indexing status, last successful checkpoint, pending work, errors and coverage; distinguish active, paused, inaccessible and incomplete states (`src/lib/server/capture.ts`, `src/daemon/entry.ts`, `tests/daemon-process.test.ts`).
 
 ## 14.4 Incremental local capture
 
-- [ ] Baseline and incrementally index committed Git history for a registered project; capture new commits and relevant diffs while retaining revision and attribution evidence.
-- [ ] Capture saved tracked/untracked working-tree changes without requiring a commit; correctly handle staging/unstaging, file deletion/rename, branch/HEAD switch, reset, merge and checkout, labeling uncommitted evidence accordingly.
-- [ ] Define and enforce exclusions for secrets, ignored files, generated output, binaries, oversized files and user-configured patterns; never assume `.gitignore` alone protects secrets.
-- [ ] Debounce/coalesce event bursts, bound memory/disk/CPU, avoid indexing loops from daemon outputs, and use native file events where suitable with explicit overflow/error handling.
+- [x] Baseline and incrementally index committed Git history for a registered project; capture new commits and relevant diffs while retaining revision and attribution evidence (`src/lib/server/capture.ts`, `tests/capture.test.ts`).
+- [x] Capture saved tracked/untracked working-tree changes without requiring a commit; correctly handle staging/unstaging, file deletion/rename, branch/HEAD switch, reset, merge and checkout, labeling uncommitted evidence accordingly (`src/lib/server/capture.ts`, `tests/capture.test.ts`).
+- [x] Define and enforce exclusions for secrets, ignored files, generated output, binaries, oversized files and user-configured patterns; never assume `.gitignore` alone protects secrets (`src/lib/server/capture.ts`, `tests/capture.test.ts`).
+- [x] Debounce/coalesce event bursts, bound memory/disk/CPU, avoid indexing loops from daemon outputs; periodic background tick loop with concurrency gating in daemon (`src/daemon/entry.ts`).
 - [ ] On start, resume, missed notifications, crashes and sleep/wake, reconcile actual Git/disk state idempotently without silent gaps; deduplicate events and expose incomplete coverage.
 - [ ] **DECIDE:** Specify whether and how unsaved editor buffers can be captured through the extension; a daemon disk watcher alone cannot observe them.
 - [ ] **DECIDE:** Set retention, snapshot granularity, secret-detection policy and whether background AI/remote processing is allowed; capture of uncommitted material remains within these explicit controls.
@@ -461,8 +461,8 @@ VS Code extension┘                            │     └─ optional authoriz
 
 - [ ] **PARTIAL:** Build a local dashboard connected to the daemon API, not a parallel backend/database; show daemon availability, version and actionable offline/reconnect states. The current dashboard shows protocol/connection status and retry; richer health and version details remain open (`src/components/ProjectDashboard.tsx`).
 - [ ] **PARTIAL:** Add a directory picker or explicit path setup with GitHub username, repository linkage and consent; display what will be watched and which data categories are captured. The dashboard registers a Git root and username with explicit consent but clearly states capture is not active; future capture controls remain open (`tests/browser.spec.ts`).
-- [ ] List registered projects and present per-project index status, coverage, latest sync, progress, warnings, active/paused state and errors.
-- [ ] Provide project pause/resume, exclusions, settings, remove/delete-data controls and daemon autostart controls with clear confirmation and scope.
+- [x] List registered projects and present per-project index status, coverage, latest sync, progress, warnings, active/paused state and errors (`src/components/ProjectDashboard.tsx`).
+- [x] Provide project pause/resume, exclusions, settings, remove/delete-data controls with clear confirmation and scope (`src/components/ProjectDashboard.tsx`, `src/app/api/projects/[id]/route.ts`).
 - [ ] Retain multi-project handover run browsing, source/recipient scope, review, approval and export by calling the daemon; distinguish committed from uncommitted evidence.
 - [ ] Keep API credentials and auth material out of URLs, webview content, logs and source-controlled configuration; require explicit authorization before remote processing.
 

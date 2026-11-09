@@ -45,6 +45,10 @@ async function cleanGit(root:string,gitDir:string,args:string[]):Promise<string>
 export async function readLatestSnapshot(projectId:string):Promise<ProjectSnapshot|null>{
  const result=await (await database()).query<{payload:ProjectSnapshot}>('SELECT payload FROM project_snapshots WHERE project_id=$1 ORDER BY observed_at DESC,id DESC LIMIT 1',[projectId]);return result.rows[0]?.payload||null;
 }
+export async function listProjectSnapshots(projectId:string,limit=10):Promise<ProjectSnapshot[]>{
+ const result=await (await database()).query<{payload:ProjectSnapshot}>('SELECT payload FROM project_snapshots WHERE project_id=$1 ORDER BY observed_at DESC,id DESC LIMIT $2',[projectId,limit]);
+ return result.rows.map(r=>r.payload);
+}
 export async function scanProject(projectId:string):Promise<ProjectSnapshot>{
  const project=await getProject(projectId);const root=await inspectRoot(project.root);
  if(root.root!==project.root||root.common!==project.gitCommonDir)throw new Error('Project root or Git directory changed; re-registration required');
