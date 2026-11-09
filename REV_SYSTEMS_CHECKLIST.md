@@ -427,7 +427,7 @@ VS Code extension┘                            │     └─ optional authoriz
 
 ## 14.3 Project registry and attribution
 
-- [ ] Register, list, update, pause/resume and remove explicit local project roots; persist each project's GitHub username and repository linkage without silently changing an existing project.
+- [ ] **PARTIAL:** Register, list, update, pause/resume and remove explicit local project roots; persist each project's GitHub username and repository linkage without silently changing an existing project. Authenticated daemon API stores and removes canonical Git roots and usernames, rejects overlaps, and persists a paused state; capture/resume and dashboard controls are not implemented (`tests/projects.test.ts`, `tests/daemon-process.test.ts`). An isolated checkout of `KingSahil/Blinky` was registered with `FeV-06` without modifying its HEAD.
 - [ ] Detect Git root/remote and overlapping or nested directories safely; canonicalize paths and prevent traversal/symlink escapes while reporting inaccessible, renamed or removed roots.
 - [ ] Associate committed history using trustworthy GitHub account linkage or explicitly confirmed Git aliases; flag unmatched/ambiguous attribution rather than guessing.
 - [ ] Represent saved/uncommitted edits separately from committed changes. Treat the configured username as the observer's declared context, not verified authorship of each local edit; preserve timestamp, path and snapshot provenance.

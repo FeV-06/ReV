@@ -36,6 +36,11 @@ async function open(): Promise<PGlite> {
     seq BIGSERIAL PRIMARY KEY, run_id UUID NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
     event_id UUID NOT NULL UNIQUE, event JSONB NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS projects (
+    id UUID PRIMARY KEY, root TEXT NOT NULL, root_key TEXT NOT NULL UNIQUE,
+    github_username TEXT NOT NULL, git_common_dir TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL, paused BOOLEAN NOT NULL DEFAULT FALSE
+  );
   INSERT INTO graph_events (run_id,event_id,event)
     SELECT r.id,(e.value->>'id')::uuid,e.value
     FROM runs r CROSS JOIN LATERAL jsonb_array_elements(COALESCE(r.payload->'graphEvents','[]'::jsonb)) e(value)

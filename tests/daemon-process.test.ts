@@ -49,6 +49,16 @@ describe('daemon API over a real child process',()=>{
   try {const metadata=JSON.parse(original);metadata.tokenHash='0'.repeat(64);await writeFile(metadataPath,JSON.stringify(metadata));await expect(requestDaemon('/v1/health')).rejects.toThrow('unavailable');}
   finally {await writeFile(metadataPath,original);if(old===undefined)delete process.env.REV_DATA_DIR;else process.env.REV_DATA_DIR=old;}
  });
+ it('registers an approved Git project, persists pause state, and never claims capture is running',async()=>{
+  const projectRoot=await mkdtemp(path.join(tmpdir(),'rev-daemon-project-'));
+  const {execFileSync}=await import('node:child_process');execFileSync('git',['init','-q',projectRoot]);
+  try {
+   let response=await request('/v1/projects','POST',{root:projectRoot,githubUsername:'FeV-06',confirmWatch:true});expect(response.status).toBe(201);const project=(await response.json()).project;expect(project.captureStatus).toBe('not_implemented');
+   response=await request(`/v1/projects/${project.id}`,'PATCH',{paused:true});expect((await response.json()).project.paused).toBe(true);
+   await stop();await start();response=await request('/v1/projects');const projects=(await response.json()).projects;expect(projects.find((p:{id:string})=>p.id===project.id).paused).toBe(true);
+   expect((await request(`/v1/projects/${project.id}`,'DELETE')).status).toBe(200);
+  } finally {await rm(projectRoot,{recursive:true,force:true});}
+ });
  it('supports reviewed fixture workflow, invalidation, restart persistence and isolated second instance',async()=>{
   const create=await request('/v1/runs','POST',{recipient:'Engineer',githubUsername:'FeV-06',targetRole:'Backend engineer',fixture:true});expect(create.status).toBe(201);let run=(await create.json()).run;
   expect(run.githubUsername).toBe('FeV-06');const selectedIds=[run.artifacts[0].id];

@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { readJsonLimited } from '@/lib/server/body';
 import { newRun, updateAction, readRun, readGraph, exportMarkdown, refreshRun, deleteRun, listRuns, clientError } from '@/lib/server/service';
 import { closeDatabase, database } from '@/lib/server/store';
+import { listProjects, registerProject, removeProject, setProjectPaused } from '@/lib/server/projects';
 
 const host='127.0.0.1';
 const requestedPort=Number(process.env.REV_DAEMON_PORT ?? '3078');
@@ -70,6 +71,17 @@ async function route(req:IncomingMessage,res:ServerResponse):Promise<void> {
     const url=new URL(req.url || '/',`http://${host}:${activePort}`);if(url.search||url.hash){json(res,400,{error:'Query parameters are not supported'});return;}
     if(req.method==='GET'&&url.pathname==='/v1/health'){json(res,200,{status:'ok',protocol:1});return;}
     if(req.method==='POST'&&url.pathname==='/v1/shutdown'){json(res,200,{ok:true});setImmediate(()=>void shutdown());return;}
+    if(url.pathname==='/v1/projects'){
+      if(req.method==='GET'){json(res,200,{projects:await listProjects()});return;}
+      if(req.method==='POST'){json(res,201,{project:await registerProject(await body(req,32_000))});return;}
+    }
+    const projectMatch=/^\/v1\/projects\/([0-9a-fA-F-]+)$/.exec(url.pathname);
+    if(projectMatch){
+      const id=uuid(projectMatch[1]);
+      if(req.method==='PATCH'){const args=z.object({paused:z.boolean()}).strict().parse(await body(req,4_000));json(res,200,{project:await setProjectPaused(id,args.paused)});return;}
+      if(req.method==='DELETE'){await removeProject(id);json(res,200,{ok:true});return;}
+      json(res,405,{error:'Method not allowed'});return;
+    }
     if(url.pathname==='/v1/runs'){
       if(req.method==='GET'){json(res,200,{runs:await listRuns()});return;}
       if(req.method==='POST'){json(res,201,{run:await newRun(await body(req,15_000_000))});return;}
