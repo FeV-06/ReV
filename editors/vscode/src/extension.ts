@@ -56,9 +56,11 @@ export class RevExtensionManager {
 
   private broadcastState(): void {
     if (this.currentPanel) {
+      this.currentPanel.webview.html = generateWebviewHtml(this.currentPanel.webview, this.state);
       this.currentPanel.webview.postMessage({ type: 'SET_STATE', state: this.state });
     }
     if (this.sidebarView) {
+      this.sidebarView.webview.html = generateWebviewHtml(this.sidebarView.webview, this.state);
       this.sidebarView.webview.postMessage({ type: 'SET_STATE', state: this.state });
     }
   }
@@ -97,7 +99,9 @@ export class RevExtensionManager {
       this.state.project.snapshot = snapshot;
       this.state.error = undefined;
       this.broadcastState();
-      vscode.window.showInformationMessage(`ReV scan updated: ${snapshot.commitCount ?? 0} commits, ${snapshot.uncommittedCount ?? 0} working changes.`);
+      const count = snapshot.changes ? snapshot.changes.length : (snapshot.uncommittedCount ?? 0);
+      const commitStr = snapshot.commitCount !== undefined ? `${snapshot.commitCount} commits` : (snapshot.commitId ? `commit ${snapshot.commitId.slice(0, 7)}` : '0 commits');
+      vscode.window.showInformationMessage(`ReV scan updated: ${commitStr}, ${count} working changes.`);
     } catch (err: any) {
       const msg = err instanceof Error ? err.message : String(err);
       this.state.error = msg;
@@ -106,7 +110,7 @@ export class RevExtensionManager {
     }
   }
 
-  async createHandover(recipient: string, targetRole: string): Promise<void> {
+  async createHandover(recipient: string, targetRole: string, fixture = true): Promise<void> {
     const ws = this.getActiveWorkspacePath();
     const username = this.state.project?.githubUsername || 'FeV-06';
 
@@ -115,7 +119,7 @@ export class RevExtensionManager {
         recipient,
         githubUsername: username,
         targetRole,
-        fixture: false,
+        fixture,
       }, ws);
 
       // Select all candidate artifacts and confirm scope first
@@ -130,11 +134,14 @@ export class RevExtensionManager {
         selectedIds,
         acceptPartial: true,
         confirmAuthorisation: true,
+        confirmRemote: !fixture,
+        fixture,
       }, ws);
 
       this.state.currentRun = generated;
       this.state.error = undefined;
       this.broadcastState();
+      vscode.window.showInformationMessage(`Synthesized handover for ${recipient} (${targetRole}) with ${generated.items?.length || 0} evidence-backed claims.`);
     } catch (err: any) {
       const msg = err instanceof Error ? err.message : String(err);
       this.state.error = msg;
@@ -225,10 +232,12 @@ export class RevExtensionManager {
     }
   }
 
-  openHandoverPanel(): vscode.WebviewPanel {
+  async openHandoverPanel(): Promise<vscode.WebviewPanel> {
+    await this.checkStatus();
+
     if (this.currentPanel) {
       this.currentPanel.reveal(vscode.ViewColumn.One);
-      void this.checkStatus();
+      this.currentPanel.webview.html = generateWebviewHtml(this.currentPanel.webview, this.state);
       return this.currentPanel;
     }
 
@@ -249,7 +258,6 @@ export class RevExtensionManager {
     });
 
     panel.webview.onDidReceiveMessage(msg => this.handleWebviewMessage(msg));
-    void this.checkStatus();
     return panel;
   }
 
@@ -282,6 +290,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('rev.openDashboard', () => {
       void vscode.env.openExternal(vscode.Uri.parse('http://127.0.0.1:3077/'));
     }),
+    vscode.commands.registerCommand('rev.createHandover', () => manager.createHandover('Successor Engineer', 'Backend engineer')),
+    vscode.commands.registerCommand('rev.approveHandover', () => manager.approveHandover()),
+    vscode.commands.registerCommand('rev.exportHandover', () => manager.exportHandover()),
     vscode.window.registerWebviewViewProvider('rev.sidebarView', {
       resolveWebviewView: (view: vscode.WebviewView) => manager.resolveWebviewView(view),
     })

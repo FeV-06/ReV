@@ -95,6 +95,10 @@ export function renderAppHtml(state: WebviewState): string {
   // Registered Project Overview
   const snapshot = state.project.snapshot;
   const projectBase = state.project.root.split(/[\\/]/).pop() || state.project.root;
+  const changesCount = snapshot?.changes ? snapshot.changes.length : (snapshot?.uncommittedCount ?? 0);
+  const commitDisplay = snapshot?.commitCount !== undefined ? snapshot.commitCount : (snapshot?.commitId ? snapshot.commitId.slice(0, 7) : 0);
+  const fingerprintDisplay = snapshot?.fingerprint ? snapshot.fingerprint.slice(0, 7) : (snapshot?.commitId ? snapshot.commitId.slice(0, 7) : 'sync');
+
   html += '<div class="card">';
   html += '  <div class="card-title">';
   html += `    <span>Watched Project: ${escapeHtml(projectBase)}</span>`;
@@ -103,15 +107,15 @@ export function renderAppHtml(state: WebviewState): string {
 
   html += '  <div class="stats-grid">';
   html += '    <div class="stat-box">';
-  html += `      <div class="stat-num">${snapshot && snapshot.commitCount !== undefined ? snapshot.commitCount : 0}</div>`;
-  html += '      <div class="stat-label">Commits</div>';
+  html += `      <div class="stat-num">${commitDisplay}</div>`;
+  html += '      <div class="stat-label">Commit / Head</div>';
   html += '    </div>';
   html += '    <div class="stat-box">';
-  html += `      <div class="stat-num">${snapshot && snapshot.uncommittedCount !== undefined ? snapshot.uncommittedCount : 0}</div>`;
-  html += '      <div class="stat-label">Working Files</div>';
+  html += `      <div class="stat-num">${changesCount}</div>`;
+  html += '      <div class="stat-label">Working Changes</div>';
   html += '    </div>';
   html += '    <div class="stat-box">';
-  html += `      <div class="stat-num">${snapshot && snapshot.fingerprint ? snapshot.fingerprint.slice(0, 6) : 'sync'}</div>`;
+  html += `      <div class="stat-num">${fingerprintDisplay}</div>`;
   html += '      <div class="stat-label">Fingerprint</div>';
   html += '    </div>';
   html += '  </div>';

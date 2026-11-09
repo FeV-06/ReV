@@ -11,6 +11,7 @@ export interface ProjectSnapshot {
   commitId?: string;
   commitCount?: number;
   uncommittedCount?: number;
+  changes?: unknown[];
   baseline: boolean;
 }
 

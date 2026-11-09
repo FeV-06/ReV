@@ -41,6 +41,21 @@
         "command": "rev.openDashboard",
         "title": "Open Local Web Dashboard",
         "category": "ReV"
+      },
+      {
+        "command": "rev.createHandover",
+        "title": "Synthesize Handover",
+        "category": "ReV"
+      },
+      {
+        "command": "rev.approveHandover",
+        "title": "Approve Handover Revision",
+        "category": "ReV"
+      },
+      {
+        "command": "rev.exportHandover",
+        "title": "Export HANDOVER.md",
+        "category": "ReV"
       }
     ],
     "viewsContainers": {

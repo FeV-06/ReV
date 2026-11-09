@@ -218,7 +218,7 @@ describe('RevExtensionManager lifecycle and UI interactions', () => {
       recipient: 'Successor Lead',
       githubUsername: 'FeV-06',
       targetRole: 'Backend engineer',
-      fixture: false,
+      fixture: true,
     }, '/home/fev/projects/test-project');
 
     expect(mockClient.updateRunAction).toHaveBeenCalledWith('run-1', {
@@ -231,6 +231,8 @@ describe('RevExtensionManager lifecycle and UI interactions', () => {
       selectedIds: ['art-1'],
       acceptPartial: true,
       confirmAuthorisation: true,
+      confirmRemote: false,
+      fixture: true,
     }, '/home/fev/projects/test-project');
 
     expect((manager as any).state.currentRun.state).toBe('review');
