@@ -84,10 +84,10 @@ VS Code extension┘                            │     └─ optional authoriz
 
 ## 2.2 Git parsing & code intelligence
 
-- [ ] Parse commit deltas and blame with `libgit2` / Git tooling.
-- [ ] Extract changed functions, types and modules using `tree-sitter` grammars.
-- [ ] Map source symbols and files to commits, PRs, ownership and related decisions.
-- [ ] Define language coverage, unsupported-language fallback and reproducible parsing tests.
+- [x] Parse commit deltas and blame with `libgit2` / Git tooling. Implemented via Git tooling in `crates/rev-core/src/risk.rs` and `crates/rev-core/src/symbols.rs` (`analyze_git_commit_symbols`); verified in `tests/symbols.test.ts` and `risk::tests`.
+- [x] Extract changed functions, types and modules using `tree-sitter` grammars. Implemented with `tree-sitter-rust`, `tree-sitter-typescript` (TS/TSX/JS), and resilient fallback AST scanner in `crates/rev-core/src/symbols.rs`; verified in `symbols::tests` and `tests/symbols.test.ts`.
+- [x] Map source symbols and files to commits, PRs, ownership and related decisions. Unified diff hunk parser (`parse_unified_diff_hunks`) intersects modified/added line numbers with symbol spans (`map_symbols_to_diff`), classifying changes as `added`, `modified`, or `deleted` with author attribution in `src/lib/server/symbols.ts` and `tests/symbols.test.ts`.
+- [x] Define language coverage, unsupported-language fallback and reproducible parsing tests. Defined Rust, TypeScript, TSX, JavaScript, Python, and graceful degradation for unknown languages (`SupportedLanguage`); tested across all variants in `tests/symbols.test.ts`.
 
 ## 2.3 Slack connector
 

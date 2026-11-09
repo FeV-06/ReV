@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 mod github;
 mod risk;
+mod symbols;
 
 const MAX_ZIP: usize = 10 * 1024 * 1024;
 const MAX_EXPANDED: u64 = 40 * 1024 * 1024;
@@ -570,6 +571,60 @@ pub async fn handle(input: Value) -> Result<Value> {
                 })
                 .collect();
             Ok(json!({"items":validate_candidates(items, &sources)?,"mode":"fixture"}))
+        }
+        "extract_symbols" => {
+            let file_path = input
+                .get("filePath")
+                .and_then(Value::as_str)
+                .context("Missing filePath")?;
+            let source = if let Some(raw) = input.get("source").and_then(Value::as_str) {
+                raw.as_bytes().to_vec()
+            } else if let Some(base64_str) = input.get("sourceBase64").and_then(Value::as_str) {
+                STANDARD
+                    .decode(base64_str)
+                    .context("Invalid base64 source")?
+            } else {
+                bail!("Missing source or sourceBase64");
+            };
+            Ok(serde_json::to_value(symbols::extract_symbols_from_source(
+                &source, file_path,
+            ))?)
+        }
+        "diff_symbols" => {
+            let file_path = input
+                .get("filePath")
+                .and_then(Value::as_str)
+                .context("Missing filePath")?;
+            let patch = input
+                .get("patch")
+                .and_then(Value::as_str)
+                .context("Missing patch")?;
+            let source = if let Some(raw) = input.get("source").and_then(Value::as_str) {
+                raw.as_bytes().to_vec()
+            } else if let Some(base64_str) = input.get("sourceBase64").and_then(Value::as_str) {
+                STANDARD
+                    .decode(base64_str)
+                    .context("Invalid base64 source")?
+            } else {
+                bail!("Missing source or sourceBase64");
+            };
+            Ok(serde_json::to_value(symbols::analyze_file_diff_symbols(
+                &source, patch, file_path,
+            ))?)
+        }
+        "analyze_git_symbols" => {
+            let repo = input
+                .get("repoPath")
+                .and_then(Value::as_str)
+                .context("Missing repoPath")?;
+            let commit_sha = input
+                .get("commitSha")
+                .and_then(Value::as_str)
+                .context("Missing commitSha")?;
+            Ok(serde_json::to_value(symbols::analyze_git_commit_symbols(
+                std::path::Path::new(repo),
+                commit_sha,
+            )?)?)
         }
         _ => bail!("Unknown operation"),
     }
