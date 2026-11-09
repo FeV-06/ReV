@@ -1,5 +1,7 @@
 # Roadmap
 
+For the event build, use the [hackathon scope](docs/hackathon-scope.md). The roadmap below tracks future work.
+
 The current MVP is on-demand and single-operator. Future areas include:
 
 1. Benchmark Laya and alternative classifiers on representative held-out handover data before selecting or fine-tuning a model.
