@@ -178,7 +178,7 @@ pub fn normalize_discussions(
                 .filter(|u| u.starts_with(&format!("https://github.com/{repo}/")))
                 .map(str::to_owned);
             let source_ref = format!("{repo} {kind} #{id}");
-            artifacts.push(artifact(
+            let mut source = artifact(
                 kind,
                 id.to_string(),
                 body.into(),
@@ -186,7 +186,9 @@ pub fn normalize_discussions(
                 string_field(item, "/created_at").map(str::to_owned),
                 url,
                 source_ref,
-            ));
+            );
+            source.github_login = string_field(item, "/user/login").map(str::to_owned);
+            artifacts.push(source);
         }
     }
     ImportResult {
@@ -235,7 +237,7 @@ pub fn normalize_commit_details(repo: &str, detail: &Value) -> ImportResult {
             file.filename,
             file.status.as_deref().unwrap_or("unknown")
         );
-        artifacts.push(artifact(
+        let mut source = artifact(
             "github_commit_patch",
             format!("{sha}:{}", file.filename),
             text,
@@ -243,7 +245,9 @@ pub fn normalize_commit_details(repo: &str, detail: &Value) -> ImportResult {
             string_field(detail, "/commit/author/date").map(str::to_owned),
             Some(format!("https://github.com/{repo}/commit/{sha}")),
             reference,
-        ));
+        );
+        source.github_login = string_field(detail, "/author/login").map(str::to_owned);
+        artifacts.push(source);
     }
     ImportResult {
         artifacts,
@@ -361,14 +365,17 @@ mod tests {
         let r = normalize_discussions("team/repo", &[c.clone(), c, malicious], &[]);
         assert_eq!(r.artifacts.len(), 2);
         assert_eq!(r.artifacts[0].text, "Use Redis because it survives restart");
+        assert_eq!(r.artifacts[0].github_login.as_deref(), Some("maya"));
+        assert_eq!(r.artifacts[1].github_login, None);
         assert!(r.artifacts[0].url.is_some());
         assert!(r.artifacts[1].url.is_none());
     }
     #[test]
     fn patch_normalization_preserves_exact_text_and_reports_missing() {
-        let detail = json!({"sha":"abcdef1234567890","commit":{"author":{"name":"Maya","date":"2026-01-01T00:00:00Z"}},"files":[{"filename":"src/cache.ts","status":"modified","patch":"@@ -1 +1 @@\n-old\n+Redis"},{"filename":"image.png","status":"added"}]});
+        let detail = json!({"sha":"abcdef1234567890","author":{"login":"maya"},"commit":{"author":{"name":"Maya","date":"2026-01-01T00:00:00Z"}},"files":[{"filename":"src/cache.ts","status":"modified","patch":"@@ -1 +1 @@\n-old\n+Redis"},{"filename":"image.png","status":"added"}]});
         let r = normalize_commit_details("team/repo", &detail);
         assert_eq!(r.artifacts.len(), 1);
+        assert_eq!(r.artifacts[0].github_login.as_deref(), Some("maya"));
         assert_eq!(r.artifacts[0].text, "@@ -1 +1 @@\n-old\n+Redis");
         assert!(r.warnings[0].contains("patch unavailable"));
     }

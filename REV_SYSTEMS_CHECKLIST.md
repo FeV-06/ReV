@@ -37,6 +37,7 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 ## 1.1 User-initiated handover
 
 - [x] Create a run with a unique ID, timestamp and recipient/role label.
+- [ ] **PARTIAL:** Capture a GitHub contributor username and a separate target role for each new handover. Optional fields now persist, survive refresh, appear in the workspace/export, and are passed as untrusted generation context (`tests/handover-context.test.ts`, `tests/browser.spec.ts`). Contributor-specific collection, confirmed alias mapping and validated role-tailored output remain open.
 - [x] Start imports only on user request; do not continuously poll sources in the background.
 - [x] Start a fresh run for an updated snapshot rather than silently changing a previous run.
 - [x] List and reopen recent local runs.
@@ -67,6 +68,7 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 - [x] Import commit messages/metadata and pull-request titles, bodies and metadata through the GitHub REST API.
 - [x] Support an optional server-configured GitHub token for repositories it can access; avoid storing the token in a run.
 - [x] Preserve commit/PR IDs, available author/time and GitHub source references.
+- [ ] **PARTIAL:** Identify a selected contributor's GitHub activity. Direct API-linked account handles are retained on imported commits, patches, PRs and comments and exact matches are highlighted; missing linked accounts are not inferred. Contributor-filtered history, manual confirmation of aliases and completeness testing remain open.
 - [x] Report GitHub API errors and when additional pages exist beyond the configured 200-record category limit.
 - [ ] **PARTIAL:** Fetch complete paginated history with explicit limits, resume/retry and rate-limit handling. Two pages per category and explicit cap/rate-limit warnings work; resume and bounded retries remain open.
 - [ ] **PARTIAL:** Import actual repository contents, changed files, commit diffs and branch state. Bounded GitHub commit patches are now imported; full files and branch state remain open. See `crates/rev-core/src/github.rs` and `github::tests`.
@@ -284,7 +286,7 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 - [x] Export an explicitly approved Markdown handover containing non-excluded items and permitted citations.
 - [x] Show incomplete source coverage without exporting potentially restricted warning details.
 - [x] Block export until approval and re-approval following a changed scope/revision.
-- [ ] Build a true authenticated, role-tailored successor portal; the current recipient label is descriptive only.
+- [ ] Build a true authenticated, role-tailored successor portal; the current target role is untrusted generation context, not an access policy, and its tailoring quality has not been evaluated.
 - [ ] Produce a source-backed, actionable Day-1 checklist and ownership/contact view with human-confirmed next steps.
 - [ ] Add version comparison, controlled sharing, receipt acknowledgement and a clear continuation workflow.
 - [ ] Consider additional output formats, including PDF, after defining their security and review requirements.
@@ -357,7 +359,7 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 - [x] Test a basic mobile viewport, keyboard interaction, source-scope invalidation and an export after a server restart.
 - [ ] Run the complete original MVP acceptance matrix, including adversarial and mixed-access cases; do not treat the build alone as full compliance.
 - [ ] Have a second contributor independently follow setup, run the app and report friction.
-- [ ] Publish the GitHub Actions workflow and verify a passing run on the exact published commit. A workflow exists on local `main` but GitHub currently reports none.
+- [x] Publish the GitHub Actions workflow and verify a passing run on the exact published baseline commit `6c2f98c` ([run 42586293957](https://github.com/FeV-06/ReV/actions/runs/42586293957)). Later commits must be checked separately.
 - [ ] Add browser E2E tests to CI and document how to supply test-only model services without production secrets.
 
 ## 12.3 Contributor & publication operations
@@ -402,4 +404,4 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 - Key implementation paths: `crates/rev-core/src/main.rs`, `src/lib/contracts.ts`, `src/lib/server/{core,service,store,body}.ts`, `src/components/HandoverWorkspace.tsx`.
 - Key tests: `tests/{scope,provider,service,store,body}.test.ts`, `tests/{browser,accessibility,live-provider}.spec.ts`, Rust unit tests.
 - The original spec's absolute claims of “zero hallucination”, “leak-proof” pruning and “100%” database compatibility are aspirations, not verified guarantees.
-- GitHub-hosted CI has not been established for the current local changes. Check the remote branch and Actions results for the exact published commit rather than relying on this historical note.
+- GitHub-hosted CI passed on published commit `6c2f98c`; check the remote branch and Actions results separately for later commits.

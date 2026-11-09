@@ -12,7 +12,7 @@ function fileAsBase64(file: File): Promise<string> {
 }
 export default function HandoverWorkspace() {
   const [runs,setRuns] = useState<RunSummary[]>([]); const [run,setRun] = useState<Run|null>(null);
-  const [recipient,setRecipient] = useState('Incoming engineer'); const [repo,setRepo] = useState(''); const [file,setFile] = useState<File|null>(null);
+  const [recipient,setRecipient] = useState('Incoming engineer'); const [githubUsername,setGithubUsername]=useState(''); const [targetRole,setTargetRole]=useState(''); const [repo,setRepo] = useState(''); const [file,setFile] = useState<File|null>(null);
   const [selected,setSelected] = useState<string[]>([]); const [items,setItems] = useState<Item[]>([]);
   const [authorised,setAuthorised] = useState(false); const [remote,setRemote] = useState(false); const [partial,setPartial] = useState(false);
   const [busy,setBusy] = useState(false); const [error,setError] = useState('');
@@ -23,7 +23,7 @@ export default function HandoverWorkspace() {
   async function create(fixture:boolean) { await perform(async()=>{
     if (file && file.size > 10*1024*1024) throw new Error('Slack ZIP exceeds 10 MiB');
     const zipBase64=!fixture && file ? await fileAsBase64(file) : undefined;
-    const result=await api('/api/runs',{method:'POST',body:JSON.stringify({recipient,repo:fixture?undefined:repo || undefined,zipBase64,fixture})}); display(result.run);
+    const result=await api('/api/runs',{method:'POST',body:JSON.stringify({recipient,githubUsername:githubUsername || undefined,targetRole:targetRole || undefined,repo:fixture?undefined:repo || undefined,zipBase64,fixture})}); display(result.run);
   }); }
   async function patch(body:object) { if(!run)return; await perform(async()=> { const d=await api(`/api/runs/${run.id}`,{method:'PATCH',body:JSON.stringify(body)}); display(d.run); }); }
   async function toggle(id:string) {
@@ -44,6 +44,8 @@ export default function HandoverWorkspace() {
       <div className="grid"><div className="column">
         <section className="card"><div className="card-head"><div><div className="eyebrow">01 / CONNECT</div><h2>Start a run</h2><p>Import only material you are authorised to use.</p></div><span className="step-icon">↗</span></div>
           <label>Recipient or role<input value={recipient} onChange={e=>setRecipient(e.target.value)} maxLength={120}/></label>
+          <label>Contributor GitHub username <span className="muted">optional · without @</span><input value={githubUsername} onChange={e=>setGithubUsername(e.target.value)} maxLength={39} placeholder="github-username"/></label>
+          <label>Target role <span className="muted">optional</span><input value={targetRole} onChange={e=>setTargetRole(e.target.value)} maxLength={120} placeholder="e.g. Platform engineer"/></label>
           <label>GitHub repository <span className="muted">optional</span><input value={repo} onChange={e=>setRepo(e.target.value)} placeholder="owner/repository"/></label>
           <label>Slack export ZIP <span className="muted">optional · max 10 MiB</span><input type="file" accept=".zip,application/zip" onChange={e=>setFile(e.target.files?.[0] || null)}/></label>
           <div className="button-row"><button disabled={busy} onClick={()=>create(false)}>Import sources <span>→</span></button><button disabled={busy} className="secondary" onClick={()=>create(true)}>Try synthetic example</button></div>
@@ -52,7 +54,8 @@ export default function HandoverWorkspace() {
         {run && <section className="card"><div className="card-head"><div><div className="eyebrow">02 / SELECT SOURCES</div><h2>Choose what can be shared</h2><p>Imported sources start unselected. Nothing is sent to a model until you confirm the recipient’s access.</p></div><span className="count">{selected.length}/{run.artifacts.length}</span></div>
           {run.mode==='fixture' && <div className="notice">Synthetic fixture · generation uses deterministic example output, not an AI model.</div>}
           {run.warnings.length>0 && <div className="warning"><strong>Incomplete coverage</strong>{run.warnings.map((w,i)=><p key={i}>{w}</p>)}<label className="check"><input type="checkbox" checked={partial} onChange={e=>setPartial(e.target.checked)}/> I understand the source coverage is incomplete.</label></div>}
-          <div className="source-list">{run.artifacts.map(a=><label className="source" key={a.id}><input type="checkbox" disabled={busy} checked={selected.includes(a.id)} onChange={()=>void toggle(a.id)}/><span><b>{a.kind.replaceAll('_',' ')}</b><small>{a.sourceRef}</small><span className="source-text">{a.text}</span></span></label>)}</div>
+          {run.githubUsername && <p className="footnote">GitHub-linked author matches are marked below; missing associations are not guessed. Collection is limited and does not yet search the contributor’s full history. Review other contributors’ context too.</p>}
+          <div className="source-list">{run.artifacts.map(a=><label className="source" key={a.id}><input type="checkbox" disabled={busy} checked={selected.includes(a.id)} onChange={()=>void toggle(a.id)}/><span><b>{a.kind.replaceAll('_',' ')}</b><small>{a.sourceRef}</small>{run.githubUsername && a.githubLogin?.toLowerCase()===run.githubUsername.toLowerCase() && <small>GitHub-linked contributor match: @{a.githubLogin}</small>}<span className="source-text">{a.text}</span></span></label>)}</div>
           <label className="check"><input type="checkbox" checked={authorised} onChange={e=>setAuthorised(e.target.checked)}/> I confirm the recipient may receive all selected material.</label>
           {run.mode!=='fixture' && <label className="check"><input type="checkbox" checked={remote} onChange={e=>setRemote(e.target.checked)}/> I consent to sending selected text to my configured model provider.</label>}
           <button disabled={busy || !selected.length || !authorised || (!!run.warnings.length && !partial) || (run.mode!=='fixture' && !remote)} onClick={()=>patch({action:'generate',selectedIds:selected,acceptPartial:partial,confirmAuthorisation:true,confirmRemote:remote,fixture:run.mode==='fixture'})}>Generate draft <span>→</span></button>
@@ -66,7 +69,7 @@ export default function HandoverWorkspace() {
         </section>}
       </div><div className="column"><section className="card compact"><div className="eyebrow">YOUR WORKSPACE</div><h2>Recent runs</h2><p>Each run is a separate snapshot.</p>{runs.length===0?<div className="empty">No handovers yet.<br/><span>Start a run or try the example.</span></div>:<div className="runs">{runs.map(r=><button className="run-row" key={r.id} onClick={()=>perform(async()=>{ const d=await api(`/api/runs/${r.id}`);display(d.run);})}><span><b>{r.recipient}</b><small>{new Date(r.createdAt).toLocaleString()}</small></span><span className="run-state">{r.state.replaceAll('_',' ')}</span></button>)}</div>}</section>
         <section className="card compact trust"><div className="eyebrow">DESIGNED FOR REVIEW</div><h3>A source, not a guess.</h3><p>Every draft is a starting point. Verify what it says, resolve uncertainty and decide what is safe to share.</p><div className="trust-line"><span>01</span> Select authorised sources</div><div className="trust-line"><span>02</span> Inspect supporting evidence</div><div className="trust-line"><span>03</span> Approve before export</div></section>
-        {run && <section className="card compact"><div className="eyebrow">CURRENT RUN</div><h3>{run.recipient}</h3><p>Status: <b>{run.state.replaceAll('_',' ')}</b></p><button className="danger" disabled={busy} onClick={()=>perform(async()=>{if(!confirm('Delete this run and its stored snapshots? Downloaded exports cannot be revoked.')) return; await api(`/api/runs/${run.id}`,{method:'DELETE'}); setRun(null);})}>Delete run</button></section>}
+        {run && <section className="card compact"><div className="eyebrow">CURRENT RUN</div><h3>{run.recipient}</h3>{run.githubUsername&&<p>Contributor: @{run.githubUsername}</p>}{run.targetRole&&<p>Target role: {run.targetRole}</p>}<p>Status: <b>{run.state.replaceAll('_',' ')}</b></p><button className="danger" disabled={busy} onClick={()=>perform(async()=>{if(!confirm('Delete this run and its stored snapshots? Downloaded exports cannot be revoked.')) return; await api(`/api/runs/${run.id}`,{method:'DELETE'}); setRun(null);})}>Delete run</button></section>}
       </div></div><footer>ReV <span>·</span> A clearer handover starts with the evidence.</footer></div>
     </main></div>;
 }

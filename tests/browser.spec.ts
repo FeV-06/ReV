@@ -2,8 +2,12 @@ import { test, expect } from '@playwright/test';
 
 test('synthetic source selection, review, approval and scoped export', async ({page}) => {
   await page.goto('http://127.0.0.1:3077/');
+  await page.getByLabel('Contributor GitHub username optional · without @').fill('MAYA');
+  await page.getByLabel('Target role optional').fill('Platform engineer');
   await page.getByRole('button', {name:'Try synthetic example'}).click();
   const sources=page.locator('label.source'); await expect(sources).toHaveCount(9);
+  await expect(page.getByText('GitHub-linked contributor match: @maya')).toHaveCount(4);
+  await expect(sources.filter({hasText:'Document cache recovery procedure'}).getByText('GitHub-linked contributor match', {exact:false})).toHaveCount(0);
   await sources.filter({hasText:'Add Redis session cache and fallback'}).locator('input').check();
   await sources.filter({hasText:'Decision: use Redis for sessions. The fallback still needs tests.'}).locator('input').check();
   await page.getByLabel('I confirm the recipient may receive all selected material.').check();
@@ -28,11 +32,13 @@ test('synthetic source selection, review, approval and scoped export', async ({p
   const run=await page.evaluate(async()=>{ const list=await (await fetch('/api/runs',{headers:{'X-Rev-Request':'1'}})).json(); return list.runs[0]; });
   const output=await page.evaluate(async(id)=>await (await fetch(`/api/runs/${id}/export`,{headers:{'X-Rev-Request':'1'}})).text(),run.id);
   expect(output).toContain('Decision: use Redis for sessions');
+  expect(output).toContain('Contributor: MAYA');expect(output).toContain('Target role: Platform engineer');
   expect(output).not.toContain('RESTRICTED_FIXTURE');
   expect(output).not.toContain('Add Redis session cache and fallback');
   await page.reload();
   await expect(page.getByRole('button',{name:/Incoming engineer.*approved/}).first()).toBeVisible();
   await page.getByRole('button',{name:/Incoming engineer.*approved/}).first().click();
+  await expect(page.getByText('Contributor: @MAYA')).toBeVisible();await expect(page.getByText('Target role: Platform engineer')).toBeVisible();
   await expect(page.getByRole('button',{name:'Download Markdown'})).toBeEnabled();
   await sources.filter({hasText:'Decision: use Redis for sessions. The fallback still needs tests.'}).locator('input').uncheck();
   await expect(page.getByRole('heading',{name:'Make it yours'})).toHaveCount(0);

@@ -56,6 +56,11 @@
         },
         "sourceRef": {
           "type": "string"
+        },
+        "githubLogin": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
         }
       },
       "required": [
@@ -252,6 +257,11 @@
               },
               "sourceRef": {
                 "type": "string"
+              },
+              "githubLogin": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
               }
             },
             "required": [
@@ -400,6 +410,18 @@
         "recipient": {
           "type": "string"
         },
+        "githubUsername": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 39,
+          "pattern": "^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$"
+        },
+        "targetRole": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "pattern": "\\S"
+        },
         "createdAt": {
           "type": "string"
         },
@@ -468,6 +490,11 @@
               },
               "sourceRef": {
                 "type": "string"
+              },
+              "githubLogin": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
               }
             },
             "required": [

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { artifactSchema, draftSchema, importSchema, itemSchema, graphEdgeTypeSchema, type Artifact, type Item, type Run } from '@/lib/contracts';
+import { artifactSchema, draftSchema, importSchema, itemSchema, graphEdgeTypeSchema, githubUsernameSchema, targetRoleSchema, type Artifact, type Item, type Run } from '@/lib/contracts';
 import { callCore } from '@/lib/server/core';
 import { appendEdge, buildGraph, reviewEdge, suggestEvidenceEdges } from '@/lib/server/graph';
 import { detectGaps } from '@/lib/server/gaps';
@@ -11,7 +11,7 @@ import { applyRefresh } from '@/lib/server/refresh';
 import { approveRun, compareAndUpdate, createRun, deleteRun, getRun, getVersionedRun, listRuns } from '@/lib/server/store';
 
 const idSchema = z.string().uuid();
-const createSchema = z.object({ recipient: z.string().trim().min(1).max(120), repo: z.string().max(201).optional(), zipBase64: z.string().max(14_000_000).optional(), fixture: z.boolean().default(false) });
+const createSchema = z.object({ recipient: z.string().trim().min(1).max(120), githubUsername:githubUsernameSchema.optional(), targetRole:targetRoleSchema.optional(), repo: z.string().max(201).optional(), zipBase64: z.string().max(14_000_000).optional(), fixture: z.boolean().default(false) });
 const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('scope'), selectedIds: z.array(idSchema).max(500) }),
   z.object({ action: z.literal('generate'), selectedIds: z.array(idSchema).min(1).max(500), acceptPartial: z.boolean(), confirmAuthorisation: z.literal(true), confirmRemote: z.boolean().default(false), fixture: z.boolean().default(false) }),
@@ -38,7 +38,10 @@ export function exportMarkdown(run: Run): string {
     if (!item.derivationSourceIds?.length || item.derivationSourceIds.some(id => !selected.has(id))) throw new Error('Item provenance is missing or outside the authorised scope; regenerate the draft');
   }
   const sources = new Map(run.artifacts.filter(s => selected.has(s.id)).map(s => [s.id, s]));
-  const lines = [`# Handover for ${safeText(run.recipient)}`, '', `Created: ${run.createdAt}`, `Mode: ${run.mode === 'fixture' ? 'synthetic fixture (not model inference)' : 'model-generated, human-reviewed'}`, '', '## Coverage and limitations', ''];
+  const lines = [`# Handover for ${safeText(run.recipient)}`, '', `Created: ${run.createdAt}`, `Mode: ${run.mode === 'fixture' ? 'synthetic fixture (not model inference)' : 'model-generated, human-reviewed'}`];
+  if(run.githubUsername)lines.push(`Contributor: ${safeText(run.githubUsername)}`);
+  if(run.targetRole)lines.push(`Target role: ${safeText(run.targetRole)}`);
+  lines.push('', '## Coverage and limitations', '');
   if (run.warnings.length) lines.push('- Source coverage is incomplete; review import warnings in the workspace.'); else lines.push('- No import warnings reported.');
   lines.push('- Source references are validated; semantic accuracy requires human review.', '- Recipient permissions were manually confirmed by the operator.', '');
   const shown = run.items.filter(i => !i.excluded);
@@ -65,7 +68,7 @@ export function assertLocalRequest(request: Request): void {
   if (request.headers.get('x-rev-request') !== '1') throw new Error('Forbidden: missing request header');
 }
 export async function newRun(raw: unknown): Promise<Run> {
-  const args = createSchema.parse(raw); const run: Run = { id: randomUUID(), recipient: args.recipient, createdAt: new Date().toISOString(), state: 'importing', artifacts: [], warnings: [], selectedIds: [], items: [], mode: null, revision: 0, approvedRevision: null, acceptedPartial: false };
+  const args = createSchema.parse(raw); const run: Run = { id: randomUUID(), recipient: args.recipient, githubUsername:args.githubUsername, targetRole:args.targetRole, createdAt: new Date().toISOString(), state: 'importing', artifacts: [], warnings: [], selectedIds: [], items: [], mode: null, revision: 0, approvedRevision: null, acceptedPartial: false };
   if (!args.fixture && !args.repo && !args.zipBase64) throw new Error('Provide a GitHub repository or Slack export');
   await createRun(run);
   const imports: {label:string; op:object}[] = [];
@@ -112,7 +115,7 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
     run.items = []; run.graphEpoch = randomUUID(); run.approvedRevision = null; run.revision++; run.state = 'reconstructing'; run.acceptedPartial = args.acceptPartial; version = await compareAndUpdate(run, version);
     try {
       const sources = run.artifacts.filter(a => args.selectedIds.includes(a.id)).map(a => artifactSchema.parse(a));
-      const result = draftSchema.parse(await callCore({op:args.fixture ? 'fixture_generate' : 'generate', sources}));
+      const result = draftSchema.parse(await callCore({op:args.fixture ? 'fixture_generate' : 'generate', sources, context:{githubUsername:run.githubUsername,targetRole:run.targetRole}}));
       run.items = result.items.map(item => ({...item, derivationSourceIds: [...run.selectedIds]})); run.mode = args.fixture ? 'fixture' : 'model'; run.state = 'needs_review';
       run.graphEvents=[...(run.graphEvents||[]),...suggestEvidenceEdges(run)];
     } catch (error) { run.state = 'failed'; run.warnings.push(`Generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`); await compareAndUpdate(run, version); throw error; }

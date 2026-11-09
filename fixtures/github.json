@@ -1,7 +1,7 @@
 {
   "repo": "fictional-labs/session-service",
   "commits": [
-    {"sha":"aaa1111111111111111111111111111111111111","commit":{"message":"Add Redis session cache and fallback","author":{"name":"Maya","date":"2026-11-01T09:00:00Z"}}},
+    {"sha":"aaa1111111111111111111111111111111111111","author":{"login":"maya"},"commit":{"message":"Add Redis session cache and fallback","author":{"name":"Maya","date":"2026-11-01T09:00:00Z"}}},
     {"sha":"bbb2222222222222222222222222222222222222","commit":{"message":"Document cache recovery procedure","author":{"name":"Maya","date":"2026-11-03T08:00:00Z"}}}
   ],
   "prs": [
@@ -14,6 +14,6 @@
     {"id":4202,"body":"Open work: add tests for cache outage recovery before launch.","html_url":"https://github.com/fictional-labs/session-service/issues/42#issuecomment-4202","user":{"login":"ari"},"created_at":"2026-11-02T09:20:00Z"}
   ],
   "commitDetails": [
-    {"sha":"aaa1111111111111111111111111111111111111","commit":{"author":{"name":"Maya","date":"2026-11-01T09:00:00Z"}},"files":[{"filename":"src/session.ts","status":"modified","patch":"@@ -1 +1,2 @@\n-import { MemoryStore } from './memory';\n+import { RedisStore } from './redis';\n+export const sessions = new RedisStore();"}]}
+    {"sha":"aaa1111111111111111111111111111111111111","author":{"login":"maya"},"commit":{"author":{"name":"Maya","date":"2026-11-01T09:00:00Z"}},"files":[{"filename":"src/session.ts","status":"modified","patch":"@@ -1 +1,2 @@\n-import { MemoryStore } from './memory';\n+import { RedisStore } from './redis';\n+export const sessions = new RedisStore();"}]}
   ]
 }

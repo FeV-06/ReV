@@ -20,6 +20,8 @@ pnpm dev
 
 Open **http://127.0.0.1:3077**. Choose **Try synthetic example**, select sources, confirm recipient authorisation, generate the clearly marked fixture draft, review, approve, and download Markdown.
 
+You can optionally specify the departing contributor's GitHub username (without `@`) and the incoming person's target role. Imported GitHub records with a directly linked matching account are marked in the source list; records with no account association are not guessed. This does not yet collect the contributor's complete history or resolve Git/Slack aliases. A role is context for generation, not an access permission; the operator still chooses and authorizes every source.
+
 For a production-style local build: `pnpm build && pnpm start`. The app binds to loopback only in the supplied scripts. Do not expose it with a tunnel.
 
 ## Real generation
