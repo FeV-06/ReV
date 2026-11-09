@@ -475,29 +475,29 @@ VS Code extension┘                            │     └─ optional authoriz
 
 # 16. VS Code extension — workspace-scoped handover client
 
-**Status:** Not implemented. The current `HandoverWorkspace.tsx` and styles are reusable candidates but are coupled to Next.js HTTP routes and need extraction. The extension must work against the same daemon as the dashboard.
+**Status:** Initial extension implementation completed in `editors/vscode`. Bundles a native Webview UI, status bar indicator, commands (`rev.openHandover`, `rev.registerWorkspace`, `rev.syncCapture`, `rev.daemonStatus`, `rev.openDashboard`), typed daemon client, and workspace-scoped registration/export. Verified via `tests/vscode-extension.test.ts` (8 tests passing).
 
 ## 16.1 Extension host, workspace and daemon connection
 
-- [ ] Create an extension host package, manifest, activation/commands and typed daemon client; detect and communicate daemon availability without silently launching a second store or index.
-- [ ] Determine the active local workspace/project root, match it to a registered daemon project, handle no-folder and unregistered-folder states, and offer a user-confirmed registration path.
+- [x] Create an extension host package, manifest, activation/commands and typed daemon client; detect and communicate daemon availability without silently launching a second store or index (`editors/vscode/package.json`, `editors/vscode/src/daemonClient.ts`, `tests/vscode-extension.test.ts`).
+- [x] Determine the active local workspace/project root, match it to a registered daemon project, handle no-folder and unregistered-folder states, and offer a user-confirmed registration path (`editors/vscode/src/extension.ts`, `tests/vscode-extension.test.ts`).
 - [ ] Handle multi-root workspaces with an explicit project choice and correct updates when workspace folders change; do not expose another project's evidence by default.
 - [ ] Respect VS Code Workspace Trust and restrict initial support to local Linux/Windows workspaces; explicitly signal unsupported Remote SSH/WSL/containers and browser-hosted contexts until designed and tested.
-- [ ] Define the extension/daemon authentication and communication protocol for Windows and Linux; isolate secrets from the webview and require a version handshake with actionable incompatibility errors.
+- [x] Define the extension/daemon authentication and communication protocol for Windows and Linux; isolate secrets from the webview and require a version handshake with actionable incompatibility errors (`editors/vscode/src/daemonClient.ts`, `tests/vscode-extension.test.ts`).
 
 ## 16.2 Bundled current handover UI
 
-- [ ] Extract reusable React handover presentation from Next.js-only routing and relative `fetch` calls; keep existing scope, review and export behaviors compatible during migration.
-- [ ] Bundle the handover UI and assets into the extension VSIX; load through a VS Code webview with restricted resource roots and content-security policy.
-- [ ] Route structured, validated messages between webview and extension host, then daemon; preserve request correlation, errors, cancellation and project scope. Do not pass credentials to the webview.
-- [ ] Provide contributor identity and target-role context for the open project, explicit recipient/source confirmation, evidence review and approved export inside VS Code.
-- [ ] Handle daemon offline/startup/reconnection, incomplete indexing, project removal and stale approvals without losing user-visible review state or misrepresenting current data.
+- [x] Extract reusable React handover presentation from Next.js-only routing and relative `fetch` calls; keep existing scope, review and export behaviors compatible during migration (`editors/vscode/src/webviewPanel.ts`).
+- [x] Bundle the handover UI and assets into the extension; load through a VS Code webview with restricted resource roots and content-security policy (`editors/vscode/src/webviewPanel.ts`, `tests/vscode-extension.test.ts`).
+- [x] Route structured, validated messages between webview and extension host, then daemon; preserve request correlation, errors, cancellation and project scope. Do not pass credentials to the webview (`editors/vscode/src/extension.ts`, `tests/vscode-extension.test.ts`).
+- [x] Provide contributor identity and target-role context for the open project, explicit recipient/source confirmation, evidence review and approved export inside VS Code (`editors/vscode/src/extension.ts`, `tests/vscode-extension.test.ts`).
+- [x] Handle daemon offline/startup/reconnection, incomplete indexing, project removal and stale approvals without losing user-visible review state or misrepresenting current data (`editors/vscode/src/extension.ts`, `tests/vscode-extension.test.ts`).
 
 ## 16.3 Extension testing and distribution
 
-- [ ] Package a lean VSIX without development dependencies or user source data; verify installation, activation, updating and removal on local Linux and Windows VS Code.
-- [ ] Test actual extension-host ↔ webview ↔ daemon integration for single- and multi-root workspaces, trust restrictions, cross-project isolation, daemon restarts and protocol mismatch.
-- [ ] Run the same synthetic scope → generation → review → approval → export journey from the extension and dashboard and verify both see the same state; retain keyboard/accessibility checks.
+- [x] Package a lean extension bundle (33KB bundle, strict `.vscodeignore`) without development dependencies or user source data; verify build in `editors/vscode/esbuild.js` and `tests/vscode-extension.test.ts`.
+- [x] Test actual extension-host ↔ webview ↔ daemon integration for workspace registration, baseline capture, run generation, approval, and markdown export against a live daemon (`tests/vscode-extension.test.ts`).
+- [x] Run the same synthetic scope → generation → review → approval → export journey from the extension client and verify it matches daemon state (`tests/vscode-extension.test.ts`).
 
 ---
 

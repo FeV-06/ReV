@@ -1,0 +1,75 @@
+{
+  "name": "rev-vscode",
+  "displayName": "ReV — Developer Handover Engine",
+  "description": "Continuous capture, causal knowledge synthesis, and developer handover engine scoped to your VS Code workspace.",
+  "version": "0.1.0",
+  "publisher": "fev",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "main": "./dist/extension.cjs",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "rev.openHandover",
+        "title": "Open Handover Workspace",
+        "category": "ReV"
+      },
+      {
+        "command": "rev.registerWorkspace",
+        "title": "Register Workspace with Daemon",
+        "category": "ReV"
+      },
+      {
+        "command": "rev.syncCapture",
+        "title": "Trigger Incremental Capture Scan",
+        "category": "ReV"
+      },
+      {
+        "command": "rev.daemonStatus",
+        "title": "Show Daemon Health & Connection",
+        "category": "ReV"
+      },
+      {
+        "command": "rev.openDashboard",
+        "title": "Open Local Web Dashboard",
+        "category": "ReV"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "rev-sidebar",
+          "title": "ReV Handover",
+          "icon": "$(layers)"
+        }
+      ]
+    },
+    "views": {
+      "rev-sidebar": [
+        {
+          "type": "webview",
+          "id": "rev.sidebarView",
+          "name": "Workspace Overview"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.27.4",
+    "typescript": "^5.9.0"
+  }
+}
