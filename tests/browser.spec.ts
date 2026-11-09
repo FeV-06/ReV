@@ -1,4 +1,19 @@
 import { test, expect } from '@playwright/test';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';
+
+test('registers a local Git project and shows capture is not active',async({page})=>{
+ const root=await mkdtemp(path.join(tmpdir(),'rev-dashboard-project-'));execFileSync('git',['init','-q',root]);
+ try {
+  await page.goto('http://127.0.0.1:3077/');await expect(page.getByText('Connected · protocol 1')).toBeVisible();
+  await page.getByLabel('Git project root').fill(root);await page.getByLabel('Project GitHub username').fill('FeV-06');
+  await page.getByLabel('I authorize ReV to register this directory for future local capture.').check();
+  await page.getByRole('button',{name:'Register project'}).click();await expect(page.getByText(root,{exact:true})).toBeVisible();
+  await expect(page.getByText('GitHub: @FeV-06 · Capture not implemented')).toBeVisible();
+  await page.reload();await expect(page.getByText(root,{exact:true})).toBeVisible();
+  page.once('dialog',dialog=>void dialog.accept());await page.getByRole('button',{name:'Remove project'}).click();await expect(page.getByText(root,{exact:true})).toHaveCount(0);
+ } finally {await rm(root,{recursive:true,force:true});}
+});
 
 test('synthetic source selection, review, approval and scoped export', async ({page}) => {
   await page.goto('http://127.0.0.1:3077/');

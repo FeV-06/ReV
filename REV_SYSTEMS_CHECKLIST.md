@@ -455,12 +455,12 @@ VS Code extension┘                            │     └─ optional authoriz
 
 # 15. Local daemon dashboard — multi-project website
 
-**Status:** Not implemented as a daemon dashboard. The existing Next.js handover workbench is a local MVP to extract/reuse.
+**Status:** An initial Next.js dashboard uses the daemon API to show connectivity and register/remove Git projects. It explicitly says capture is not implemented; health monitoring, privacy controls and full multi-project handovers remain open.
 
 ## 15.1 Project and daemon management
 
-- [ ] Build a local dashboard connected to the daemon API, not a parallel backend/database; show daemon availability, version and actionable offline/reconnect states.
-- [ ] Add a directory picker or explicit path setup with GitHub username, repository linkage and consent; display what will be watched and which data categories are captured.
+- [ ] **PARTIAL:** Build a local dashboard connected to the daemon API, not a parallel backend/database; show daemon availability, version and actionable offline/reconnect states. The current dashboard shows protocol/connection status and retry; richer health and version details remain open (`src/components/ProjectDashboard.tsx`).
+- [ ] **PARTIAL:** Add a directory picker or explicit path setup with GitHub username, repository linkage and consent; display what will be watched and which data categories are captured. The dashboard registers a Git root and username with explicit consent but clearly states capture is not active; future capture controls remain open (`tests/browser.spec.ts`).
 - [ ] List registered projects and present per-project index status, coverage, latest sync, progress, warnings, active/paused state and errors.
 - [ ] Provide project pause/resume, exclusions, settings, remove/delete-data controls and daemon autostart controls with clear confirmation and scope.
 - [ ] Retain multi-project handover run browsing, source/recipient scope, review, approval and export by calling the daemon; distinguish committed from uncommitted evidence.
