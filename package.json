@@ -16,6 +16,7 @@
     "contracts:check": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/contracts.ts --check",
     "daemon:build": "node scripts/build-daemon.mjs",
     "daemon:start": "node dist/daemon/entry.js",
+    "daemon:autostart": "node scripts/daemon-autostart.mjs",
     "test": "cargo build --workspace && pnpm daemon:build && vitest run",
     "test:rust": "cargo test --workspace",
     "verify": "pnpm typecheck && pnpm contracts:check && pnpm test && pnpm test:rust && pnpm build"

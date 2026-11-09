@@ -28,11 +28,38 @@ let lockOwned=false;
 const MAX_ACTIVE=8;
 let active=0;
 
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
 async function acquireLock():Promise<void> {
   try { await mkdir(lockPath,{mode:0o700});lockOwned=true; }
   catch(error) {
-    if((error as NodeJS.ErrnoException).code==='EEXIST')throw new Error('A ReV daemon is already using this data directory, or a stale daemon lock requires inspection');
-    throw error;
+    if((error as NodeJS.ErrnoException).code==='EEXIST') {
+      try {
+        const ownerJson = await readFile(lockOwnerPath, 'utf8');
+        const owner = JSON.parse(ownerJson) as { pid?: number };
+        if (typeof owner.pid === 'number' && !isProcessAlive(owner.pid)) {
+          process.stderr.write(`[daemon] Cleaning up stale lock from dead PID ${owner.pid}\\n`);
+          await rm(lockOwnerPath, { force: true });
+          await rmdir(lockPath);
+          await mkdir(lockPath, { mode: 0o700 });
+          lockOwned = true;
+        } else {
+          throw new Error(`A ReV daemon is already using this data directory (PID ${owner.pid ?? 'unknown'})`);
+        }
+      } catch (inner) {
+        if ((inner as Error).message.includes('already using this data directory')) throw inner;
+        throw new Error('A ReV daemon is already using this data directory, or a stale daemon lock requires inspection');
+      }
+    } else {
+      throw error;
+    }
   }
   await writeFile(lockOwnerPath,JSON.stringify({protocol:1,pid:process.pid,nonce:launchNonce})+'\n',{mode:0o600,flag:'wx'});
 }
