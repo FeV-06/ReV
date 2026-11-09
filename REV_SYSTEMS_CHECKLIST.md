@@ -4,29 +4,35 @@
 
 **Baseline:** Historical MVP baseline `b1e1f49`; subsequent backend changes and verification are tracked in the sections below and Git history. The public branch can differ from the local work; check Git rather than treating this document as live branch status.
 
-**Scope:** Derived from the original team product specification, the fundamental MVP spec, the hackathon brief and the team's later discussion of Laya.
+**Scope:** Derived from the original team product specification, the fundamental MVP spec, the hackathon brief and subsequent product decisions. The user has approved a three-part local architecture: Node-based background daemon retaining the Rust core, a local multi-project dashboard, and a workspace-scoped VS Code extension that bundles the handover UI.
 
 ## How to read this checklist
 
 - `- [x]` = that **specific, bounded subtask** is implemented or completed and supported by the evidence cited in its system section. It does not mean the larger system is finished.
 - `- [ ]` = not implemented, incomplete, unverified, or a future decision. Prefixes **PARTIAL**, **VERIFY**, **DECIDE** and **LATER** explain why it remains open.
+- Existing checked items describe the **current Next.js MVP or recorded decisions**, not automatically the new daemon, dashboard or extension. Each migration and cross-client verification remains open until tested.
 - No parent system is implicitly complete because one child is checked. A blank box is not necessarily a defect in the Round 2 MVP; many are intentionally beyond it.
 - This is a snapshot, not a promise of accuracy for every possible dataset or environment. When completing a task, link its implementation and an actual test, manual check or decision.
 - **Security boundary:** The current app is a local, single-operator tool. The operator manually confirms which sources a recipient may receive. It does **not** authenticate recipients or automatically verify GitHub/Slack access.
 - **Evidence boundary:** Matching a quote and byte range proves the reference exists in the stored snapshot; it does not establish that the claim is true. Time proximity alone does not establish causality.
 - **Fixture boundary:** The sample-data button uses clearly labeled deterministic output. A separate real-model run has been tested; do not present fixture output as model inference.
 
-## System map
+## System map and approved operating model
 
 ```text
-User → workspace / on-demand run → GitHub + Slack ingestion → source snapshots
-     → recipient scope → model extraction → reference validation → review
-     → approve → recipient-scoped Markdown export
-                          │
-                          └─ Partial foundations: graph, divergence, ownership,
-                             exit questions, redaction and PostgreSQL transfer;
-                             fuller systems and continuous updates remain open
+Local dashboard ─┐                                  ┌─ approved local directories
+                 ├─ authenticated local API ─► daemon ── committed history + saved/uncommitted changes
+VS Code extension┘                            │     └─ optional authorized GitHub + Slack sources
+  current workspace                          ├─ single storage owner + incremental index
+  bundled handover UI                        └─ on-demand handover → scope → review → export
 ```
+
+- **Daemon (target):** Node service reusing the current TypeScript orchestration/PGLite and invoking the Rust core; a single headless daemon owns registered projects, watching, jobs and persistent state. It starts automatically on computer start for the configured user account on Linux and Windows, subject to a platform-specific implementation and test. It remains active when both UIs are closed; sleep, shutdown and power loss are not uninterrupted operation.
+- **Dashboard (target):** A local website for registering watched directories and GitHub usernames, monitoring project/index/daemon health and managing settings, privacy and handovers across projects.
+- **VS Code extension (target):** A bundled workspace-scoped handover UI backed by the same daemon. The extension host mediates its webview-to-daemon requests; no separate database, indexer or required Next.js server inside the extension. Reuse existing React workflow where practical, not an unmodified Next.js server.
+- **Capture (approved):** Continuously track committed history **and** saved/uncommitted changes in explicitly registered directories. Initial backfill and restart reconciliation must be specified and tested. Unsaved editor buffers are a separate open decision; do not imply disk watchers can see them.
+- **Generation and privacy:** Creating a handover remains on demand with explicit recipient/source selection and review; whether AI performs any automatic background processing remains undecided. A GitHub username is contributor context, not proof of local edits; the target role is relevance context, not permission. No external source/model access without the existing authorization/consent boundaries.
+- **Current implementation:** There is no persistent watcher, autostarted daemon, multi-project dashboard or VS Code extension yet. The existing local Next.js MVP is the migration baseline, not the target architecture.
 
 ---
 
@@ -38,7 +44,7 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 
 - [x] Create a run with a unique ID, timestamp and recipient/role label.
 - [ ] **PARTIAL:** Capture a GitHub contributor username and a separate target role for each new handover. Optional fields now persist, survive refresh, appear in the workspace/export, and are passed as untrusted generation context (`tests/handover-context.test.ts`, `tests/browser.spec.ts`). Contributor-specific collection, confirmed alias mapping and validated role-tailored output remain open.
-- [x] Start imports only on user request; do not continuously poll sources in the background.
+- [x] **CURRENT MVP:** Start imports only on user request; the present app does not continuously poll sources. This is historical implementation evidence, not the approved daemon's future behavior.
 - [x] Start a fresh run for an updated snapshot rather than silently changing a previous run.
 - [x] List and reopen recent local runs.
 - [x] Allow an operator to delete a run and its stored approved revisions.
@@ -313,10 +319,12 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 - [ ] Add multi-tenant RLS and real authenticated access boundaries.
 - [ ] Add realtime collaborative review and optional `pgvector` search with permission-aware indexing.
 
-## 10.3 Continuous processing — later
+## 10.3 Continuous capture and on-demand handovers
 
-- [x] Establish the user-approved sequence: **on-demand first, continuous processing later**.
-- [ ] **DECIDE:** Choose whether source updates arrive through webhooks, polling, scheduled sync or another mechanism.
+**Decision update:** The earlier on-demand-only MVP remains valid historical evidence, but the approved target now captures local changes continuously via the daemon. Generation is on demand. Remote webhook/polling choices remain separate decisions.
+
+- [x] **HISTORICAL DECISION:** The initial MVP was on demand first; the later design now calls for local continuous capture.
+- [ ] Select and test efficient native filesystem/Git change detection with a reconciliation strategy for missed events; decide remote GitHub/Slack update triggers separately.
 - [ ] **PARTIAL:** Implement incremental ingestion, deduplication, versioning, retry and source revocation handling. A bounded snapshot-diff/refresh API exists and defaults new content to unselected; it rejects changes or revocations affecting previously selected sources until atomic prior-approval invalidation is implemented (`tests/refresh.test.ts`, `tests/refresh-flow.test.ts`). No scheduler or live connector is wired.
 - [ ] Recompute affected claims/graph paths and atomically invalidate prior approvals when sources or permissions change; the current refresh implementation fails closed instead of making unsafe updates.
 - [ ] Test idempotency, missed events, downtime recovery and consistency across local/cloud modes.
@@ -392,7 +400,119 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 - [ ] Evidence-supported causal graph and inspectable decision timeline.
 - [ ] Targeted gap questions plus human-reviewed contradiction detection.
 - [ ] Real role-based sharing and source-permission integration.
-- [ ] Evaluate Laya/other classifiers and continuous processing separately against the team's priorities.
+- [ ] Evaluate Laya/other classifiers and the detailed background AI-processing policy separately against the team's priorities.
+
+---
+
+# 14. Daemon, local watching and lifecycle — target architecture
+
+**Status:** Not implemented. The existing Node/Next.js service, PGLite store and Rust child process are reusable foundations, not a daemon. The user selected a Node-owned daemon with the existing Rust core, automatic startup on Linux and Windows, and monitoring of committed plus saved/uncommitted changes.
+
+## 14.1 Daemon service, API and migration
+
+- [ ] Extract project/run orchestration and PGLite ownership from the Next.js process into one headless Node daemon; retain the Rust core behind a typed interface and preserve existing handover behavior.
+- [ ] Define a versioned, documented local daemon API and shared client contracts for project registration, status, capture, run/review/export and errors; add consumer/compatibility tests.
+- [ ] Ensure a single owner opens the persistent store; both clients use its API and never independently open or mutate the daemon database.
+- [ ] Implement single-instance detection, readiness/health status, graceful shutdown, bounded work queues, cancellation, failure reporting and clean restart; stop/restart only ReV-owned processes.
+- [ ] Migrate existing PGLite runs, approvals, source and graph events into daemon-owned storage using a backed-up, versioned, tested migration; preserve legacy runs and avoid destructive changes.
+- [ ] Verify the full existing scoped synthetic handover through the daemon API, including approval invalidation and restart persistence, before treating the extraction as complete.
+
+## 14.2 Linux and Windows installation and autostart
+
+- [ ] Define installation, runtime packaging, data locations and minimum supported Linux/Windows/Node versions; deliver the required Node runtime and Rust executable appropriately for each supported target.
+- [ ] Install/configure ReV daemon automatic startup for the configured user account at computer start using an appropriate Linux mechanism; document exact behavior across boot, login, logout and user sessions, and make start/stop/disable/uninstall explicit.
+- [ ] Implement equivalent automatic startup for the configured user account on Windows; define and test boot-versus-login behavior and Windows paths without requiring administrator rights unless specifically justified.
+- [ ] Test startup, absence of a logged-in session where supported, duplicate launch, crash/restart, reboot/relogin, sleep/wake, shutdown and uninstall on real Linux and Windows environments. State any platform limitations rather than claiming 24/7 operation during sleep or shutdown.
+- [ ] Document secure user-scoped file permissions, service logs, troubleshooting and runtime updates; never log credentials or captured source content by default.
+
+## 14.3 Project registry and attribution
+
+- [ ] Register, list, update, pause/resume and remove explicit local project roots; persist each project's GitHub username and repository linkage without silently changing an existing project.
+- [ ] Detect Git root/remote and overlapping or nested directories safely; canonicalize paths and prevent traversal/symlink escapes while reporting inaccessible, renamed or removed roots.
+- [ ] Associate committed history using trustworthy GitHub account linkage or explicitly confirmed Git aliases; flag unmatched/ambiguous attribution rather than guessing.
+- [ ] Represent saved/uncommitted edits separately from committed changes. Treat the configured username as the observer's declared context, not verified authorship of each local edit; preserve timestamp, path and snapshot provenance.
+- [ ] Record per-project indexing status, last successful checkpoint, pending work, errors and coverage; distinguish active, paused, inaccessible and incomplete states.
+
+## 14.4 Incremental local capture
+
+- [ ] Baseline and incrementally index committed Git history for a registered project; capture new commits and relevant diffs while retaining revision and attribution evidence.
+- [ ] Capture saved tracked/untracked working-tree changes without requiring a commit; correctly handle staging/unstaging, file deletion/rename, branch/HEAD switch, reset, merge and checkout, labeling uncommitted evidence accordingly.
+- [ ] Define and enforce exclusions for secrets, ignored files, generated output, binaries, oversized files and user-configured patterns; never assume `.gitignore` alone protects secrets.
+- [ ] Debounce/coalesce event bursts, bound memory/disk/CPU, avoid indexing loops from daemon outputs, and use native file events where suitable with explicit overflow/error handling.
+- [ ] On start, resume, missed notifications, crashes and sleep/wake, reconcile actual Git/disk state idempotently without silent gaps; deduplicate events and expose incomplete coverage.
+- [ ] **DECIDE:** Specify whether and how unsaved editor buffers can be captured through the extension; a daemon disk watcher alone cannot observe them.
+- [ ] **DECIDE:** Set retention, snapshot granularity, secret-detection policy and whether background AI/remote processing is allowed; capture of uncommitted material remains within these explicit controls.
+- [ ] Benchmark idle and active CPU, memory, IO and index latency on representative Linux and Windows repositories; define budgets and demonstrate that closing both UIs leaves capture running.
+
+## 14.5 Local security and governance
+
+- [ ] Authenticate daemon clients and authorize project-scoped operations; protect against cross-origin requests, DNS rebinding, other local users, unauthorized local processes and token leakage. Evaluate the actual transport on both OSes rather than assuming loopback is sufficient.
+- [ ] Define explicit directory-registration consent and controls for capture pause, exclusions, deletion and retention; report stored data and the effect of removing a watched project.
+- [ ] Exclude secrets from remote providers, exports and logs; keep uncommitted content out of those channels unless explicitly selected/authorized. Re-check recipient scope before sharing and disclose already-exported copies cannot be recalled.
+- [ ] Verify watched-path containment, symlinks, hostile repositories, mixed-project access, stale/revoked permissions, cross-client races, malformed requests and workspace-trust handling with security tests.
+
+---
+
+# 15. Local daemon dashboard — multi-project website
+
+**Status:** Not implemented as a daemon dashboard. The existing Next.js handover workbench is a local MVP to extract/reuse.
+
+## 15.1 Project and daemon management
+
+- [ ] Build a local dashboard connected to the daemon API, not a parallel backend/database; show daemon availability, version and actionable offline/reconnect states.
+- [ ] Add a directory picker or explicit path setup with GitHub username, repository linkage and consent; display what will be watched and which data categories are captured.
+- [ ] List registered projects and present per-project index status, coverage, latest sync, progress, warnings, active/paused state and errors.
+- [ ] Provide project pause/resume, exclusions, settings, remove/delete-data controls and daemon autostart controls with clear confirmation and scope.
+- [ ] Retain multi-project handover run browsing, source/recipient scope, review, approval and export by calling the daemon; distinguish committed from uncommitted evidence.
+- [ ] Keep API credentials and auth material out of URLs, webview content, logs and source-controlled configuration; require explicit authorization before remote processing.
+
+## 15.2 Dashboard verification
+
+- [ ] Test onboarding and two independent projects, project isolation, pause/resume, excluded files and stale/unavailable projects using real temporary directories and Git repositories.
+- [ ] Test disconnected/reconnected daemon, restart persistence, browser security/origin behavior, settings changes and accessible keyboard/mobile workflows.
+
+---
+
+# 16. VS Code extension — workspace-scoped handover client
+
+**Status:** Not implemented. The current `HandoverWorkspace.tsx` and styles are reusable candidates but are coupled to Next.js HTTP routes and need extraction. The extension must work against the same daemon as the dashboard.
+
+## 16.1 Extension host, workspace and daemon connection
+
+- [ ] Create an extension host package, manifest, activation/commands and typed daemon client; detect and communicate daemon availability without silently launching a second store or index.
+- [ ] Determine the active local workspace/project root, match it to a registered daemon project, handle no-folder and unregistered-folder states, and offer a user-confirmed registration path.
+- [ ] Handle multi-root workspaces with an explicit project choice and correct updates when workspace folders change; do not expose another project's evidence by default.
+- [ ] Respect VS Code Workspace Trust and restrict initial support to local Linux/Windows workspaces; explicitly signal unsupported Remote SSH/WSL/containers and browser-hosted contexts until designed and tested.
+- [ ] Define the extension/daemon authentication and communication protocol for Windows and Linux; isolate secrets from the webview and require a version handshake with actionable incompatibility errors.
+
+## 16.2 Bundled current handover UI
+
+- [ ] Extract reusable React handover presentation from Next.js-only routing and relative `fetch` calls; keep existing scope, review and export behaviors compatible during migration.
+- [ ] Bundle the handover UI and assets into the extension VSIX; load through a VS Code webview with restricted resource roots and content-security policy.
+- [ ] Route structured, validated messages between webview and extension host, then daemon; preserve request correlation, errors, cancellation and project scope. Do not pass credentials to the webview.
+- [ ] Provide contributor identity and target-role context for the open project, explicit recipient/source confirmation, evidence review and approved export inside VS Code.
+- [ ] Handle daemon offline/startup/reconnection, incomplete indexing, project removal and stale approvals without losing user-visible review state or misrepresenting current data.
+
+## 16.3 Extension testing and distribution
+
+- [ ] Package a lean VSIX without development dependencies or user source data; verify installation, activation, updating and removal on local Linux and Windows VS Code.
+- [ ] Test actual extension-host ↔ webview ↔ daemon integration for single- and multi-root workspaces, trust restrictions, cross-project isolation, daemon restarts and protocol mismatch.
+- [ ] Run the same synthetic scope → generation → review → approval → export journey from the extension and dashboard and verify both see the same state; retain keyboard/accessibility checks.
+
+---
+
+## Migration order and review gates
+
+1. **Daemon seam:** define contracts and secure local communication, extract existing backend/store, migrate data and pass the existing workflow through the new owner.
+2. **Watching and lifecycle:** register a real local Git project, establish the first baseline, watch commits and saved/uncommitted changes, reconcile missed events, and implement/test platform-specific startup.
+3. **Dashboard:** manage projects and surface capture/daemon health using that same API.
+4. **VS Code extension:** bundle the extracted handover UI and connect the active workspace to the daemon; verify the same data and review workflow across both clients.
+
+These are dependency priorities, not completed features or a promise that every platform edge is solved. Preserve existing check marks as MVP evidence; require separate Linux/Windows, privacy and end-to-end verification for the new architecture.
+
+### End-to-end acceptance target
+
+With ReV installed and a computer started, the configured user's daemon starts automatically on each supported OS. The user registers a local Git project and username in the dashboard, and ReV indexes committed activity and saved/uncommitted changes while both interfaces are closed. Opening that project in VS Code connects the extension's bundled handover view to the **same** daemon data. The user chooses a target role, scopes authorized evidence, reviews and approves a handover, and can see the same state in the dashboard. A daemon restart catches up safely; pausing a project prevents further capture; excluded files and unauthorized evidence do not enter the generated/exported handover. Demonstrate on both Linux and Windows without substituting synthetic data for actual capture.
 
 ---
 
