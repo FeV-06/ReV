@@ -13,3 +13,4 @@ test-results/
 *.zip
 !fixtures/slack-fixture.zip
 .DS_Store
+next-env.d.ts

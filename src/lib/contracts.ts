@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
 export const artifactSchema = z.object({
-  id: z.string().uuid(), kind: z.enum(['github_commit', 'github_pr', 'github_review_comment', 'github_discussion_comment', 'github_commit_patch', 'slack_message', 'review_answer', 'review_redaction']),
+  id: z.string().uuid(), kind: z.enum(['git_commit', 'github_commit', 'github_pr', 'github_review_comment', 'github_discussion_comment', 'github_commit_patch', 'slack_message', 'review_answer', 'review_redaction']),
   externalId: z.string(), text: z.string(), author: z.string().nullable(),
-  timestamp: z.string().nullable(), url: z.string().url().nullable(), sourceRef: z.string(), githubLogin:z.string().min(1).max(100).optional(),
+  timestamp: z.string().nullable(), url: z.string().url().nullable(), sourceRef: z.string(),
+  githubLogin: z.string().min(1).max(100).optional(),
+  paths: z.array(z.string()).optional(),
 });
 export type Artifact = z.infer<typeof artifactSchema>;
 
@@ -33,6 +35,27 @@ export const sourceEventSchema=z.object({id:z.string().uuid(),type:z.literal('so
 export type SourceEvent=z.infer<typeof sourceEventSchema>;
 export const githubUsernameSchema=z.string().min(1).max(39).regex(/^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/,'Enter a GitHub username without @');
 export const targetRoleSchema=z.string().min(1).max(120).regex(/\S/,'Target role must not be empty');
-export const runSchema = z.object({ id:z.string().uuid(), recipient:z.string(), githubUsername:githubUsernameSchema.optional(), targetRole:targetRoleSchema.optional(), createdAt:z.string(), state:runStateSchema, artifacts:z.array(artifactSchema), warnings:z.array(z.string()), selectedIds:z.array(z.string().uuid()), items:z.array(itemSchema), mode:z.string().nullable(), revision:z.number().int().nonnegative(), approvedRevision:z.number().int().nonnegative().nullable(), acceptedPartial:z.boolean(), graphEvents:z.array(graphEventSchema).optional(),graphEpoch:z.string().uuid().optional(),gaps:z.array(gapSchema).optional(),sourceEvents:z.array(sourceEventSchema).optional() });
+export const runSchema = z.object({
+  id: z.string().uuid(),
+  recipient: z.string(),
+  githubUsername: githubUsernameSchema.optional(),
+  targetRole: targetRoleSchema.optional(),
+  departingPerson: z.string().optional(),
+  takeoverScope: z.string().optional(),
+  createdAt: z.string(),
+  state: runStateSchema,
+  artifacts: z.array(artifactSchema),
+  warnings: z.array(z.string()),
+  selectedIds: z.array(z.string().uuid()),
+  items: z.array(itemSchema),
+  mode: z.string().nullable(),
+  revision: z.number().int().nonnegative(),
+  approvedRevision: z.number().int().nonnegative().nullable(),
+  acceptedPartial: z.boolean(),
+  graphEvents: z.array(graphEventSchema).optional(),
+  graphEpoch: z.string().uuid().optional(),
+  gaps: z.array(gapSchema).optional(),
+  sourceEvents: z.array(sourceEventSchema).optional()
+});
 export type RunState = z.infer<typeof runStateSchema>;
 export type Run = z.infer<typeof runSchema>;

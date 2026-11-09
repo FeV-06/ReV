@@ -20,6 +20,7 @@ test('synthetic source selection, review, approval and scoped export', async ({p
   await page.getByLabel('Contributor GitHub username optional · without @').fill('MAYA');
   await page.getByLabel('Target role optional').fill('Platform engineer');
   await page.getByRole('button', {name:'Try synthetic example'}).click();
+  await expect(page.getByLabel('What are you taking over?')).toHaveValue('');
   const sources=page.locator('label.source'); await expect(sources).toHaveCount(9);
   await expect(page.getByText('GitHub-linked contributor match: @maya')).toHaveCount(4);
   await expect(sources.filter({hasText:'Document cache recovery procedure'}).getByText('GitHub-linked contributor match', {exact:false})).toHaveCount(0);
@@ -29,6 +30,8 @@ test('synthetic source selection, review, approval and scoped export', async ({p
   await page.getByRole('button', {name:'Generate draft'}).click();
   await expect(page.getByRole('heading',{name:'Make it yours'})).toBeVisible();
   await expect(page.locator('.review-item')).toHaveCount(2);
+  await expect(page.getByRole('heading', { name: 'Start here' })).toBeVisible();
+  await expect(page.locator('.notice').filter({hasText:'Start here'})).toContainText('Add a test for the Redis session fallback.');
   const graphResult=await page.evaluate(async()=>{
     const headers={'X-Rev-Request':'1','Content-Type':'application/json'};
     const list=await (await fetch('/api/runs',{headers})).json();const id=list.runs[0].id;

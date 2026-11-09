@@ -292,7 +292,9 @@ pub fn normalize_commit_details(repo: &str, detail: &Value) -> ImportResult {
             "github_commit_patch",
             format!("{sha}:{}", file.filename),
             text,
-            string_field(detail, "/commit/author/name").map(str::to_owned),
+            string_field(detail, "/author/login")
+                .or_else(|| string_field(detail, "/commit/author/name"))
+                .map(str::to_owned),
             string_field(detail, "/commit/author/date").map(str::to_owned),
             Some(format!("https://github.com/{repo}/commit/{sha}")),
             reference,

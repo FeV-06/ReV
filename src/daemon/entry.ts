@@ -8,6 +8,7 @@ import { readJsonLimited } from '@/lib/server/body';
 import { newRun, updateAction, readRun, readGraph, exportMarkdown, refreshRun, deleteRun, listRuns, clientError } from '@/lib/server/service';
 import { closeDatabase, database } from '@/lib/server/store';
 import { listProjects, registerProject, removeProject, setProjectPaused } from '@/lib/server/projects';
+import { connectedSources } from '@/lib/server/sources';
 
 const host='127.0.0.1';
 const requestedPort=Number(process.env.REV_DAEMON_PORT ?? '3078');
@@ -83,7 +84,7 @@ async function route(req:IncomingMessage,res:ServerResponse):Promise<void> {
       json(res,405,{error:'Method not allowed'});return;
     }
     if(url.pathname==='/v1/runs'){
-      if(req.method==='GET'){json(res,200,{runs:await listRuns()});return;}
+      if(req.method==='GET'){json(res,200,{runs:await listRuns(),sources:await connectedSources()});return;}
       if(req.method==='POST'){json(res,201,{run:await newRun(await body(req,15_000_000))});return;}
     }
     const match=/^\/v1\/runs\/([0-9a-fA-F-]+)(?:\/(graph|export|refresh))?$/.exec(url.pathname);
