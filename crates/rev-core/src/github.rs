@@ -150,6 +150,57 @@ async fn fetch_pages(
     values
 }
 
+fn github_username_is_valid(username: &str) -> bool {
+    if username.is_empty()
+        || username.len() > 39
+        || username.starts_with('-')
+        || username.ends_with('-')
+        || username.contains("--")
+    {
+        return false;
+    }
+    username
+        .bytes()
+        .all(|c| c.is_ascii_alphanumeric() || c == b'-')
+}
+
+async fn fetch_commits_by_author(
+    client: &Client,
+    base: &str,
+    repo: &str,
+    username: &str,
+    token: Option<&str>,
+    max_pages: usize,
+    warnings: &mut Vec<String>,
+) -> Vec<Value> {
+    let extra = format!("&author={username}");
+    let warning_start = warnings.len();
+    let mut results = fetch_pages(
+        client, base, repo, "commits", &extra, token, max_pages, warnings,
+    )
+    .await;
+    for warning in &mut warnings[warning_start..] {
+        *warning = format!("contributor commits: {warning}");
+    }
+    let mut other = 0usize;
+    let mut unlinked = 0usize;
+    results.retain(|commit| match string_field(commit, "/author/login") {
+        Some(login) if login.eq_ignore_ascii_case(username) => true,
+        Some(_) => {
+            other += 1;
+            false
+        }
+        None => {
+            unlinked += 1;
+            false
+        }
+    });
+    if other > 0 || unlinked > 0 {
+        warnings.push(format!("contributor commits: excluded {other} differently linked and {unlinked} unlinked returned records; aliases require manual confirmation"));
+    }
+    results
+}
+
 pub fn normalize_discussions(
     repo: &str,
     review_comments: &[Value],
@@ -259,12 +310,16 @@ pub async fn import(
     repo: &str,
     token: Option<&str>,
     config: &GitHubConfig,
+    contributor: Option<&str>,
 ) -> Result<ImportResult> {
     if !repo_path_is_valid(repo) {
         bail!("Repository must be owner/name using letters, numbers, dash, underscore or dot");
     }
     if !(1..=10).contains(&config.max_pages) || config.detail_commits > 50 {
         bail!("GitHub import limits are invalid");
+    }
+    if contributor.is_some_and(|value| !github_username_is_valid(value)) {
+        bail!("Invalid GitHub contributor username");
     }
     let client = Client::builder()
         .user_agent("ReV-handover/0.1")
@@ -344,6 +399,70 @@ pub async fn import(
             Err(_) => warnings.push(format!("commit {sha}: GitHub request failed or timed out")),
         }
     }
+    if let Some(username) = contributor {
+        let matching = fetch_commits_by_author(
+            &client,
+            &config.api_base,
+            repo,
+            username,
+            token,
+            config.max_pages,
+            &mut warnings,
+        )
+        .await;
+        let mut extra = crate::normalize_github(repo, &matching, &[]);
+        let mut seen: HashSet<(String, String)> = result
+            .artifacts
+            .iter()
+            .map(|a| (a.kind.clone(), a.external_id.clone()))
+            .collect();
+        result.artifacts.extend(
+            extra
+                .artifacts
+                .drain(..)
+                .filter(|a| seen.insert((a.kind.clone(), a.external_id.clone()))),
+        );
+        warnings.extend(extra.warnings);
+        if matching.len() > config.detail_commits {
+            warnings.push(format!(
+                "contributor commit patches: limited to {} commits; remaining patches not imported",
+                config.detail_commits
+            ));
+        }
+        for commit in matching.iter().take(config.detail_commits) {
+            let Some(sha) = string_field(commit, "/sha").filter(|s| safe_sha(s)) else {
+                warnings.push("contributor patches: skipped invalid SHA".into());
+                continue;
+            };
+            let url = format!(
+                "{}/repos/{repo}/commits/{sha}",
+                config.api_base.trim_end_matches('/')
+            );
+            match request(&client, &url, token).send().await {
+                Ok(response) => match response_json(response).await {
+                    Ok(detail) => {
+                        if string_field(&detail, "/author/login")
+                            .is_some_and(|login| login.eq_ignore_ascii_case(username))
+                        {
+                            let mut normalized = normalize_commit_details(repo, &detail);
+                            result.artifacts.extend(
+                                normalized.artifacts.drain(..).filter(|a| {
+                                    seen.insert((a.kind.clone(), a.external_id.clone()))
+                                }),
+                            );
+                            warnings.append(&mut normalized.warnings);
+                        } else {
+                            warnings.push(format!("contributor patch {sha}: account association missing or changed; skipped"));
+                        }
+                    }
+                    Err(err) => warnings.push(format!("contributor commit {sha}: {err}")),
+                },
+                Err(_) => warnings.push(format!(
+                    "contributor commit {sha}: GitHub request failed or timed out"
+                )),
+            }
+        }
+    }
     result.warnings.extend(warnings);
     if result.artifacts.is_empty() {
         bail!(
@@ -384,6 +503,52 @@ mod tests {
         assert!(repo_path_is_valid("a/b"));
         assert!(!repo_path_is_valid("a/../b"));
         assert!(!safe_sha("abc/../../etc"));
+        assert!(github_username_is_valid("FeV-06"));
+        for bad in ["", "@FeV-06", "a/b", "-a", "a-", "a--b", "two words"] {
+            assert!(!github_username_is_valid(bad));
+        }
+    }
+    #[tokio::test]
+    async fn contributor_fetch_retains_only_explicit_account_matches_and_pagination_warnings() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for _ in 0..2 {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut buffer = vec![0u8; 8192];
+                let n = socket.read(&mut buffer).await.unwrap();
+                let request = String::from_utf8_lossy(&buffer[..n]);
+                assert!(request.contains("author=FeV-06"));
+                let body = json!([
+                    {"sha":"abc1234","author":{"login":"fev-06"},"commit":{"message":"mine"}},
+                    {"sha":"def5678","author":null,"commit":{"message":"unlinked"}},
+                    {"sha":"abc5678","author":{"login":"someone-else"},"commit":{"message":"other"}}
+                ])
+                .to_string();
+                let reply=format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nLink: <http://invalid>; rel=\"next\"\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",body.len(),body);
+                socket.write_all(reply.as_bytes()).await.unwrap();
+            }
+        });
+        let client = Client::new();
+        let mut warnings = Vec::new();
+        let commits = fetch_commits_by_author(
+            &client,
+            &format!("http://{addr}"),
+            "a/b",
+            "FeV-06",
+            None,
+            2,
+            &mut warnings,
+        )
+        .await;
+        server.await.unwrap();
+        assert_eq!(commits.len(), 2);
+        assert!(commits.iter().all(|c| c["author"]["login"] == "fev-06"));
+        assert!(warnings.iter().any(|w| w.contains("additional pages")));
+        assert!(warnings
+            .iter()
+            .any(|w| w.contains("2 differently linked and 2 unlinked")));
     }
     #[tokio::test]
     async fn imports_paginated_comments_and_patch_over_actual_http() {
@@ -439,7 +604,7 @@ mod tests {
             max_pages: 2,
             detail_commits: 1,
         };
-        let result = import("a/b", None, &config).await.unwrap();
+        let result = import("a/b", None, &config, None).await.unwrap();
         server.await.unwrap();
         for kind in [
             "github_commit",

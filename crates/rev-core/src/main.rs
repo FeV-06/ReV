@@ -400,6 +400,7 @@ pub async fn handle(input: Value) -> Result<Value> {
                 input.get("repo").and_then(Value::as_str).unwrap_or(""),
                 std::env::var("REV_GITHUB_TOKEN").ok().as_deref(),
                 &github::GitHubConfig::default(),
+                input.get("contributor").and_then(Value::as_str),
             )
             .await?,
         )?),

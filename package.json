@@ -14,7 +14,9 @@
     "typecheck": "tsc --noEmit",
     "contracts:generate": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/contracts.ts",
     "contracts:check": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/contracts.ts --check",
-    "test": "cargo build --workspace && vitest run",
+    "daemon:build": "node scripts/build-daemon.mjs",
+    "daemon:start": "node dist/daemon/entry.js",
+    "test": "cargo build --workspace && pnpm daemon:build && vitest run",
     "test:rust": "cargo test --workspace",
     "verify": "pnpm typecheck && pnpm contracts:check && pnpm test && pnpm test:rust && pnpm build"
   },
@@ -32,6 +34,7 @@
     "@types/pg": "8.23.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "esbuild": "0.27.4",
     "typescript": "^5.9.0",
     "vitest": "5.1.0"
   }

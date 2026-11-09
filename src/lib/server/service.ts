@@ -56,17 +56,7 @@ export function exportMarkdown(run: Run): string {
   }
   return lines.join('\n');
 }
-function getOrigin(request: Request): boolean {
-  const origin = request.headers.get('origin'); const host = request.headers.get('host');
-  if (!host || !/^(127\.0\.0\.1|localhost):3077$/.test(host)) return false;
-  if (origin) return origin === `http://${host}`;
-  if (request.method !== 'GET') return false;
-  return request.headers.get('sec-fetch-site') === 'same-origin';
-}
-export function assertLocalRequest(request: Request): void {
-  if (!getOrigin(request)) throw new Error('Forbidden: open ReV at http://127.0.0.1:3077');
-  if (request.headers.get('x-rev-request') !== '1') throw new Error('Forbidden: missing request header');
-}
+export { assertLocalRequest, clientError } from '@/lib/server/request-security';
 export async function newRun(raw: unknown): Promise<Run> {
   const args = createSchema.parse(raw); const run: Run = { id: randomUUID(), recipient: args.recipient, githubUsername:args.githubUsername, targetRole:args.targetRole, createdAt: new Date().toISOString(), state: 'importing', artifacts: [], warnings: [], selectedIds: [], items: [], mode: null, revision: 0, approvedRevision: null, acceptedPartial: false };
   if (!args.fixture && !args.repo && !args.zipBase64) throw new Error('Provide a GitHub repository or Slack export');
@@ -78,7 +68,7 @@ export async function newRun(raw: unknown): Promise<Run> {
     imports.push({ label: 'Synthetic GitHub', op: { op:'normalize_fixture', ...github } }, { label:'Synthetic Slack', op:{ op:'slack', zipBase64:zip.toString('base64') } });
     run.mode = 'fixture';
   } else {
-    if (args.repo) imports.push({label:'GitHub', op:{op:'github', repo:args.repo}});
+    if (args.repo) imports.push({label:'GitHub', op:{op:'github', repo:args.repo, contributor:args.githubUsername}});
     if (args.zipBase64) imports.push({label:'Slack', op:{op:'slack', zipBase64:args.zipBase64}});
   }
   for (const {label,op} of imports) {
@@ -194,4 +184,3 @@ export async function refreshRun(id:string,raw:unknown):Promise<Run>{
   const next=applyRefresh(prior,args.sources,args.revokedIds);await createRun(next);return publicRun(next);
 }
 export { listRuns, deleteRun };
-export function clientError(error: unknown): string { return error instanceof z.ZodError ? 'Invalid request data' : error instanceof Error ? error.message : 'Operation failed'; }

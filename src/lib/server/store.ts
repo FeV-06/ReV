@@ -9,6 +9,12 @@ export function database(): Promise<PGlite> {
   if (!globalDb.revDb) globalDb.revDb = open();
   return globalDb.revDb;
 }
+export async function closeDatabase():Promise<void> {
+  if (!globalDb.revDb) return;
+  const pending=globalDb.revDb;
+  try { const db=await pending; await db.close(); }
+  finally { if(globalDb.revDb===pending) delete globalDb.revDb; }
+}
 async function open(): Promise<PGlite> {
   const dir = path.resolve(/*turbopackIgnore: true*/ process.env.REV_DATA_DIR || '.rev-data');
   await mkdir(dir, { recursive: true, mode: 0o700 });

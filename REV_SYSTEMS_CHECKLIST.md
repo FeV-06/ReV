@@ -32,7 +32,7 @@ VS Code extension┘                            │     └─ optional authoriz
 - **VS Code extension (target):** A bundled workspace-scoped handover UI backed by the same daemon. The extension host mediates its webview-to-daemon requests; no separate database, indexer or required Next.js server inside the extension. Reuse existing React workflow where practical, not an unmodified Next.js server.
 - **Capture (approved):** Continuously track committed history **and** saved/uncommitted changes in explicitly registered directories. Initial backfill and restart reconciliation must be specified and tested. Unsaved editor buffers are a separate open decision; do not imply disk watchers can see them.
 - **Generation and privacy:** Creating a handover remains on demand with explicit recipient/source selection and review; whether AI performs any automatic background processing remains undecided. A GitHub username is contributor context, not proof of local edits; the target role is relevance context, not permission. No external source/model access without the existing authorization/consent boundaries.
-- **Current implementation:** There is no persistent watcher, autostarted daemon, multi-project dashboard or VS Code extension yet. The existing local Next.js MVP is the migration baseline, not the target architecture.
+- **Current implementation:** A manually started, local Node daemon now owns the PGLite-backed handover API; the Next.js workbench proxies to it. There is no persistent watcher, autostart setup, multi-project dashboard or VS Code extension yet. The current daemon is an integration foundation, not the complete target architecture.
 
 ---
 
@@ -74,7 +74,7 @@ VS Code extension┘                            │     └─ optional authoriz
 - [x] Import commit messages/metadata and pull-request titles, bodies and metadata through the GitHub REST API.
 - [x] Support an optional server-configured GitHub token for repositories it can access; avoid storing the token in a run.
 - [x] Preserve commit/PR IDs, available author/time and GitHub source references.
-- [ ] **PARTIAL:** Identify a selected contributor's GitHub activity. Direct API-linked account handles are retained on imported commits, patches, PRs and comments and exact matches are highlighted; missing linked accounts are not inferred. Contributor-filtered history, manual confirmation of aliases and completeness testing remain open.
+- [ ] **PARTIAL:** Identify a selected contributor's GitHub activity. Direct API-linked account handles are retained on imported commits, patches, PRs and comments; a bounded contributor-filtered GitHub commit query supplements recent activity and checks the linked login. `KingSahil/Blinky` / `FeV-06` was exercised through the daemon; missing associations are not inferred. Full history, manual alias confirmation and completeness testing remain open.
 - [x] Report GitHub API errors and when additional pages exist beyond the configured 200-record category limit.
 - [ ] **PARTIAL:** Fetch complete paginated history with explicit limits, resume/retry and rate-limit handling. Two pages per category and explicit cap/rate-limit warnings work; resume and bounded retries remain open.
 - [ ] **PARTIAL:** Import actual repository contents, changed files, commit diffs and branch state. Bounded GitHub commit patches are now imported; full files and branch state remain open. See `crates/rev-core/src/github.rs` and `github::tests`.
@@ -406,16 +406,16 @@ VS Code extension┘                            │     └─ optional authoriz
 
 # 14. Daemon, local watching and lifecycle — target architecture
 
-**Status:** Not implemented. The existing Node/Next.js service, PGLite store and Rust child process are reusable foundations, not a daemon. The user selected a Node-owned daemon with the existing Rust core, automatic startup on Linux and Windows, and monitoring of committed plus saved/uncommitted changes.
+**Status:** A manually started Node daemon and versioned local handover API exist; the Next.js workbench now proxies to it. `tests/daemon-process.test.ts` exercises the actual child process, authentication, current-store reuse, approval invalidation and restart. Automatic startup, watching, project registry, Windows verification and VS Code integration remain open.
 
 ## 14.1 Daemon service, API and migration
 
-- [ ] Extract project/run orchestration and PGLite ownership from the Next.js process into one headless Node daemon; retain the Rust core behind a typed interface and preserve existing handover behavior.
+- [ ] **PARTIAL:** Extract project/run orchestration and PGLite ownership from the Next.js process into one headless Node daemon; retain the Rust core behind a typed interface and preserve existing handover behavior. Existing run routes proxy to a manually started daemon; project management and complete lifecycle remain open.
 - [ ] Define a versioned, documented local daemon API and shared client contracts for project registration, status, capture, run/review/export and errors; add consumer/compatibility tests.
-- [ ] Ensure a single owner opens the persistent store; both clients use its API and never independently open or mutate the daemon database.
+- [ ] **PARTIAL:** Ensure a single owner opens the persistent store; both clients use its API and never independently open or mutate the daemon database. The current dashboard routes use the daemon, and a second daemon using the same data directory is rejected; extension and abnormal-crash recovery remain open.
 - [ ] Implement single-instance detection, readiness/health status, graceful shutdown, bounded work queues, cancellation, failure reporting and clean restart; stop/restart only ReV-owned processes.
 - [ ] Migrate existing PGLite runs, approvals, source and graph events into daemon-owned storage using a backed-up, versioned, tested migration; preserve legacy runs and avoid destructive changes.
-- [ ] Verify the full existing scoped synthetic handover through the daemon API, including approval invalidation and restart persistence, before treating the extraction as complete.
+- [x] Verify the existing scoped synthetic handover through the daemon API, including approval invalidation and restart persistence (`tests/daemon-process.test.ts`); browser workflow was also exercised through the dashboard proxy. This is not proof of all daemon migration items.
 
 ## 14.2 Linux and Windows installation and autostart
 
