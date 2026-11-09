@@ -7,7 +7,7 @@ ReV's current web interface is a **local, single-operator tool**. It has no logi
 1. GitHub API responses, Slack exports, model outputs and reviewer-entered text are untrusted. They may contain instructions, secrets, active markup, corrupt archives or misleading claims.
 2. The operator chooses a source scope before generation. The application sends only those selected records to the configured model provider; the operator must authorize remote transmission.
 3. Citations are checked for exact source/span matches. This establishes reference integrity only; it does not prove semantic support or truth.
-4. Source-scope changes invalidate draft approval. The local operator can still see imported records; this is not recipient authorization.
+4. Source-scope changes invalidate draft approval. The local operator can still see imported records; this is not recipient authorization. Source redaction creates a separate local snapshot with selected text replaced; it does not delete or restrict the original source. The operator must select the redacted snapshot, not the original, and ensure restricted data is absent from every selected record and its metadata. This is not a substitute for access control.
 5. Exported files leave the application's control and cannot be revoked.
 
 ## Existing controls and limits

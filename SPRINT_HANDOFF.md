@@ -1,5 +1,7 @@
 # ReV sprint state
 
+> **Historical handoff:** This snapshot predates the standalone graph-event table, model-assisted divergence candidates, citation repair, PostgreSQL import prototype, source refresh planning and local redaction work. Its state and priorities are not a current status report; see `REV_SYSTEMS_CHECKLIST.md` and Git history.
+
 ## Objective and constraints
 
 Continue the full `REV_SYSTEMS_CHECKLIST.md` with real implementation and verification; leave the frontend lightweight because a teammate is working on it. Do not use subagents (explicit user direction), do not push without an explicit new push request, never touch unrelated services, do not claim automatic GitHub/Slack permissions or zero hallucination. Keep `PARTIAL`, `VERIFY`, and externally blocked checklist items honest.

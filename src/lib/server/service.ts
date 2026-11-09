@@ -21,6 +21,7 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('detect_gaps') }),
   z.object({ action: z.literal('detect_divergence'), selectedIds:z.array(idSchema).min(2).max(500),confirmRemote:z.literal(true) }),
   z.object({ action: z.literal('attach_citations'), itemId:idSchema, selectedIds:z.array(idSchema).min(1).max(500), references:z.array(z.object({sourceId:idSchema,quote:z.string().min(1).max(4000)})).min(1).max(10) }),
+  z.object({ action: z.literal('redact_source'), sourceId:idSchema, quote:z.string().min(1).max(4000), selectedIds:z.array(idSchema).min(1).max(500) }),
   z.object({ action: z.literal('answer_gap'), gapId:idSchema, answer:z.string().trim().min(1).max(4000), selectedIds:z.array(idSchema).min(1).max(500) }),
   z.object({ action: z.literal('approve'), confirmAuthorisation: z.literal(true) }),
 ]);
@@ -141,6 +142,16 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
     run.items=[...run.items,...candidates];
     run.graphEvents=[...(run.graphEvents||[]),...suggestEvidenceEdges({...run,items:candidates})];
     run.state='needs_review';run.revision++;run.approvedRevision=null;
+  } else if (args.action === 'redact_source') {
+    if(!['awaiting_scope_confirmation','needs_review','approved'].includes(run.state))throw new Error('Source redaction is unavailable while the run is processing');
+    if(args.selectedIds.slice().sort().join(',')!==run.selectedIds.slice().sort().join(','))throw new Error('Source scope changed; reload before redaction');
+    if(!run.selectedIds.includes(args.sourceId))throw new Error('Redaction source is not selected');
+    const source=run.artifacts.find(a=>a.id===args.sourceId);
+    if(!source||!source.text.includes(args.quote))throw new Error('Exact redaction quote not found');
+    const now=new Date().toISOString();const redactedSourceId=randomUUID();
+    run.artifacts.push({id:redactedSourceId,kind:'review_redaction',externalId:redactedSourceId,text:source.text.replaceAll(args.quote,'[REDACTED]'),author:null,timestamp:now,url:null,sourceRef:`Reviewer-redacted source ${redactedSourceId}`});
+    run.sourceEvents=[...(run.sourceEvents||[]),{id:randomUUID(),type:'source_redacted',parentSourceId:source.id,redactedSourceId,at:now}];
+    run.selectedIds=[];run.items=[];run.gaps=[];run.graphEpoch=randomUUID();run.state='awaiting_scope_confirmation';run.revision++;run.approvedRevision=null;
   } else if (args.action === 'attach_citations') {
     if(!['needs_review','approved'].includes(run.state))throw new Error('Generate a draft before reviewing citations');
     if(args.selectedIds.slice().sort().join(',')!==run.selectedIds.slice().sort().join(','))throw new Error('Source scope changed; reload before attaching citations');

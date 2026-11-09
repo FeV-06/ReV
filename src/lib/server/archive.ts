@@ -1,16 +1,19 @@
 import { Client } from 'pg';
 import { z } from 'zod';
-import { runSchema, graphEventSchema } from '@/lib/contracts';
+import { runSchema, graphEventSchema, sourceEventSchema } from '@/lib/contracts';
 
-const archiveSchema=z.object({version:z.literal(1),runs:z.array(runSchema),approved:z.array(z.object({runId:z.string().uuid(),revision:z.number().int(),approvedAt:z.string(),payload:runSchema})),events:z.array(z.object({runId:z.string().uuid(),event:graphEventSchema}))});
+const archiveSchema=z.object({version:z.literal(1),runs:z.array(runSchema),approved:z.array(z.object({runId:z.string().uuid(),revision:z.number().int(),approvedAt:z.string(),payload:runSchema})),events:z.array(z.object({runId:z.string().uuid(),event:graphEventSchema})),sourceEvents:z.array(z.object({runId:z.string().uuid(),event:sourceEventSchema})).optional()});
 export type RunArchive=z.infer<typeof archiveSchema>;
 
 /** Offline, explicit snapshot transfer; does not implement live sync or user authorization. */
 export function validateArchive(value:unknown):RunArchive {
  const archive=archiveSchema.parse(value);const ids=new Set(archive.runs.map(r=>r.id));
  if(ids.size!==archive.runs.length)throw new Error('Archive contains duplicate run IDs');
- if(archive.approved.some(r=>!ids.has(r.runId)||r.payload.id!==r.runId||r.payload.revision!==r.revision)||archive.events.some(e=>!ids.has(e.runId)))throw new Error('Archive has orphaned or inconsistent records');
+ if(archive.approved.some(r=>!ids.has(r.runId)||r.payload.id!==r.runId||r.payload.revision!==r.revision)||archive.events.some(e=>!ids.has(e.runId))||(archive.sourceEvents||[]).some(e=>!ids.has(e.runId)))throw new Error('Archive has orphaned or inconsistent records');
  if(new Set(archive.events.map(e=>e.event.id)).size!==archive.events.length)throw new Error('Archive contains duplicate event IDs');
+ if(new Set((archive.sourceEvents||[]).map(e=>e.event.id)).size!==(archive.sourceEvents||[]).length)throw new Error('Archive contains duplicate source event IDs');
+ const artifacts=new Map(archive.runs.map(r=>[r.id,new Set(r.artifacts.map(a=>a.id))]));
+ if((archive.sourceEvents||[]).some(({runId,event})=>!artifacts.get(runId)?.has(event.parentSourceId)||!artifacts.get(runId)?.has(event.redactedSourceId)))throw new Error('Archive has orphaned source lineage');
  return archive;
 }
 
@@ -24,12 +27,14 @@ export async function importToPostgres(connectionString:string,input:unknown,con
   await client.query('BEGIN');
   await client.query(`CREATE TABLE IF NOT EXISTS runs (id UUID PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL, payload JSONB NOT NULL, version BIGINT NOT NULL DEFAULT 0);
   CREATE TABLE IF NOT EXISTS approved_revisions (run_id UUID NOT NULL REFERENCES runs(id) ON DELETE CASCADE,revision INTEGER NOT NULL,approved_at TIMESTAMPTZ NOT NULL,payload JSONB NOT NULL,PRIMARY KEY(run_id,revision));
-  CREATE TABLE IF NOT EXISTS graph_events (seq BIGSERIAL PRIMARY KEY,run_id UUID NOT NULL REFERENCES runs(id) ON DELETE CASCADE,event_id UUID NOT NULL UNIQUE,event JSONB NOT NULL);`);
-  await client.query('LOCK TABLE runs, approved_revisions, graph_events IN ACCESS EXCLUSIVE MODE');
-  const count=await client.query('SELECT (SELECT count(*) FROM runs)+(SELECT count(*) FROM approved_revisions)+(SELECT count(*) FROM graph_events) AS n');if(Number(count.rows[0].n)!==0)throw new Error('Target database is not empty; refusing to merge or overwrite');
-  for(const run of archive.runs){const {graphEvents,...payload}=run;await client.query('INSERT INTO runs(id,created_at,payload) VALUES($1,$2,$3::jsonb)',[run.id,run.createdAt,JSON.stringify(payload)]);}
+  CREATE TABLE IF NOT EXISTS graph_events (seq BIGSERIAL PRIMARY KEY,run_id UUID NOT NULL REFERENCES runs(id) ON DELETE CASCADE,event_id UUID NOT NULL UNIQUE,event JSONB NOT NULL);
+  CREATE TABLE IF NOT EXISTS source_events (seq BIGSERIAL PRIMARY KEY,run_id UUID NOT NULL REFERENCES runs(id) ON DELETE CASCADE,event_id UUID NOT NULL UNIQUE,event JSONB NOT NULL);`);
+  await client.query('LOCK TABLE runs, approved_revisions, graph_events, source_events IN ACCESS EXCLUSIVE MODE');
+  const count=await client.query('SELECT (SELECT count(*) FROM runs)+(SELECT count(*) FROM approved_revisions)+(SELECT count(*) FROM graph_events)+(SELECT count(*) FROM source_events) AS n');if(Number(count.rows[0].n)!==0)throw new Error('Target database is not empty; refusing to merge or overwrite');
+  for(const run of archive.runs){const {graphEvents,sourceEvents,...payload}=run;await client.query('INSERT INTO runs(id,created_at,payload) VALUES($1,$2,$3::jsonb)',[run.id,run.createdAt,JSON.stringify(payload)]);}
   for(const row of archive.approved)await client.query('INSERT INTO approved_revisions(run_id,revision,approved_at,payload) VALUES($1,$2,$3,$4::jsonb)',[row.runId,row.revision,row.approvedAt,JSON.stringify(row.payload)]);
   for(const row of archive.events)await client.query('INSERT INTO graph_events(run_id,event_id,event) VALUES($1,$2,$3::jsonb)',[row.runId,row.event.id,JSON.stringify(row.event)]);
+  for(const row of archive.sourceEvents||[])await client.query('INSERT INTO source_events(run_id,event_id,event) VALUES($1,$2,$3::jsonb)',[row.runId,row.event.id,JSON.stringify(row.event)]);
   await client.query('COMMIT');return {runs:archive.runs.length,events:archive.events.length,approved:archive.approved.length};
  } catch(error){await client.query('ROLLBACK');throw error;} finally {await client.end();}
 }

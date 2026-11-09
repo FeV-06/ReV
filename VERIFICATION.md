@@ -1,5 +1,7 @@
 # Round 2 MVP verification
 
+> **Historical verification:** This report documents earlier revisions, not the current branch. Some capabilities listed as absent below have since been partially implemented; see `REV_SYSTEMS_CHECKLIST.md` and `SPRINT_HANDOFF.md` for later work. Do not interpret these earlier test results as a fresh verification of the current commit.
+
 **Verdict: runnable local MVP for a Round 2 demonstration; the full original specification is not complete.** The judge needs access to this repository or a packaged copy and their own Node/pnpm/Rust environment. The current app must not be exposed publicly: it is local and single-operator, not an authenticated hosted service.
 
 ## Evidence from local execution

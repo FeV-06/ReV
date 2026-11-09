@@ -19,9 +19,10 @@ describe('portable archive',()=>{
   const url=process.env.REV_TEST_POSTGRES_URL!;
   let run=await newRun({recipient:'postgres-archive-test',fixture:true});const selectedIds=[run.artifacts[0].id];
   run=await updateAction(run.id,{action:'scope',selectedIds});run=await updateAction(run.id,{action:'generate',selectedIds,acceptPartial:false,confirmAuthorisation:true,fixture:true});run=await updateAction(run.id,{action:'approve',confirmAuthorisation:true});
+  run=await updateAction(run.id,{action:'redact_source',sourceId:selectedIds[0],quote:'Redis',selectedIds});
   const archive=validateArchive(await exportArchive());await expect(importToPostgres(url,archive,false)).rejects.toThrow('Explicit confirmation');const receipt=await importToPostgres(url,archive,true);expect(receipt.runs).toBeGreaterThan(0);expect(receipt.events).toBeGreaterThan(0);
   const client=new Client({connectionString:url});await client.connect();
-  try {const row=await client.query('SELECT payload FROM runs WHERE id=$1',[run.id]);expect(row.rows[0].payload.recipient).toBe('postgres-archive-test');await expect(importToPostgres(url,archive,true)).rejects.toThrow('not empty');}
+  try {const row=await client.query('SELECT payload FROM runs WHERE id=$1',[run.id]);expect(row.rows[0].payload.recipient).toBe('postgres-archive-test');const sourceEvents=await client.query('SELECT event FROM source_events WHERE run_id=$1',[run.id]);expect(sourceEvents.rows[0].event.type).toBe('source_redacted');await expect(importToPostgres(url,archive,true)).rejects.toThrow('not empty');}
   finally {await client.end();await deleteRun(run.id);}
  });
 });

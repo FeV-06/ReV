@@ -2,7 +2,7 @@
 
 **Purpose:** A working task list for the full ReV vision, with the implemented Round 2 MVP marked separately.
 
-**Baseline:** Local `main` at `b1e1f49`; public `FeV-06/ReV` `main` at `7536ddd` (same product files, but no published GitHub Actions workflow).
+**Baseline:** Historical MVP baseline `b1e1f49`; subsequent backend changes and verification are tracked in the sections below and Git history. The public branch can differ from the local work; check Git rather than treating this document as live branch status.
 
 **Scope:** Derived from the original team product specification, the fundamental MVP spec, the hackathon brief and the team's later discussion of Laya.
 
@@ -23,8 +23,9 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
      → recipient scope → model extraction → reference validation → review
      → approve → recipient-scoped Markdown export
                           │
-                          └─ Future: classification, causal graph, divergence,
-                             bus factor, exit questions, cloud and live updates
+                          └─ Partial foundations: graph, divergence, ownership,
+                             exit questions, redaction and PostgreSQL transfer;
+                             fuller systems and continuous updates remain open
 ```
 
 ---
@@ -275,7 +276,7 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 - [x] Save a review and require explicit approval of the current revision.
 - [x] Store approved snapshots and invalidate the current approval when review changes.
 - [ ] **PARTIAL:** Allow the reviewer to attach or repair citations for an edited item through the UI. A server action validates exact selected-source quotes and invalidates approval (`tests/citation-flow.test.ts`); no UI control exists yet.
-- [ ] Add distinct confirm/reject/redact states and granular redaction, rather than only excluding an item.
+- [ ] **PARTIAL:** Add distinct confirm/reject/redact states and granular redaction, rather than only excluding an item. The local-only `redact_source` API can create an unselected copy with an exact phrase replaced and invalidate the current approval (`tests/redaction.test.ts`); the original remains stored and selectable, prior downloaded exports cannot be recalled, and this is not recipient access enforcement. No redaction UI exists yet.
 - [ ] Add reviewer identity, audit history and collaborative review after authentication is designed.
 
 ## 9.2 Successor handover
@@ -401,4 +402,4 @@ User → workspace / on-demand run → GitHub + Slack ingestion → source snaps
 - Key implementation paths: `crates/rev-core/src/main.rs`, `src/lib/contracts.ts`, `src/lib/server/{core,service,store,body}.ts`, `src/components/HandoverWorkspace.tsx`.
 - Key tests: `tests/{scope,provider,service,store,body}.test.ts`, `tests/{browser,accessibility,live-provider}.spec.ts`, Rust unit tests.
 - The original spec's absolute claims of “zero hallucination”, “leak-proof” pruning and “100%” database compatibility are aspirations, not verified guarantees.
-- Remote snapshot checked separately: public `main` at `7536ddd`; `.github/workflows/verify.yml` exists only on local `main`, so a GitHub-hosted CI pass has not been established.
+- GitHub-hosted CI has not been established for the current local changes. Check the remote branch and Actions results for the exact published commit rather than relying on this historical note.
