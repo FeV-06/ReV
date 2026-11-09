@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const artifactSchema = z.object({
-  id: z.string().uuid(), kind: z.enum(['github_commit', 'github_pr', 'github_review_comment', 'github_discussion_comment', 'github_commit_patch', 'slack_message', 'review_answer']),
+  id: z.string().uuid(), kind: z.enum(['github_commit', 'github_pr', 'github_review_comment', 'github_discussion_comment', 'github_commit_patch', 'slack_message', 'review_answer', 'review_redaction']),
   externalId: z.string(), text: z.string(), author: z.string().nullable(),
   timestamp: z.string().nullable(), url: z.string().url().nullable(), sourceRef: z.string(),
 });
@@ -29,6 +29,8 @@ export const graphEventSchema = z.object({id:z.string().uuid(),type:z.enum(['edg
 export type GraphEvent = z.infer<typeof graphEventSchema>;
 export const gapSchema=z.object({id:z.string().uuid(),itemId:z.string().uuid(),sourceIds:z.array(z.string().uuid()),question:z.string(),status:z.enum(['open','answered']),answerSourceId:z.string().uuid().optional()});
 export type Gap=z.infer<typeof gapSchema>;
-export const runSchema = z.object({ id:z.string().uuid(), recipient:z.string(), createdAt:z.string(), state:runStateSchema, artifacts:z.array(artifactSchema), warnings:z.array(z.string()), selectedIds:z.array(z.string().uuid()), items:z.array(itemSchema), mode:z.string().nullable(), revision:z.number().int().nonnegative(), approvedRevision:z.number().int().nonnegative().nullable(), acceptedPartial:z.boolean(), graphEvents:z.array(graphEventSchema).optional(),graphEpoch:z.string().uuid().optional(),gaps:z.array(gapSchema).optional() });
+export const sourceEventSchema=z.object({id:z.string().uuid(),type:z.literal('source_redacted'),parentSourceId:z.string().uuid(),redactedSourceId:z.string().uuid(),at:z.string()});
+export type SourceEvent=z.infer<typeof sourceEventSchema>;
+export const runSchema = z.object({ id:z.string().uuid(), recipient:z.string(), createdAt:z.string(), state:runStateSchema, artifacts:z.array(artifactSchema), warnings:z.array(z.string()), selectedIds:z.array(z.string().uuid()), items:z.array(itemSchema), mode:z.string().nullable(), revision:z.number().int().nonnegative(), approvedRevision:z.number().int().nonnegative().nullable(), acceptedPartial:z.boolean(), graphEvents:z.array(graphEventSchema).optional(),graphEpoch:z.string().uuid().optional(),gaps:z.array(gapSchema).optional(),sourceEvents:z.array(sourceEventSchema).optional() });
 export type RunState = z.infer<typeof runStateSchema>;
 export type Run = z.infer<typeof runSchema>;
