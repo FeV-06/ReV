@@ -4,7 +4,7 @@ import type {Artifact,Run} from '@/lib/contracts';
 type Change={key:string;oldId?:string;newId?:string};
 export type RefreshPlan={added:Change[];changed:Change[];unchanged:Change[];missing:Change[];revoked:Change[]};
 function key(a:Artifact):string{return `${a.kind}:${a.externalId}`;}
-function signature(a:Artifact):string{return JSON.stringify([a.kind,a.externalId,a.text,a.author,a.timestamp,a.url,a.sourceRef]);}
+function signature(a:Artifact):string{return JSON.stringify([a.kind,a.externalId,a.text,a.author,a.timestamp,a.url,a.sourceRef,a.paths]);}
 export function planRefresh(run:Run,incoming:Artifact[],revokedIds:string[]):RefreshPlan{
  const old=new Map(run.artifacts.map(a=>[key(a),a]));const next=new Map<string,Artifact>();const oldIds=new Map(run.artifacts.map(a=>[a.id,key(a)]));const incomingIds=new Set<string>();
  if(old.size!==run.artifacts.length||oldIds.size!==run.artifacts.length)throw new Error('Prior snapshot contains duplicate source identities');
@@ -27,5 +27,5 @@ export function applyRefresh(run:Run,incoming:Artifact[],revokedIds:string[]):Ru
  // Prior approved exports become unsafe if a source changes or access is revoked.
  // This function only creates a new snapshot and cannot revoke the old one.
  if(plan.changed.some(c=>run.selectedIds.includes(c.oldId!))||plan.revoked.some(c=>run.selectedIds.includes(c.oldId!)))throw new Error('Changed or revoked selected sources require atomic invalidation of prior approvals; refresh is not yet available');
- return {id:randomUUID(),recipient:run.recipient,createdAt:new Date().toISOString(),state:'awaiting_scope_confirmation',artifacts,warnings:plan.missing.length?[`${plan.missing.length} prior source records were not observed; they were retained but not selected.`]:[],selectedIds,items:[],mode:run.mode,revision:0,approvedRevision:null,acceptedPartial:false,graphEpoch:randomUUID(),graphEvents:[],gaps:[]};
+ return {id:randomUUID(),recipient:run.recipient,departingPerson:run.departingPerson,takeoverScope:run.takeoverScope,createdAt:new Date().toISOString(),state:'awaiting_scope_confirmation',artifacts,warnings:plan.missing.length?[`${plan.missing.length} prior source records were not observed; they were retained but not selected.`]:[],selectedIds,items:[],mode:run.mode,revision:0,approvedRevision:null,acceptedPartial:false,graphEpoch:randomUUID(),graphEvents:[],gaps:[]};
 }

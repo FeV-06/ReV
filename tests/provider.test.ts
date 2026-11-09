@@ -1,8 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
+import { createRun } from '@/lib/server/store';
+import { deleteRun, exportMarkdown, updateAction } from '@/lib/server/service';
+import type { Run } from '@/lib/contracts';
 
 async function withProvider(handler:(body: any)=>any, fn:(base:string)=>Promise<void>) {
   const server:Server=createServer((req,res)=>{
@@ -21,7 +25,7 @@ function core(op:object,env:Record<string,string>):Promise<any> {
   });
 }
 const sourceId=randomUUID();
-const source={id:sourceId,kind:'slack_message',externalId:'1',text:'Decision: Redis',author:null,timestamp:null,url:null,sourceRef:'test'};
+const source={id:sourceId,kind:'slack_message' as const,externalId:'1',text:'Decision: Redis',author:null,timestamp:null,url:null,sourceRef:'test'};
 
 describe('provider protocol and failure paths (local fake server, not live inference)',()=>{
   it.each(['openai','anthropic'])('%s parses valid typed candidates and flags fabricated citations',async provider=>{
@@ -42,7 +46,7 @@ describe('provider protocol and failure paths (local fake server, not live infer
   });
   it('fails explicitly when the model service is unavailable',async()=>{
     const r=await core({op:'generate',sources:[source]},{REV_MODEL_PROVIDER:'openai',REV_MODEL_BASE_URL:'http://127.0.0.1:1/v1',REV_MODEL_NAME:'test-model'});
-    expect(r.ok).toBe(false);expect(r.error).toContain('failed');
+    expect(r.ok).toBe(false);expect(r.error).toContain('Could not connect to the model provider');
   });
   it('only returns divergence candidates with two distinct valid source references',async()=>{
     const second={...source,id:randomUUID(),externalId:'2',text:'Decision: use memory cache'};
@@ -54,4 +58,46 @@ describe('provider protocol and failure paths (local fake server, not live infer
       expect(r.ok).toBe(true);expect(r.data.items).toHaveLength(1);expect(r.data.items[0].citations).toHaveLength(2);
     });
   });
+});
+
+it('uses the confirmed takeover scope and exports only cited Day 1 actions', async () => {
+  const excluded = { ...source, id: randomUUID(), externalId: 'restricted', text: 'Restricted deployment notes' };
+  let run: Run = {
+    id: randomUUID(), recipient: 'Incoming engineer', departingPerson: 'maya', createdAt: new Date().toISOString(),
+    state: 'awaiting_scope_confirmation', artifacts: [source, excluded],
+    warnings: ['Generation failed: Model request failed or timed out'], selectedIds: [source.id], items: [], mode: null, revision: 0, approvedRevision: null, acceptedPartial: false,
+  };
+  vi.stubEnv('REV_DATA_DIR', path.join(tmpdir(), `rev-provider-${process.pid}`));
+  await createRun(run);
+  try {
+    const generate = { action: 'generate', selectedIds: run.selectedIds, acceptPartial: false, confirmAuthorisation: true, confirmRemote: true };
+    let sent = '';
+    await withProvider(body => {
+      sent = body.messages[1].content;
+      return { choices: [{ message: { content: JSON.stringify({ items: [
+        { category: 'next_action', text: 'Inspect the Redis setup.', evidence: [{ sourceId, quote: 'Decision: Redis' }] },
+        { category: 'next_action', text: 'Deploy immediately.', evidence: [{ sourceId, quote: 'fabricated' }] },
+      ] }) } }] };
+    }, async base => {
+      vi.stubEnv('REV_MODEL_PROVIDER', 'openai');
+      vi.stubEnv('REV_MODEL_BASE_URL', base);
+      vi.stubEnv('REV_MODEL_NAME', 'test-model');
+      run = await updateAction(run.id, { ...generate, takeoverScope: 'Billing retries' });
+      expect(sent).toContain('"takeoverScope":"Billing retries"');
+      run = await updateAction(run.id, { ...generate, takeoverScope: '   ' });
+      expect(run.takeoverScope).toBeUndefined();
+      expect(run.warnings).toEqual([]);
+    });
+    expect(sent).toContain('"departingPerson":"maya"');
+    expect(sent).not.toContain('"takeoverScope"');
+    expect(sent).not.toContain(excluded.text);
+    run = await updateAction(run.id, { action: 'approve', confirmAuthorisation: true });
+    const output = exportMarkdown(run);
+    expect(output.split('## Handover details')[0]).toContain('## Start here');
+    expect(output.split('## Handover details')[0]).toContain('Inspect the Redis setup');
+    expect(output.split('## Handover details')[0]).not.toContain('Deploy immediately');
+  } finally {
+    await deleteRun(run.id);
+    vi.unstubAllEnvs();
+  }
 });

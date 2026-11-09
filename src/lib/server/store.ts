@@ -4,15 +4,32 @@ import path from 'node:path';
 import type { Run } from '@/lib/contracts';
 import type { RunArchive } from '@/lib/server/archive';
 
-const globalDb = globalThis as typeof globalThis & { revDb?: Promise<PGlite> };
+const schemaVersion = 1;
+const globalDb = globalThis as typeof globalThis & {
+  revDb?: Promise<PGlite>;
+  revDbSchema?: { version: number; ready: Promise<PGlite> };
+};
+
 export function database(): Promise<PGlite> {
-  if (!globalDb.revDb) globalDb.revDb = open();
-  return globalDb.revDb;
+  // Next dev can reload this module while retaining the previous connection.
+  if (globalDb.revDbSchema?.version === schemaVersion) return globalDb.revDbSchema.ready;
+  const existing = globalDb.revDbSchema?.ready ?? globalDb.revDb;
+  const ready = (existing ?? open()).then(async db => {
+    await migrate(db);
+    if (!existing) await recoverInterruptedRuns(db);
+    return db;
+  });
+  globalDb.revDbSchema = { version: schemaVersion, ready };
+  return ready;
 }
+
 async function open(): Promise<PGlite> {
   const dir = path.resolve(/*turbopackIgnore: true*/ process.env.REV_DATA_DIR || '.rev-data');
   await mkdir(dir, { recursive: true, mode: 0o700 });
-  const db = await PGlite.create(path.join(dir, 'pglite'));
+  return PGlite.create(path.join(dir, 'pglite'));
+}
+
+async function migrate(db: PGlite): Promise<void> {
   await db.exec(`CREATE TABLE IF NOT EXISTS runs (
     id UUID PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL, payload JSONB NOT NULL, version BIGINT NOT NULL DEFAULT 0
   );
@@ -34,10 +51,12 @@ async function open(): Promise<PGlite> {
     SELECT r.id,(e.value->>'id')::uuid,e.value
     FROM runs r CROSS JOIN LATERAL jsonb_array_elements(COALESCE(r.payload->'graphEvents','[]'::jsonb)) e(value)
     ON CONFLICT (event_id) DO NOTHING;
-  UPDATE runs SET payload = payload - 'graphEvents' WHERE payload ? 'graphEvents';
-  UPDATE runs SET payload = jsonb_set(jsonb_set(payload, '{state}', '"failed"'::jsonb), '{warnings}', COALESCE(payload->'warnings','[]'::jsonb) || '["Run was interrupted by a server restart; retry generation or import."]'::jsonb), version = version + 1
+  UPDATE runs SET payload = payload - 'graphEvents' WHERE payload ? 'graphEvents';`);
+}
+
+async function recoverInterruptedRuns(db: PGlite): Promise<void> {
+  await db.exec(`UPDATE runs SET payload = jsonb_set(jsonb_set(payload, '{state}', '"failed"'::jsonb), '{warnings}', COALESCE(payload->'warnings','[]'::jsonb) || '["Run was interrupted by a server restart; retry generation or import."]'::jsonb), version = version + 1
   WHERE payload->>'state' IN ('importing','reconstructing');`);
-  return db;
 }
 export async function createRun(run: Run): Promise<void> {
   const db = await database();

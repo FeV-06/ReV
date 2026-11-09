@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 test('synthetic source selection, review, approval and scoped export', async ({page}) => {
   await page.goto('http://127.0.0.1:3077/');
   await page.getByRole('button', {name:'Try synthetic example'}).click();
+  await expect(page.getByLabel('What are you taking over?')).toHaveValue('');
   const sources=page.locator('label.source'); await expect(sources).toHaveCount(9);
   await sources.filter({hasText:'Add Redis session cache and fallback'}).locator('input').check();
   await sources.filter({hasText:'Decision: use Redis for sessions. The fallback still needs tests.'}).locator('input').check();
@@ -10,6 +11,8 @@ test('synthetic source selection, review, approval and scoped export', async ({p
   await page.getByRole('button', {name:'Generate draft'}).click();
   await expect(page.getByRole('heading',{name:'Make it yours'})).toBeVisible();
   await expect(page.locator('.review-item')).toHaveCount(2);
+  await expect(page.getByRole('heading', { name: 'Start here' })).toBeVisible();
+  await expect(page.locator('.notice').filter({hasText:'Start here'})).toContainText('Add a test for the Redis session fallback.');
   const graphResult=await page.evaluate(async()=>{
     const headers={'X-Rev-Request':'1','Content-Type':'application/json'};
     const list=await (await fetch('/api/runs',{headers})).json();const id=list.runs[0].id;

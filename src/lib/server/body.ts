@@ -1,4 +1,4 @@
-export async function readJsonLimited(request: Request, limit: number): Promise<unknown> {
+export async function readJsonLimited(request: Request | Response, limit: number): Promise<unknown> {
   const declared = request.headers.get('content-length');
   if (declared && (!/^\d+$/.test(declared) || Number(declared) > limit)) throw new Error('Request body exceeds size limit');
   if (!request.body) throw new Error('Request body is required');

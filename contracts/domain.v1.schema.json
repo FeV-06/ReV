@@ -15,6 +15,7 @@
         "kind": {
           "type": "string",
           "enum": [
+            "git_commit",
             "github_commit",
             "github_pr",
             "github_review_comment",
@@ -56,6 +57,12 @@
         },
         "sourceRef": {
           "type": "string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -211,6 +218,7 @@
               "kind": {
                 "type": "string",
                 "enum": [
+                  "git_commit",
                   "github_commit",
                   "github_pr",
                   "github_review_comment",
@@ -252,6 +260,12 @@
               },
               "sourceRef": {
                 "type": "string"
+              },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": [
@@ -400,6 +414,12 @@
         "recipient": {
           "type": "string"
         },
+        "departingPerson": {
+          "type": "string"
+        },
+        "takeoverScope": {
+          "type": "string"
+        },
         "createdAt": {
           "type": "string"
         },
@@ -427,6 +447,7 @@
               "kind": {
                 "type": "string",
                 "enum": [
+                  "git_commit",
                   "github_commit",
                   "github_pr",
                   "github_review_comment",
@@ -468,6 +489,12 @@
               },
               "sourceRef": {
                 "type": "string"
+              },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": [

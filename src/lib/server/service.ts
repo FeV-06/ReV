@@ -10,11 +10,15 @@ import { attachVerifiedCitations } from '@/lib/server/citations';
 import { applyRefresh } from '@/lib/server/refresh';
 import { approveRun, compareAndUpdate, createRun, deleteRun, getRun, getVersionedRun, listRuns } from '@/lib/server/store';
 
+import { dayOneItems, generationFailurePrefix, sourceWarnings } from '@/lib/handover';
+import { slackChannelId } from '@/lib/server/slack';
+import { importLocalGit, importSlackChannels } from '@/lib/server/sources';
+
 const idSchema = z.string().uuid();
-const createSchema = z.object({ recipient: z.string().trim().min(1).max(120), repo: z.string().max(201).optional(), zipBase64: z.string().max(14_000_000).optional(), fixture: z.boolean().default(false) });
+const createSchema = z.object({ recipient: z.string().trim().min(1).max(120).default('Incoming engineer'), departingPerson: z.string().trim().min(1).max(120).optional(), repo: z.string().max(201).optional(), zipBase64: z.string().max(14_000_000).optional(), fixture: z.boolean().default(false), localGit: z.boolean().default(false), connectedSlack: z.boolean().default(false), slackChannelIds: z.array(slackChannelId).max(5).default([]) });
 const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('scope'), selectedIds: z.array(idSchema).max(500) }),
-  z.object({ action: z.literal('generate'), selectedIds: z.array(idSchema).min(1).max(500), acceptPartial: z.boolean(), confirmAuthorisation: z.literal(true), confirmRemote: z.boolean().default(false), fixture: z.boolean().default(false) }),
+  z.object({ action: z.literal('generate'), takeoverScope: z.string().trim().max(400).optional(), selectedIds: z.array(idSchema).min(1).max(500), acceptPartial: z.boolean(), confirmAuthorisation: z.literal(true), confirmRemote: z.boolean().default(false), fixture: z.boolean().default(false) }),
   z.object({ action: z.literal('save'), items: z.array(itemSchema).max(100) }),
   z.object({ action: z.literal('graph_propose'), fromId:idSchema, toId:idSchema, type:graphEdgeTypeSchema, evidenceSourceIds:z.array(idSchema).min(1).max(50) }),
   z.object({ action: z.literal('graph_review'), edgeId:idSchema, decision:z.enum(['confirmed','rejected']) }),
@@ -39,11 +43,19 @@ export function exportMarkdown(run: Run): string {
   }
   const sources = new Map(run.artifacts.filter(s => selected.has(s.id)).map(s => [s.id, s]));
   const lines = [`# Handover for ${safeText(run.recipient)}`, '', `Created: ${run.createdAt}`, `Mode: ${run.mode === 'fixture' ? 'synthetic fixture (not model inference)' : 'model-generated, human-reviewed'}`, '', '## Coverage and limitations', ''];
-  if (run.warnings.length) lines.push('- Source coverage is incomplete; review import warnings in the workspace.'); else lines.push('- No import warnings reported.');
+  if (sourceWarnings(run.warnings).length) lines.push('- Source coverage is incomplete; review import warnings in the workspace.'); else lines.push('- No import warnings reported.');
   lines.push('- Source references are validated; semantic accuracy requires human review.', '- Recipient permissions were manually confirmed by the operator.', '');
   const shown = run.items.filter(i => !i.excluded);
   if (!shown.length) lines.push('No items were approved for inclusion.');
-  for (const item of shown) {
+  const dayOne = dayOneItems(run);
+  const remainder = shown.filter(item => !dayOne.includes(item));
+  if (run.departingPerson && !dayOne.length) {
+    lines.push('## Start here', '', 'No supported first task yet. Confirm the next step with the team.', '');
+  }
+  for (const item of [...dayOne, ...remainder]) {
+    if (item === dayOne[0]) lines.push('## Start here', '');
+    if (item === dayOne[1]) lines.push('## Day 1 follow-ups', '');
+    if (dayOne.length && item === remainder[0]) lines.push('## Handover details', '');
     lines.push(`### ${safeText(item.category.replaceAll('_', ' '))}`, '', safeText(item.text), '', `Status: ${item.verification}${item.needsClarification ? ' · clarification needed' : ''}`, '');
     for (const cite of item.verification === 'unverified' ? [] : item.citations) {
       const source = sources.get(cite.sourceId); if (!source) throw new Error('Citation is outside the authorised scope');
@@ -65,21 +77,23 @@ export function assertLocalRequest(request: Request): void {
   if (request.headers.get('x-rev-request') !== '1') throw new Error('Forbidden: missing request header');
 }
 export async function newRun(raw: unknown): Promise<Run> {
-  const args = createSchema.parse(raw); const run: Run = { id: randomUUID(), recipient: args.recipient, createdAt: new Date().toISOString(), state: 'importing', artifacts: [], warnings: [], selectedIds: [], items: [], mode: null, revision: 0, approvedRevision: null, acceptedPartial: false };
-  if (!args.fixture && !args.repo && !args.zipBase64) throw new Error('Provide a GitHub repository or Slack export');
+  const args = createSchema.parse(raw); const run: Run = { id: randomUUID(), recipient: args.recipient, departingPerson: args.departingPerson, createdAt: new Date().toISOString(), state: 'importing', artifacts: [], warnings: [], selectedIds: [], items: [], mode: null, revision: 0, approvedRevision: null, acceptedPartial: false };
+  if (!args.fixture && !args.repo && !args.zipBase64 && !args.localGit && !args.connectedSlack && !args.slackChannelIds.length) throw new Error('Choose a connected source, GitHub repository or Slack export');
   await createRun(run);
-  const imports: {label:string; op:object}[] = [];
+  const imports: {label: string; load: () => Promise<unknown>}[] = [];
   if (args.fixture) {
     const github = JSON.parse(await readFile(path.join(process.cwd(), 'fixtures/github.json'), 'utf8'));
     const zip = await readFile(path.join(process.cwd(), 'fixtures/slack-fixture.zip'));
-    imports.push({ label: 'Synthetic GitHub', op: { op:'normalize_fixture', ...github } }, { label:'Synthetic Slack', op:{ op:'slack', zipBase64:zip.toString('base64') } });
+    imports.push({ label: 'Synthetic GitHub', load: () => callCore({ op:'normalize_fixture', ...github }) }, { label:'Synthetic Slack', load: () => callCore({ op:'slack', zipBase64:zip.toString('base64') }) });
     run.mode = 'fixture';
   } else {
-    if (args.repo) imports.push({label:'GitHub', op:{op:'github', repo:args.repo}});
-    if (args.zipBase64) imports.push({label:'Slack', op:{op:'slack', zipBase64:args.zipBase64}});
+    if (args.localGit) imports.push({label:'Local Git', load: importLocalGit});
+    if (args.repo) imports.push({label:'GitHub', load: () => callCore({op:'github', repo:args.repo})});
+    if (args.connectedSlack || args.slackChannelIds.length) imports.push({label:'Connected Slack', load: () => importSlackChannels(args.slackChannelIds)});
+    if (args.zipBase64) imports.push({label:'Slack', load: () => callCore({op:'slack', zipBase64:args.zipBase64})});
   }
-  for (const {label,op} of imports) {
-    try { const result = importSchema.parse(await callCore(op)); run.artifacts.push(...result.artifacts); run.warnings.push(...result.warnings.map(w => `${label}: ${w}`)); }
+  for (const {label,load} of imports) {
+    try { const result = importSchema.parse(await load()); run.artifacts.push(...result.artifacts); run.warnings.push(...result.warnings.map(w => `${label}: ${w}`)); }
     catch (error) { run.warnings.push(`${label}: ${error instanceof Error ? error.message : 'Import failed'}`); }
   }
   run.state = run.artifacts.length ? 'awaiting_scope_confirmation' : 'failed';
@@ -102,20 +116,26 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
     return publicRun(run);
   } else if (args.action === 'generate') {
     if (!['awaiting_scope_confirmation','needs_review','approved','failed'].includes(run.state)) throw new Error('Run is already processing');
-    if (run.warnings.length && !args.acceptPartial) throw new Error('Acknowledge incomplete source coverage before continuing');
+    const coverageWarnings = sourceWarnings(run.warnings);
+    if (coverageWarnings.length && !args.acceptPartial) throw new Error('Acknowledge incomplete source coverage before continuing');
     if (args.fixture !== (run.mode === 'fixture')) throw new Error('Fixture mode is available only for the synthetic example');
     const validIds = new Set(run.artifacts.map(a => a.id));
     if (args.selectedIds.some(id => !validIds.has(id))) throw new Error('Selected source is not in this run');
     if (args.selectedIds.length !== new Set(args.selectedIds).size) throw new Error('Duplicate source selection');
     if (!args.fixture && !args.confirmRemote) throw new Error('Confirm the selected material may be sent to the configured provider');
     if (args.selectedIds.slice().sort().join(',') !== run.selectedIds.slice().sort().join(',')) throw new Error('Source scope changed; save it before generation');
+    const takeoverScope = (args.takeoverScope ?? run.takeoverScope) || undefined;
+    run.takeoverScope = takeoverScope;
+    run.warnings = coverageWarnings;
     run.items = []; run.graphEpoch = randomUUID(); run.approvedRevision = null; run.revision++; run.state = 'reconstructing'; run.acceptedPartial = args.acceptPartial; version = await compareAndUpdate(run, version);
     try {
       const sources = run.artifacts.filter(a => args.selectedIds.includes(a.id)).map(a => artifactSchema.parse(a));
-      const result = draftSchema.parse(await callCore({op:args.fixture ? 'fixture_generate' : 'generate', sources}));
+      const result = draftSchema.parse(await callCore({op:args.fixture ? 'fixture_generate' : 'generate', sources, handover: run.departingPerson ? {
+        departingPerson: run.departingPerson, takeoverScope, incomingRole: run.recipient,
+      } : undefined}));
       run.items = result.items.map(item => ({...item, derivationSourceIds: [...run.selectedIds]})); run.mode = args.fixture ? 'fixture' : 'model'; run.state = 'needs_review';
       run.graphEvents=[...(run.graphEvents||[]),...suggestEvidenceEdges(run)];
-    } catch (error) { run.state = 'failed'; run.warnings.push(`Generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`); await compareAndUpdate(run, version); throw error; }
+    } catch (error) { run.state = 'failed'; run.warnings.push(`${generationFailurePrefix}${error instanceof Error ? error.message : 'Unknown error'}`); await compareAndUpdate(run, version); throw error; }
   } else if (args.action === 'save') {
     if (!['needs_review','approved'].includes(run.state)) throw new Error('Generate a draft before reviewing');
     if (args.items.length !== run.items.length || new Set(args.items.map(i => i.id)).size !== run.items.length) throw new Error('Review must contain every draft item exactly once');
