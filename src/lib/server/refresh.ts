@@ -30,6 +30,7 @@ export function applyRefresh(run:Run,incoming:Artifact[],revokedIds:string[]):Ru
  return {
    id:randomUUID(),
    recipient:run.recipient,
+   successorEmail:run.successorEmail,
    githubUsername:run.githubUsername,
    targetRole:run.targetRole,
    departingPerson:run.departingPerson,

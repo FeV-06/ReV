@@ -2,11 +2,21 @@ import { describe, it, expect } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { approveRun, compareAndUpdate, createRun, database, deleteRun, getVersionedRun } from '@/lib/server/store';
+import { approveRun, compareAndUpdate, createRun, database, deleteRun, getVersionedRun, listRuns } from '@/lib/server/store';
 import type { Run } from '@/lib/contracts';
 
 process.env.REV_DATA_DIR = path.join(tmpdir(), `rev-vitest-${process.pid}`);
 describe('persistent optimistic transitions',()=>{
+  it('retains both workspace and successor identity in run summaries', async () => {
+    const id = randomUUID();
+    const run: Run = {id, recipient:'Fixture', projectRoot:'/example/workspace', successorEmail:'dev@example.test', createdAt:new Date().toISOString(), state:'needs_review', artifacts:[], warnings:[], selectedIds:[], items:[], mode:'fixture', revision:1, approvedRevision:null, acceptedPartial:false};
+    await createRun(run);
+    try {
+      expect((await listRuns()).find(item => item.id === id)).toMatchObject({ projectRoot: '/example/workspace', successorEmail: 'dev@example.test' });
+    } finally {
+      await deleteRun(id);
+    }
+  });
   it('rejects stale writes and retains immutable approved revisions',async()=>{
     const id=randomUUID();
     const run:Run={id,recipient:'Fixture',createdAt:new Date().toISOString(),state:'needs_review',artifacts:[],warnings:[],selectedIds:[],items:[],mode:'fixture',revision:1,approvedRevision:null,acceptedPartial:false};

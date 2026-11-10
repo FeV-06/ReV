@@ -15,16 +15,6 @@ function gitAuthor(name: string, email: string) {
   return /^(?:\d+\+)?([\w-]+)@users\.noreply\.github\.com$/i.exec(email)?.[1] ?? name;
 }
 
-function matchesContributor(name: string, email: string, contributor?: string): boolean {
-  if (!contributor) return true;
-  const c = contributor.toLowerCase();
-  const n = name.toLowerCase();
-  const e = email.toLowerCase();
-  if (n.includes(c) || e.includes(c)) return true;
-  if (c === 'fev-06' && (n.includes('fev') || e.includes('fev') || e.includes('gjulka'))) return true;
-  return false;
-}
-
 async function localGitRoot() {
   return git('rev-parse', '--show-toplevel').then(root => root.trimEnd()).catch(() => null);
 }
@@ -66,18 +56,26 @@ export async function connectedSources() {
   };
 }
 
-export async function importLocalGit(projectDir?: string, contributor?: string) {
-  const root = projectDir || await localGitRoot();
+type LocalGitOptions = { projectDir?: string; authors?: string[]; includeWorkspaceChanges?: boolean; includeSymbols?: boolean };
+
+/** Import exact author matches, while keeping uncommitted workspace state separate and unattributed. */
+export async function importLocalGit(input: LocalGitOptions | string[] = { includeWorkspaceChanges: false, includeSymbols: false }) {
+  const options: LocalGitOptions = Array.isArray(input)
+    ? { authors: input, includeWorkspaceChanges: false, includeSymbols: false }
+    : input;
+  const identities = new Set((options.authors ?? []).map(author => author.trim().toLowerCase()).filter(Boolean));
+  const root = options.projectDir || await localGitRoot();
   if (!root) throw new Error('No local Git checkout found. Check REV_GIT_DIR.');
   const limit = localCommitLimit;
   const log = await gitInDir(root, '--no-pager', 'log', '-z', '--no-notes', '--no-show-signature', `--max-count=${limit + 1}`, '--format=%x00%H%x00%aN%x00%aE%x00%aI%x00%B', '--name-only', 'HEAD', '--')
     .catch(() => { throw new Error('Could not read local Git history. Check that the checkout has commits.'); });
   const fields = log.split('\0');
   const artifacts: Artifact[] = [];
-  let i = 1;
   const recentShas: { sha: string; author: string; timestamp: string }[] = [];
-
-  while (i + 4 < fields.length && artifacts.length < limit) {
+  const warnings: string[] = [];
+  let i = 1;
+  let scanned = 0;
+  while (i + 4 < fields.length && scanned < limit) {
     const [sha, name, email, timestamp, text] = fields.slice(i, i + 5);
     i += 5;
     const paths: string[] = [];
@@ -86,74 +84,81 @@ export async function importLocalGit(projectDir?: string, contributor?: string) 
       i++;
     }
     i++;
+    scanned++;
     const author = gitAuthor(name, email);
-    const isMatched = matchesContributor(name, email, contributor);
-    artifacts.push({
-      id: randomUUID(),
-      kind: 'git_commit',
-      externalId: sha,
-      text: `Commit ${sha.slice(0, 7)}: ${text.trim()}`,
-      author,
-      githubLogin: isMatched ? contributor : undefined,
-      timestamp,
-      paths: paths.slice(0, 100),
-      url: null,
-      sourceRef: `${basename(root)}@${sha}`,
-    });
-    if (recentShas.length < 5) {
-      recentShas.push({ sha, author, timestamp });
-    }
+    if (identities.size && ![name, email, author].some(value => identities.has(value.trim().toLowerCase()))) continue;
+    const username = /^(?:\d+\+)?([\w-]+)@users\.noreply\.github\.com$/i.exec(email)?.[1];
+    const githubLogin = username && /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/.test(username) ? username : undefined;
+    artifacts.push({ id: randomUUID(), kind: 'git_commit', externalId: sha, text: text.trim(),
+      author, githubLogin, timestamp, paths: paths.slice(0, 100), url: null, sourceRef: `${basename(root)}@${sha}` });
+    if (recentShas.length < 5) recentShas.push({ sha, author, timestamp });
   }
 
-  // Extract changed AST symbols from recent commits
-  for (const { sha, author, timestamp } of recentShas) {
-    try {
-      const symReport = await analyzeGitSymbols(root, sha);
-      const isMatched = matchesContributor(symReport.authorName, symReport.authorEmail, contributor);
-      for (const f of symReport.files) {
-        for (const s of f.changedSymbols) {
-          artifacts.push({
-            id: randomUUID(),
-            kind: 'code_symbol',
-            externalId: `${sha.slice(0, 7)}:${f.filePath}:${s.symbol.name}`,
-            text: `Symbol ${s.symbol.name} (${s.symbol.kind}) ${s.changeKind} in ${f.filePath}. Signature: ${s.symbol.signature || s.symbol.name}`,
-            author,
-            githubLogin: isMatched ? contributor : undefined,
-            timestamp,
-            paths: [f.filePath],
-            url: null,
-            sourceRef: `${f.filePath}#${s.symbol.name}`,
-          });
+  if (options.includeSymbols !== false) {
+    for (const { sha, author, timestamp } of recentShas) {
+      try {
+        const symReport = await analyzeGitSymbols(root, sha);
+        const username = /^(?:\d+\+)?([\w-]+)@users\.noreply\.github\.com$/i.exec(symReport.authorEmail)?.[1];
+        const githubLogin = username && /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/.test(username) ? username : undefined;
+        for (const f of symReport.files) {
+          for (const s of f.changedSymbols) {
+            artifacts.push({ id: randomUUID(), kind: 'code_symbol',
+              externalId: `${sha.slice(0, 7)}:${f.filePath}:${s.symbol.name}`,
+              text: `Symbol ${s.symbol.name} (${s.symbol.kind}) ${s.changeKind} in ${f.filePath}. Signature: ${s.symbol.signature || s.symbol.name}`,
+              author, githubLogin, timestamp, paths: [f.filePath], url: null, sourceRef: `${f.filePath}#${s.symbol.name}` });
+          }
         }
-      }
-    } catch {}
-  }
-
-  // Extract working modifications
-  try {
-    const statusOut = await gitInDir(root, 'status', '--porcelain=v1', '-z', '--untracked-files=all');
-    const entries = statusOut.split('\0').filter(Boolean);
-    for (const entry of entries.slice(0, 50)) {
-      if (entry.length >= 4) {
-        const filePath = entry.slice(3);
-        const code = entry.slice(0, 2).trim();
-        artifacts.push({
-          id: randomUUID(),
-          kind: 'working_change',
-          externalId: `working:${filePath}`,
-          text: `Working change in ${filePath} (${code === 'M' ? 'Modified' : 'Untracked'}) in ${basename(root)}.`,
-          author: contributor || 'local',
-          githubLogin: contributor,
-          timestamp: new Date().toISOString(),
-          paths: [filePath],
-          url: null,
-          sourceRef: `working:${filePath}`,
-        });
+      } catch {
+        warnings.push(`Could not analyze code symbols for commit ${sha.slice(0, 7)}; committed evidence is still available.`);
       }
     }
-  } catch {}
+  }
 
-  return { artifacts, warnings: i + 4 < fields.length ? ['Only the latest 100 commits reachable from HEAD were imported.'] : [] };
+  if (options.includeWorkspaceChanges !== false) {
+    try {
+      const statusOut = await gitInDir(root, 'status', '--porcelain=v1', '-z', '--untracked-files=all');
+      const entries = statusOut.split('\0');
+      let count = 0;
+      for (let index = 0; index < entries.length && count < 50; index++) {
+        const entry = entries[index];
+        if (entry.length < 4) continue;
+        const filePath = entry.slice(3);
+        const code = entry.slice(0, 2);
+        const change = code === '??' ? 'Untracked' : code.includes('R') ? 'Renamed' : code.includes('C') ? 'Copied' : code.includes('D') ? 'Deleted' : 'Modified';
+        if (code.includes('R') || code.includes('C')) index++;
+        artifacts.push({ id: randomUUID(), kind: 'working_change', externalId: `working:${filePath}`,
+          text: `Shared, unattributed workspace change in ${filePath} (${change}) in ${basename(root)}.`,
+          author: null, timestamp: new Date().toISOString(), paths: [filePath], url: null,
+          sourceRef: `Shared workspace change: ${filePath}` });
+        count++;
+      }
+    } catch {
+      warnings.push('Could not inspect shared workspace changes. Committed evidence is still available.');
+    }
+  }
+
+  if (i + 4 < fields.length) warnings.push('Only the latest 100 commits reachable from HEAD were imported.');
+  return { artifacts, warnings };
+}
+
+/** Read committed project notes only. Never read local files or untracked content. */
+export async function importLocalDocs(projectDir?: string) {
+  const root = projectDir || await localGitRoot();
+  if (!root) throw new Error('No local Git checkout found. Check REV_GIT_DIR.');
+  const revision = (await gitInDir(root, 'rev-parse', 'HEAD')).trim();
+  const files = (await gitInDir(root, 'ls-tree', '-r', '--name-only', '-z', revision, '--', 'README.md', 'ROADMAP.md', 'VERIFICATION.md', 'SPRINT_HANDOFF.md', 'docs')).split('\0');
+  const docs = files.filter(file => /^(?:[\w.-]+|docs\/[\w./-]+)\.md$/i.test(file) && !file.startsWith('docs/research/')).slice(0, 12);
+  const artifacts: Artifact[] = [];
+  for (const file of docs) {
+    const text = await gitInDir(root, 'show', `${revision}:${file}`);
+    if (!text.trim()) continue;
+    artifacts.push({
+      id: randomUUID(), kind: 'git_document', externalId: `${revision}:${file}`,
+      text: text.slice(0, 6000), author: null, timestamp: null, url: null,
+      sourceRef: `${file} @ ${revision.slice(0, 8)}`, paths: [file],
+    });
+  }
+  return { artifacts, warnings: [] };
 }
 
 const slackHistory = z.object({

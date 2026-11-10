@@ -2,20 +2,23 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { chmod, mkdir, readFile, rename, rm, rmdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { existsSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { z } from 'zod';
 
-const localEnv = path.resolve(process.cwd(), '.env.local');
-if (existsSync(localEnv)) {
-  try { process.loadEnvFile(localEnv); } catch {}
-}
 import { readJsonLimited } from '@/lib/server/body';
-import { newRun, updateAction, readRun, readGraph, exportMarkdown, refreshRun, deleteRun, listRuns, clientError } from '@/lib/server/service';
+import { askHandover, newRun, updateAction, readRun, readGraph, exportMarkdown, refreshRun, deleteRun, listRuns, clientError } from '@/lib/server/service';
 import { closeDatabase, database } from '@/lib/server/store';
 import { getProject, listProjects, registerProject, removeProject, setProjectPaused } from '@/lib/server/projects';
 import { listProjectSnapshots, readLatestSnapshot, scanProject } from '@/lib/server/capture';
 import { connectedSources } from '@/lib/server/sources';
+import { syncToSupabase, testPostgresConnection } from '@/lib/server/sync-supabase';
+import { loadSettings } from '@/lib/server/settings';
+
+try {
+  process.loadEnvFile('.env.local');
+} catch (error) {
+  if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+}
 
 const host='127.0.0.1';
 const requestedPort=Number(process.env.REV_DAEMON_PORT ?? '3078');
@@ -138,12 +141,42 @@ async function route(req:IncomingMessage,res:ServerResponse):Promise<void> {
       if(req.method==='GET'){json(res,200,{runs:await listRuns(),sources:await connectedSources()});return;}
       if(req.method==='POST'){json(res,201,{run:await newRun(await body(req,15_000_000))});return;}
     }
-    const match=/^\/v1\/runs\/([0-9a-fA-F-]+)(?:\/(graph|export|refresh))?$/.exec(url.pathname);
+    if(url.pathname==='/v1/sync/supabase'&&req.method==='POST'){
+      const args=await body(req,64_000);
+      const parsed=z.object({testOnly:z.boolean().optional(),confirmSync:z.boolean().optional(),connectionString:z.string().max(2_000).optional(),runId:z.string().uuid().optional()}).strict().safeParse(args);
+      if(!parsed.success){json(res,400,{error:'Invalid sync request'});return;}
+      const payload=parsed.data;
+      const savedSettings=await loadSettings();
+      const connectionString=
+        (payload.connectionString??'').trim()||
+        savedSettings.postgresUri.trim()||
+        process.env.SUPABASE_DB_URL||
+        process.env.DATABASE_URL||
+        '';
+      if(payload.testOnly===true){
+        // Connection check only: never uploads data and does not require sync consent.
+        if(!connectionString){json(res,400,{success:false,error:'No connection string provided'});return;}
+        const testResult=await testPostgresConnection(connectionString);
+        json(res,testResult.success?200:400,testResult);
+        return;
+      }
+      // Data upload requires the explicit, literal consent flag; nothing is sent without it.
+      if(payload.confirmSync!==true){json(res,403,{success:false,error:'Explicit cloud sync consent is required (confirmSync: true). Data remains local in PGlite.'});return;}
+      if(!connectionString){
+        json(res,200,{success:false,fallback:'local',error:'No Supabase connection configured. Data remains safe in local PGlite.',timestamp:new Date().toISOString()});
+        return;
+      }
+      const result=await syncToSupabase(connectionString,payload.runId);
+      json(res,result.success?200:400,result);
+      return;
+    }
+    const match=/^\/v1\/runs\/([0-9a-fA-F-]+)(?:\/(graph|export|refresh|ask))?$/.exec(url.pathname);
     if(!match){json(res,404,{error:'Not found'});return;}
     const id=uuid(match[1]);const action=match[2];
     if(!action&&req.method==='GET'){json(res,200,{run:await readRun(id)});return;}
     if(!action&&req.method==='PATCH'){json(res,200,{run:await updateAction(id,await body(req,15_000_000))});return;}
     if(!action&&req.method==='DELETE'){await readRun(id);await deleteRun(id);json(res,200,{ok:true});return;}
+    if(action==='ask'&&req.method==='POST'){json(res,200,await askHandover(id,await body(req,8_000)));return;}
     if(action==='graph'&&req.method==='GET'){json(res,200,{graph:await readGraph(id)});return;}
     if(action==='refresh'&&req.method==='POST'){json(res,200,{run:await refreshRun(id,await body(req,4_000_000))});return;}
     if(action==='export'&&req.method==='GET'){

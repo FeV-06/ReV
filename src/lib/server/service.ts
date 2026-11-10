@@ -2,9 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { artifactSchema, draftSchema, importSchema, itemSchema, graphEdgeTypeSchema, githubUsernameSchema, targetRoleSchema, type Artifact, type Item, type Run } from '@/lib/contracts';
+import { artifactSchema, draftSchema, importSchema, itemSchema, graphEdgeTypeSchema, githubUsernameSchema, successorEmailSchema, targetRoleSchema, type Artifact, type Item, type Run } from '@/lib/contracts';
 import { callCore } from '@/lib/server/core';
 import { appendEdge, buildGraph, reviewEdge, suggestEvidenceEdges } from '@/lib/server/graph';
+import { answerSuccessor, appendQuestions, prepareInterview, visibleGaps } from '@/lib/server/interview';
 import { detectGaps } from '@/lib/server/gaps';
 import { attachVerifiedCitations } from '@/lib/server/citations';
 import { applyRefresh } from '@/lib/server/refresh';
@@ -12,11 +13,12 @@ import { approveRun, compareAndUpdate, createRun, deleteRun, getRun, getVersione
 
 import { dayOneItems, generationFailurePrefix, sourceWarnings } from '@/lib/handover';
 import { slackChannelId } from '@/lib/server/slack';
-import { importLocalGit, importSlackChannels } from '@/lib/server/sources';
+import { importLocalDocs, importLocalGit, importSlackChannels } from '@/lib/server/sources';
 
 const idSchema = z.string().uuid();
 const createSchema = z.object({
   recipient: z.string().trim().min(1).max(120).default('Incoming engineer'),
+  successorEmail: successorEmailSchema.optional(),
   githubUsername: githubUsernameSchema.optional(),
   targetRole: targetRoleSchema.optional(),
   departingPerson: z.string().trim().min(1).max(120).optional(),
@@ -25,21 +27,24 @@ const createSchema = z.object({
   zipBase64: z.string().max(14_000_000).optional(),
   fixture: z.boolean().default(false),
   localGit: z.boolean().default(false),
+  localDocs: z.boolean().default(false),
   connectedSlack: z.boolean().default(false),
   slackChannelIds: z.array(slackChannelId).max(5).default([]),
 });
 const actionSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('assign_successor'), email: successorEmailSchema.nullable() }),
   z.object({ action: z.literal('scope'), selectedIds: z.array(idSchema).max(500) }),
   z.object({ action: z.literal('generate'), takeoverScope: z.string().trim().max(400).optional(), selectedIds: z.array(idSchema).min(1).max(500), acceptPartial: z.boolean(), confirmAuthorisation: z.literal(true), confirmRemote: z.boolean().default(false), fixture: z.boolean().default(false) }),
   z.object({ action: z.literal('save'), items: z.array(itemSchema).max(100) }),
   z.object({ action: z.literal('graph_propose'), fromId:idSchema, toId:idSchema, type:graphEdgeTypeSchema, evidenceSourceIds:z.array(idSchema).min(1).max(50) }),
   z.object({ action: z.literal('graph_review'), edgeId:idSchema, decision:z.enum(['confirmed','rejected']) }),
-  z.object({ action: z.literal('detect_gaps') }),
+  z.object({ action: z.literal('prepare_interview'), confirmRemote: z.boolean().default(false) }),
+  z.object({ action: z.literal('detect_gaps'), confirmRemote: z.boolean().default(false) }),
   z.object({ action: z.literal('detect_divergence'), selectedIds:z.array(idSchema).min(2).max(500),confirmRemote:z.literal(true) }),
   z.object({ action: z.literal('attach_citations'), itemId:idSchema, selectedIds:z.array(idSchema).min(1).max(500), references:z.array(z.object({sourceId:idSchema,quote:z.string().min(1).max(4000)})).min(1).max(10) }),
   z.object({ action: z.literal('redact_source'), sourceId:idSchema, quote:z.string().min(1).max(4000), selectedIds:z.array(idSchema).min(1).max(500) }),
-  z.object({ action: z.literal('answer_gap'), gapId:idSchema, answer:z.string().trim().min(1).max(4000), selectedIds:z.array(idSchema).min(1).max(500) }),
-  z.object({ action: z.literal('approve'), confirmAuthorisation: z.literal(true) }),
+  z.object({ action: z.literal('answer_gap'), gapId:idSchema, author:z.string().trim().min(1).max(120).optional(), answer:z.string().trim().min(1).max(4000), selectedIds:z.array(idSchema).min(1).max(500) }),
+  z.object({ action: z.literal('approve'), confirmAuthorisation: z.literal(true), interviewAnswerIds: z.array(idSchema).max(100).default([]) }),
 ]);
 
 function safeText(s: string): string { return s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replace(/([\\`*_{}\[\]()#+.!|~-])/g, '\\$1'); }
@@ -80,16 +85,24 @@ export function exportMarkdown(run: Run): string {
     }
     lines.push('');
   }
+  const sharedAnswers = visibleGaps(run).filter(gap => gap.answerSourceId && sources.has(gap.answerSourceId));
+  if (sharedAnswers.length) lines.push('## Interview answers', '');
+  for (const gap of sharedAnswers) {
+    const source = sources.get(gap.answerSourceId!)!;
+    lines.push(`### ${safeText(gap.question)}`, '', safeText(source.text), '',
+      `Recorded from ${safeText(source.author ?? 'Unknown contributor')} · ${source.timestamp ?? ''}`, '');
+  }
   return lines.join('\n');
 }
 export { assertLocalRequest, clientError } from '@/lib/server/request-security';
 export async function newRun(raw: unknown): Promise<Run> {
   const args = createSchema.parse(raw);
   const departingPerson = args.departingPerson || args.githubUsername;
-  const githubUsername = args.githubUsername || (args.departingPerson && /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/.test(args.departingPerson) ? args.departingPerson : undefined);
+  const githubUsername = args.githubUsername ?? githubUsernameSchema.safeParse(args.departingPerson).data;
   const run: Run = {
     id: randomUUID(),
     recipient: args.recipient,
+    successorEmail: args.successorEmail?.toLowerCase(),
     githubUsername,
     targetRole: args.targetRole,
     departingPerson,
@@ -116,14 +129,39 @@ export async function newRun(raw: unknown): Promise<Run> {
     imports.push({ label: 'Synthetic GitHub', load: () => callCore({ op:'normalize_fixture', ...github }) }, { label:'Synthetic Slack', load: () => callCore({ op:'slack', zipBase64:zip.toString('base64') }) });
     run.mode = 'fixture';
   } else {
-    if (args.localGit || args.projectRoot) imports.push({label:'Local Git & Workspace', load: () => importLocalGit(args.projectRoot, githubUsername)});
+    const localIdentities = [departingPerson, githubUsername].filter((name): name is string => Boolean(name));
+    if (args.localGit || args.projectRoot) imports.push({
+      label: 'Local Git',
+      load: () => importLocalGit({ projectDir: args.projectRoot, authors: localIdentities }),
+    });
+    if ((args.localGit || args.projectRoot) && args.localDocs) imports.push({
+      label: 'Repository docs',
+      load: () => importLocalDocs(args.projectRoot),
+    });
     if (args.repo) imports.push({label:'GitHub', load: () => callCore({op:'github', repo:args.repo, contributor:githubUsername})});
     if (args.connectedSlack || args.slackChannelIds.length) imports.push({label:'Connected Slack', load: () => importSlackChannels(args.slackChannelIds)});
     if (args.zipBase64) imports.push({label:'Slack', load: () => callCore({op:'slack', zipBase64:args.zipBase64})});
   }
-  for (const {label,load} of imports) {
-    try { const result = importSchema.parse(await load()); run.artifacts.push(...result.artifacts); run.warnings.push(...result.warnings.map(w => `${label}: ${w}`)); }
-    catch (error) { run.warnings.push(`${label}: ${error instanceof Error ? error.message : 'Import failed'}`); }
+  const identity = (value?: string | null) => value?.trim().toLowerCase();
+  const githubAuthor = identity(githubUsername);
+  for (const { label, load } of imports) {
+    try {
+      const result = importSchema.parse(await load());
+      const artifacts = args.fixture ? result.artifacts : result.artifacts.filter(source => {
+        if ((source.kind === 'github_commit' || source.kind === 'github_commit_patch') && departingPerson) {
+          return Boolean(githubAuthor && identity(source.githubLogin) === githubAuthor);
+        }
+        return true;
+      });
+      const hasCommit = artifacts.some(source => source.kind === 'git_commit' || source.kind === 'github_commit');
+      if (!args.fixture && departingPerson && (label === 'Local Git' || label === 'GitHub') && !hasCommit) {
+        result.warnings.push(`No commits matched ${departingPerson}. Check the Git author name or GitHub username.`);
+      }
+      run.artifacts.push(...artifacts);
+      run.warnings.push(...result.warnings.map(warning => `${label}: ${warning}`));
+    } catch (error) {
+      run.warnings.push(`${label}: ${error instanceof Error ? error.message : 'Import failed'}`);
+    }
   }
   run.state = run.artifacts.length ? 'awaiting_scope_confirmation' : 'failed';
   await compareAndUpdate(run, 0);
@@ -133,7 +171,12 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
   idSchema.parse(id); const stored = await getVersionedRun(id); if (!stored) throw new Error('Run not found');
   const {run} = stored; let version = stored.version;
   const args = actionSchema.parse(raw);
-  if (args.action === 'scope') {
+  if (args.action === 'assign_successor') {
+    if (run.state !== 'needs_review' && run.state !== 'approved') {
+      throw new Error('Generate a draft before assigning a successor');
+    }
+    run.successorEmail = args.email?.toLowerCase();
+  } else if (args.action === 'scope') {
     if (['importing','reconstructing'].includes(run.state)) throw new Error('Cannot change scope while the run is processing');
     const validIds = new Set(run.artifacts.map(a => a.id));
     if (args.selectedIds.some(id => !validIds.has(id)) || args.selectedIds.length !== new Set(args.selectedIds).size) throw new Error('Invalid source selection');
@@ -217,21 +260,42 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
     const repaired=attachVerifiedCitations(run,args.itemId,args.references);
     run.items=run.items.map(i=>i.id===args.itemId?repaired:i);run.graphEpoch=randomUUID();
     run.graphEvents=[...(run.graphEvents||[]),...suggestEvidenceEdges(run)];run.state='needs_review';run.revision++;run.approvedRevision=null;
-  } else if (args.action === 'detect_gaps') {
+  } else if (args.action === 'detect_gaps' || args.action === 'prepare_interview') {
     if(!['needs_review','approved'].includes(run.state))throw new Error('Generate a draft before detecting gaps');
-    const detected=detectGaps(run);const answered=(run.gaps||[]).filter(g=>g.status==='answered');
-    run.gaps=[...answered,...detected];run.state='needs_review';run.revision++;run.approvedRevision=null;
+    const preparing = args.action === 'prepare_interview';
+    if (preparing && run.mode !== 'fixture' && !args.confirmRemote) {
+      throw new Error('Allow the configured model to use the selected sources before preparing questions');
+    }
+    const proposed = args.confirmRemote && run.mode !== 'fixture' ? await prepareInterview(run) : [];
+    if (proposed.length) {
+      appendQuestions(run, proposed);
+    } else {
+      const detected = detectGaps(run, preparing && run.mode === 'fixture');
+      if (!preparing) run.gaps = (run.gaps ?? []).filter(gap => gap.origin || gap.status === 'answered');
+      appendQuestions(run, detected.map(gap => preparing ? { ...gap, origin: 'interview' } : gap));
+    }
   } else if (args.action === 'answer_gap') {
     if(!['needs_review','approved'].includes(run.state))throw new Error('Generate a draft before answering gaps');
-    const gap=(run.gaps||[]).find(g=>g.id===args.gapId&&g.status==='open');
-    if(!gap||!run.items.some(i=>i.id===gap.itemId&&!i.excluded))throw new Error('Open gap not found');
+    const gap=visibleGaps(run).find(g=>g.id===args.gapId&&g.status==='open');
+    if(!gap)throw new Error('Open gap not found');
     if(args.selectedIds.slice().sort().join(',')!==run.selectedIds.slice().sort().join(','))throw new Error('Source scope changed; reload before answering');
     const now=new Date().toISOString();const sourceId=randomUUID();
-    run.artifacts.push({id:sourceId,kind:'review_answer',externalId:sourceId,text:args.answer,author:'Reviewer',timestamp:now,url:null,sourceRef:`Reviewer answer ${sourceId}`});
+    run.artifacts.push({id:sourceId,kind:'review_answer',externalId:sourceId,text:args.answer,author:args.author ?? 'Reviewer',timestamp:now,url:null,sourceRef:'Handover interview answer'});
     run.gaps=(run.gaps||[]).map(g=>g.id===gap.id?{...g,status:'answered',answerSourceId:sourceId}:g);
-    run.selectedIds=[];run.items=[];run.graphEpoch=randomUUID();run.state='awaiting_scope_confirmation';run.revision++;run.approvedRevision=null;
+    run.state='needs_review';run.revision++;run.approvedRevision=null;
   } else {
-    if (run.state !== 'needs_review') throw new Error('Only a reviewed draft can be approved');
+    const sharingNewAnswers = args.interviewAnswerIds.some(id => !run.selectedIds.includes(id));
+    if (run.state !== 'needs_review' && !(run.state === 'approved' && sharingNewAnswers)) {
+      throw new Error('Only a reviewed draft or new interview answers can be approved');
+    }
+    const eligible = new Set(visibleGaps(run).map(gap => gap.answerSourceId));
+    if (args.interviewAnswerIds.some(id => !eligible.has(id) || !run.artifacts.some(source => source.id === id && source.kind === 'review_answer'))) {
+      throw new Error('Interview answer is outside the current handover');
+    }
+    const selectedIds = [...new Set([...run.selectedIds, ...args.interviewAnswerIds])];
+    if (selectedIds.length > 500) throw new Error('Too many sources selected');
+    if (selectedIds.length !== run.selectedIds.length) run.revision++;
+    run.selectedIds = selectedIds;
     run.state = 'approved'; run.approvedRevision = run.revision;
     await approveRun(run, version); return publicRun(run);
   }
@@ -239,8 +303,33 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
 }
 async function readRawRun(id:string):Promise<Run> { idSchema.parse(id); const run=await getRun(id); if(!run) throw new Error('Run not found'); return run; }
 function publicRun(run:Run):Run {
-  const visibleIds=new Set(run.items.filter(i=>!i.excluded).map(i=>i.id));const scope=new Set(run.selectedIds);
-  return {...run,graphEvents:(run.graphEvents||[]).filter(e=>(!run.graphEpoch||e.epoch===run.graphEpoch)&&e.edge.evidenceSourceIds.every(id=>scope.has(id))),gaps:(run.gaps||[]).filter(g=>visibleIds.has(g.itemId)&&g.sourceIds.every(id=>scope.has(id)))};
+  const scope=new Set(run.selectedIds);
+  return {...run,graphEvents:(run.graphEvents||[]).filter(e=>(!run.graphEpoch||e.epoch===run.graphEpoch)&&e.edge.evidenceSourceIds.every(id=>scope.has(id))),gaps:visibleGaps(run)};
+}
+export async function askHandover(id: string, raw: unknown) {
+  idSchema.parse(id);
+  const { question, confirmRemote } = z.object({
+    question: z.string().trim().min(1).max(1000), confirmRemote: z.boolean().default(false),
+  }).parse(raw);
+  const stored = await getVersionedRun(id);
+  if (!stored) throw new Error('Run not found');
+  const { run, version } = stored;
+  if (run.state !== 'approved' || run.approvedRevision !== run.revision) {
+    throw new Error('The lead needs to approve the current handover before you can ask questions');
+  }
+  if (run.mode !== 'fixture' && !confirmRemote) {
+    throw new Error('Confirm that the question and approved sources can be sent to the configured provider');
+  }
+  const response = await answerSuccessor(run, question);
+  if (response.followUp) {
+    appendQuestions(run, [{
+      id: randomUUID(), origin: 'successor', question: response.followUp, sourceIds: [], status: 'open',
+    }]);
+    await compareAndUpdate(run, version);
+  } else if ((await getVersionedRun(id))?.version !== version) {
+    throw new Error('The handover changed while answering. Ask again using the current revision');
+  }
+  return response;
 }
 export async function readRun(id: string): Promise<Run> { return publicRun(await readRawRun(id)); }
 export async function readGraph(id: string) { return buildGraph(await readRawRun(id)); }
