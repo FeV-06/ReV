@@ -65,6 +65,19 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
   const [exportedMarkdown, setExportedMarkdown] = useState<string | null>(null);
   const [syncTarget, setSyncTarget] = useState<'cloud' | 'local'>('cloud');
   const [syncingCloud, setSyncingCloud] = useState(false);
+  const [hasSupabaseConfigured, setHasSupabaseConfigured] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('rev_system_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.postgresUri?.trim()) {
+          setHasSupabaseConfigured(true);
+        }
+      }
+    } catch {}
+  }, []);
 
   async function refresh() {
     try {
@@ -924,9 +937,11 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
                         onChange={() => setSyncTarget('cloud')}
                       />
                       <div>
-                        <strong>Sync to Cloud & Supabase (Default)</strong>
+                        <strong>Sync to Cloud & Supabase {hasSupabaseConfigured ? '(Default)' : ''}</strong>
                         <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#475569' }}>
-                          Store in local PGlite and automatically sync to central team Supabase repository.
+                          {hasSupabaseConfigured
+                            ? 'Store in local PGlite and automatically sync to central team Supabase repository.'
+                            : 'Supabase connection not configured in Settings — will default safely to local PGlite with zero errors.'}
                         </p>
                       </div>
                     </label>
@@ -940,9 +955,9 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
                         onChange={() => setSyncTarget('local')}
                       />
                       <div>
-                        <strong>Keep Local Only (PGlite Sovereignty)</strong>
+                        <strong>Keep Local Only (PGlite Sovereignty) {!hasSupabaseConfigured ? '(Active Mode)' : ''}</strong>
                         <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#475569' }}>
-                          Prevent cloud transfer. This handover will remain strictly local on this machine.
+                          Prevent cloud transfer. This handover will remain strictly local in PGlite on this machine.
                         </p>
                       </div>
                     </label>

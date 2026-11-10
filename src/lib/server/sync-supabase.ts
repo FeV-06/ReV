@@ -108,10 +108,15 @@ async function ensureRemoteSchema(client: Client): Promise<void> {
  * If runId is provided, syncs that run and its related events;
  * otherwise syncs all local runs.
  */
-export async function syncToSupabase(connectionString: string, runId?: string): Promise<SyncResult> {
+export async function syncToSupabase(connectionString?: string, runId?: string): Promise<SyncResult> {
   const timestamp = new Date().toISOString();
+  const connStr =
+    (typeof connectionString === 'string' ? connectionString.trim() : '') ||
+    process.env.SUPABASE_DB_URL ||
+    process.env.DATABASE_URL ||
+    '';
 
-  if (!connectionString.trim()) {
+  if (!connStr) {
     return {
       success: false,
       syncedRuns: 0,
@@ -122,7 +127,7 @@ export async function syncToSupabase(connectionString: string, runId?: string): 
     };
   }
 
-  if (!validatePostgresUrl(connectionString)) {
+  if (!validatePostgresUrl(connStr)) {
     return {
       success: false,
       syncedRuns: 0,
@@ -174,7 +179,7 @@ export async function syncToSupabase(connectionString: string, runId?: string): 
   }
 
   // 2. Connect to remote Supabase and execute idempotent UPSERTs
-  const client = new Client({ connectionString, connectionTimeoutMillis: 10000 });
+  const client = new Client({ connectionString: connStr, connectionTimeoutMillis: 10000 });
   try {
     await client.connect();
     await client.query('BEGIN');
