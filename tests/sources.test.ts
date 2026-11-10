@@ -25,6 +25,13 @@ it('detects a configured checkout and imports its committed history', async () =
     const result = await importLocalGit();
     expect(result.artifacts).toMatchObject([{ kind: 'git_commit', author: 'example-author', text: 'Record a decision', paths: ['billing/retry.ts'] }]);
     expect(result.warnings).toEqual([]);
+    git('-c', 'user.name=Other Author', '-c', 'user.email=other@example.test',
+      '-c', 'commit.gpgSign=false', 'commit', '--quiet', '--allow-empty', '-m', 'Other contributor change');
+    for (const identity of ['Example Author', 'EXAMPLE-AUTHOR']) {
+      const filtered = await importLocalGit([identity]);
+      expect(filtered.artifacts.map(source => source.text)).toEqual(['Record a decision']);
+    }
+    expect((await importLocalGit(['unknown'])).artifacts).toEqual([]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

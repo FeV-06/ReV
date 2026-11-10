@@ -2,15 +2,18 @@
 
 import React, { useEffect, useState } from 'react';
 import type { Run } from '@/lib/contracts';
+import { useAuth } from '@/lib/auth-context';
 import HandoverReader from '@/components/dev/HandoverReader';
 
-type RunSummary = Pick<Run, 'id' | 'createdAt' | 'recipient' | 'state'> & {
+type RunSummary = Pick<Run, 'id' | 'createdAt' | 'recipient' | 'state' | 'successorEmail'> & {
   departingPerson?: string;
   githubUsername?: string;
   targetRole?: string;
 };
 
 export default function DevDashboard() {
+  const { user } = useAuth();
+  const email = user?.email.trim().toLowerCase();
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -25,7 +28,8 @@ export default function DevDashboard() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load handovers');
-      setRuns(data.runs || []);
+      const available: RunSummary[] = data.runs ?? [];
+      setRuns(available.filter(run => run.state === 'approved' && (!run.successorEmail || run.successorEmail === email)));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error fetching handovers');
     } finally {
@@ -35,7 +39,7 @@ export default function DevDashboard() {
 
   useEffect(() => {
     loadAssignedHandovers();
-  }, []);
+  }, [email]);
 
   async function openHandover(id: string) {
     try {
@@ -46,18 +50,18 @@ export default function DevDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load run details');
 
-      let md = '';
-      if (data.run.state === 'approved') {
-        const exp = await fetch(`/api/runs/${id}/export`, {
-          headers: { 'X-Rev-Request': '1' },
-        });
-        if (exp.ok) {
-          md = await exp.text();
-        }
+      const run: Run = data.run;
+      if (run.successorEmail && run.successorEmail !== email) throw new Error('This handover is assigned to another successor');
+      if (run.state !== 'approved' || run.revision !== run.approvedRevision) {
+        throw new Error('This handover is back in review. Reopen it after the lead approves it.');
       }
-
-      setMarkdownText(md);
-      setSelectedRun(data.run);
+      const exp = await fetch(`/api/runs/${id}/export`, {
+        headers: { 'X-Rev-Request': '1' },
+      });
+      if (!exp.ok) throw new Error('Could not load the current approved handover');
+      const selected = new Set(run.selectedIds);
+      setMarkdownText(await exp.text());
+      setSelectedRun({ ...run, artifacts: run.artifacts.filter(source => selected.has(source.id)) });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not open handover');
     } finally {
@@ -91,7 +95,7 @@ export default function DevDashboard() {
         <div className="m3-dev-badge-card">
           <span className="m3-dev-avatar">👤</span>
           <div>
-            <strong>Alex Vance</strong>
+            <strong>{user?.name}</strong>
             <small>Successor / Onboarding Engineer</small>
           </div>
         </div>

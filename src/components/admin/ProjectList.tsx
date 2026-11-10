@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import type { Run } from '@/lib/contracts';
 import ProjectDashboard from '@/components/ProjectDashboard';
 
-type RunSummary = Pick<Run, 'id' | 'createdAt' | 'recipient' | 'state'> & {
+type RunSummary = Pick<Run, 'id' | 'createdAt' | 'recipient' | 'state' | 'successorEmail'> & {
   departingPerson?: string;
   githubUsername?: string;
   targetRole?: string;
@@ -107,7 +107,7 @@ export default function ProjectList({ onStartNewHandover, onOpenRunInWizard }: P
 
             <div className="m3-info-tile">
               <span className="m3-tile-label">WHO JOINED (SUCCESSOR)</span>
-              <strong className="m3-tile-val">Alex Vance</strong>
+              <strong className="m3-tile-val">{selectedRun.successorEmail ?? 'Unassigned'}</strong>
               <small>Incoming Developer</small>
             </div>
 
@@ -217,7 +217,7 @@ export default function ProjectList({ onStartNewHandover, onOpenRunInWizard }: P
 
                         <div className="m3-row-meta">
                           <span><b>Departed:</b> {r.departingPerson || r.githubUsername || 'Maya Patel'}</span>
-                          <span><b>Successor:</b> Alex Vance</span>
+                          <span><b>Successor:</b> {r.successorEmail ?? 'Unassigned'}</span>
                           {r.targetRole && <span><b>Role:</b> {r.targetRole}</span>}
                         </div>
                       </div>

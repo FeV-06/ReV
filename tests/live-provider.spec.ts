@@ -3,7 +3,9 @@ import path from 'node:path';
 
 test.skip(process.env.REV_TEST_LIVE !== '1', 'Opt-in: requires a configured live model provider');
 test('real configured provider with synthetic Slack export', async ({page}) => {
-  await page.goto('http://127.0.0.1:3077/');
+  await page.goto(process.env.REV_BROWSER_TEST_URL ?? 'http://127.0.0.1:3077/');
+  await page.locator('#btn-login-superuser-admin').click();
+  await page.getByRole('button', { name: 'New Handover Studio' }).click();
   await page.getByLabel('Who’s leaving?').fill('maya');
   const localGit = page.getByRole('checkbox', {name:/Use local Git history/});
   if (await localGit.isVisible()) await localGit.uncheck();
@@ -30,5 +32,13 @@ test('real configured provider with synthetic Slack export', async ({page}) => {
   const run=await page.evaluate(async()=>{ const l=await (await fetch('/api/runs',{headers:{'X-Rev-Request':'1'}})).json();return l.runs[0]; });
   const text=await page.evaluate(async id=>await (await fetch(`/api/runs/${id}/export`,{headers:{'X-Rev-Request':'1'}})).text(),run.id);
   expect(text).toContain('model-generated, human-reviewed'); expect(text).not.toContain('RESTRICTED_FIXTURE');
-  console.log('LIVE MODEL E2E: generated',await page.locator('.review-item').count(),'items; restricted fixture absent from export');
+  await page.getByRole('button', { name: 'Sign out' }).filter({ visible: true }).click();
+  await page.locator('#btn-login-superuser-dev').click();
+  await page.getByRole('heading', { name: run.recipient, exact: true }).click();
+  await page.getByLabel('Ask a question').fill('What did the team decide to use for sessions?');
+  await page.getByLabel('Allow this question and approved sources to be sent to the configured AI provider').check();
+  await page.getByRole('button', { name: 'Ask assistant' }).click();
+  const chat = page.getByRole('log', { name: 'Handover conversation' });
+  await expect(chat.locator('.citation')).toContainText('Decision: use Redis', { timeout: 120_000 });
+  await expect(chat).not.toContainText('RESTRICTED_FIXTURE');
 });

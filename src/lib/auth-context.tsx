@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
-export type UserRole = 'admin' | 'developer';
+export type UserRole = 'admin' | 'developer' | 'departing';
 
 export interface UserProfile {
   name: string;
@@ -20,6 +20,7 @@ const SUPERUSER_PROFILES: Record<UserRole, UserProfile> = {
     avatar: '👑',
     email: 'jordan.rivera@team.internal',
   },
+  departing: { name: 'Departing teammate', role: 'departing', title: 'Departure interview', avatar: '✎', email: '' },
   developer: {
     name: 'Alex Vance',
     role: 'developer',
@@ -67,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const saved = localStorage.getItem('rev_user');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && (parsed.role === 'admin' || parsed.role === 'developer')) {
+        if (parsed && (parsed.role === 'admin' || parsed.role === 'developer' || parsed.role === 'departing')) {
           setUser(parsed);
         }
       }

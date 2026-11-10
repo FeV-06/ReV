@@ -215,6 +215,14 @@ export function AuthForm() {
             </div>
             <div className="m3-access-arrow">→</div>
           </button>
+          <button type="button" className="m3-fast-access-card dev" onClick={() => loginAsSuperuser('departing')}>
+            <div className="m3-access-icon" aria-hidden="true">✎</div>
+            <div className="m3-access-info">
+              <strong>Departing Person</strong>
+              <small>Open your interview and answer questions</small>
+            </div>
+            <div className="m3-access-arrow" aria-hidden="true">→</div>
+          </button>
         </div>
       </div>
 

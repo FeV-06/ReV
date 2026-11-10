@@ -1,18 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { createServer, type Server } from 'node:http';
+import { createServer, type Server, type ServerResponse } from 'node:http';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
+import { callCore } from '@/lib/server/core';
 import { createRun } from '@/lib/server/store';
-import { deleteRun, exportMarkdown, updateAction } from '@/lib/server/service';
+import { askHandover, deleteRun, exportMarkdown, updateAction } from '@/lib/server/service';
 import type { Run } from '@/lib/contracts';
 
-async function withProvider(handler:(body: any)=>any, fn:(base:string)=>Promise<void>) {
+async function withProvider(handler:(body: any, response: ServerResponse)=>any, fn:(base:string)=>Promise<void>) {
   const server:Server=createServer((req,res)=>{
     const chunks:Buffer[]=[];req.on('data',c=>chunks.push(c));req.on('end',()=>{
-      const result=handler(JSON.parse(Buffer.concat(chunks).toString()));
-      res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(result));
+      const result=handler(JSON.parse(Buffer.concat(chunks).toString()),res);
+      res.writeHead(res.statusCode,{'Content-Type':'application/json'});res.end(JSON.stringify(result));
     });
   });
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -32,7 +33,7 @@ describe('provider protocol and failure paths (local fake server, not live infer
     await withProvider(body=>{
       const result=JSON.stringify({items:[{category:'decision',text:'Redis chosen',evidence:[{sourceId,quote:'Decision: Redis'}]},{category:'risk',text:'Unknown',evidence:[{sourceId,quote:'not in source'}]}]});
       expect(body.model).toBe('test-model');
-      return provider==='openai'?{choices:[{message:{content:result}}]}:{content:[{type:'text',text:result}]};
+      return provider==='openai'?{choices:[{message:{content:'```json\n'+result+'\n```'}}]}:{content:[{type:'text',text:result}]};
     },async base=>{
       const r=await core({op:'generate',sources:[source]},{REV_MODEL_PROVIDER:provider,REV_MODEL_BASE_URL:base,REV_MODEL_NAME:'test-model'});
       expect(r.ok).toBe(true);expect(r.data.items[0].verification).toBe('validated_reference');expect(r.data.items[1].verification).toBe('unverified');
@@ -98,6 +99,86 @@ it('uses the confirmed takeover scope and exports only cited Day 1 actions', asy
     expect(output.split('## Handover details')[0]).not.toContain('Deploy immediately');
   } finally {
     await deleteRun(run.id);
+    vi.unstubAllEnvs();
+  }
+});
+
+it('prepares cited interview questions and rejects unsupported successor answers through Rust', async () => {
+  const restricted = { ...source, id: randomUUID(), externalId: 'restricted', text: 'Restricted rollback instructions' };
+  const run: Run = {
+    id: randomUUID(), recipient: 'Incoming engineer', createdAt: new Date().toISOString(),
+    state: 'needs_review', artifacts: [source, restricted], warnings: [], selectedIds: [source.id],
+    items: [], mode: 'model', revision: 0, approvedRevision: null, acceptedPartial: false,
+  };
+  const requests: string[] = [];
+  vi.stubEnv('REV_DATA_DIR', path.join(tmpdir(), `rev-provider-${process.pid}`));
+  await createRun(run);
+  try {
+    await withProvider(body => {
+      requests.push(body.messages[1].content);
+      const prepare = body.messages[0].content.startsWith('Prepare');
+      return { choices: [{ message: { content: JSON.stringify({ items: prepare ? [
+        { text: 'Missing evidence field' },
+        { question: 'Fabricated context?', evidence: [{ sourceId, quote: 'Wrong quote' }] },
+        { question: 'Why was Redis chosen?', evidence: [{ sourceId, quote: 'Decision: Redis' }] },
+      ] : [
+        { category: 'next_action', text: 'Redis was chosen.', evidence: [{ sourceId, quote: 'Decision: Redis' }] },
+        { category: 'unknown', text: 'What is the rollback procedure?', evidence: [] },
+      ] }) } }] };
+    }, async base => {
+      vi.stubEnv('REV_MODEL_PROVIDER', 'openai');
+      vi.stubEnv('REV_MODEL_BASE_URL', base);
+      vi.stubEnv('REV_MODEL_NAME', 'test-model');
+      const prepared = await updateAction(run.id, { action: 'prepare_interview', confirmRemote: true });
+      expect(prepared.gaps).toHaveLength(1);
+      expect(prepared.gaps).toMatchObject([{ question: 'Why was Redis chosen?', sourceIds: [sourceId] }]);
+      await updateAction(run.id, { action: 'approve', confirmAuthorisation: true });
+      await expect(askHandover(run.id, { question: 'What cache and how do we roll it back?' })).rejects.toThrow('Confirm');
+      expect(await askHandover(run.id, { question: 'What cache and how do we roll it back?', confirmRemote: true })).toMatchObject({
+        answer: 'Redis was chosen.', citations: [{ sourceId, quote: 'Decision: Redis' }], followUp: 'What is the rollback procedure?',
+      });
+      expect(requests).toHaveLength(2);
+      expect(requests.join(' ')).not.toContain(restricted.text);
+    });
+    await withProvider(() => ({ choices: [{ message: { content: JSON.stringify({ items: [
+      { category: 'next_action', text: 'Do a risky rollback.', evidence: [{ sourceId, quote: 'Decision: Redis' }, { sourceId, quote: 'Fabricated instructions' }] },
+    ] }) } }] }), async base => {
+      vi.stubEnv('REV_MODEL_BASE_URL', base);
+      expect(await askHandover(run.id, { question: 'How do I roll back?', confirmRemote: true })).toMatchObject({
+        answer: null, citations: [], followUp: 'How do I roll back?',
+      });
+    });
+  } finally {
+    await deleteRun(run.id);
+    vi.unstubAllEnvs();
+  }
+});
+
+it('retries an HTTP 413 with smaller source excerpts and preserves citation checks', async () => {
+  const sizes: number[] = [];
+  try {
+    await withProvider((body, response) => {
+      const size = Buffer.byteLength(body.messages[1].content);
+      sizes.push(size);
+      if (size > 3500) {
+        response.statusCode = 413;
+        return {};
+      }
+      return { choices: [{ message: { content: JSON.stringify({ items: [
+        { category: 'decision', text: 'Redis chosen', evidence: [{ sourceId, quote: 'Decision: Redis' }] },
+      ] }) } }] };
+    }, async base => {
+      vi.stubEnv('REV_DATA_DIR', path.join(tmpdir(), `rev-oversize-${process.pid}`));
+      vi.stubEnv('REV_MODEL_PROVIDER', 'openai');
+      vi.stubEnv('REV_MODEL_BASE_URL', base);
+      vi.stubEnv('REV_MODEL_NAME', 'test-model');
+      expect(await callCore({ op: 'generate', sources: [{ ...source, text: source.text.repeat(1000) }] })).toMatchObject({
+        items: [{ verification: 'validated_reference' }],
+      });
+    });
+    expect(sizes).toHaveLength(2);
+    expect(sizes[1]).toBeLessThan(sizes[0]);
+  } finally {
     vi.unstubAllEnvs();
   }
 });

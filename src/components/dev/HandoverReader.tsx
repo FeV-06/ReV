@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import type { Run, Artifact } from '@/lib/contracts';
 import DayOneChecklist from '@/components/dev/DayOneChecklist';
+import HandoverAssistant from '@/components/dev/HandoverAssistant';
 
 interface HandoverReaderProps {
   run: Run;
@@ -70,7 +71,7 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
 
           <div className="m3-dep-card">
             <span className="m3-micro-label">ASSIGNED TO (SUCCESSOR)</span>
-            <strong>Alex Vance</strong>
+            <strong>{run.successorEmail ?? 'Unassigned'}</strong>
             <small>Senior Engineer</small>
           </div>
 
@@ -88,6 +89,7 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
         </div>
       </section>
 
+      {run.state === "approved" && <HandoverAssistant key={run.id} run={run} />}
       {/* Two Column Layout: Main Markdown & Claims | Interactive Day-1 Checklist */}
       <div className="m3-reader-layout">
         <div className="m3-reader-main">

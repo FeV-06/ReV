@@ -16,6 +16,7 @@
           "type": "string",
           "enum": [
             "git_commit",
+            "git_document",
             "github_commit",
             "github_pr",
             "github_review_comment",
@@ -224,6 +225,7 @@
                 "type": "string",
                 "enum": [
                   "git_commit",
+                  "git_document",
                   "github_commit",
                   "github_pr",
                   "github_review_comment",
@@ -424,6 +426,12 @@
         "recipient": {
           "type": "string"
         },
+        "successorEmail": {
+          "type": "string",
+          "maxLength": 254,
+          "format": "email",
+          "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+        },
         "githubUsername": {
           "type": "string",
           "minLength": 1,
@@ -470,6 +478,7 @@
                 "type": "string",
                 "enum": [
                   "git_commit",
+                  "git_document",
                   "github_commit",
                   "github_pr",
                   "github_review_comment",
@@ -788,6 +797,13 @@
                 "format": "uuid",
                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
               },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "interview",
+                  "successor"
+                ]
+              },
               "sourceIds": {
                 "type": "array",
                 "items": {
@@ -814,7 +830,6 @@
             },
             "required": [
               "id",
-              "itemId",
               "sourceIds",
               "question",
               "status"
@@ -1110,6 +1125,13 @@
           "format": "uuid",
           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
         },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "interview",
+            "successor"
+          ]
+        },
         "sourceIds": {
           "type": "array",
           "items": {
@@ -1136,7 +1158,6 @@
       },
       "required": [
         "id",
-        "itemId",
         "sourceIds",
         "question",
         "status"

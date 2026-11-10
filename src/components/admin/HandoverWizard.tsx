@@ -2,7 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { dayOneItems, generationFailurePrefix, sourceWarnings, suggestedAreas } from '@/lib/handover';
-import type { Item, Run } from '@/lib/contracts';
+import { successorEmailSchema, type Item, type Run } from '@/lib/contracts';
+import ContributorField from '@/components/ContributorField';
+import DepartureInterview from '@/components/DepartureInterview';
 import ProjectDashboard from '@/components/ProjectDashboard';
 
 type RunSummary = Pick<Run, 'id' | 'createdAt' | 'recipient' | 'state'>;
@@ -60,7 +62,13 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
   const [slackError, setSlackError] = useState('');
   const [slackBusy, setSlackBusy] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [shareAnswers, setShareAnswers] = useState<string[]>([]);
+  function toggleShare(id: string) {
+    setShareAnswers(previous => previous.includes(id) ? previous.filter(value => value !== id) : [...previous, id]);
+  }
   const [error, setError] = useState('');
+  const [successorEmail, setSuccessorEmail] = useState('');
+  const [showSuccessor, setShowSuccessor] = useState(false);
   const [publishedNotice, setPublishedNotice] = useState('');
   const [exportedMarkdown, setExportedMarkdown] = useState<string | null>(null);
   const [syncTarget, setSyncTarget] = useState<'cloud' | 'local'>('cloud');
@@ -161,6 +169,8 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
   }
 
   function display(r: Run) {
+    if (r.id !== run?.id) setShareAnswers([]);
+    setSuccessorEmail(r.successorEmail ?? '');
     setTakeoverScope(r.takeoverScope ?? '');
     setRun(r);
     setSelected(r.selectedIds);
@@ -177,14 +187,16 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
     }
   }
 
-  async function perform(fn: () => Promise<void>) {
+  async function perform(fn: () => Promise<void>, onError?: (message: string) => void) {
     setBusy(true);
     setError('');
     try {
       await fn();
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Operation failed');
+      const message = e instanceof Error ? e.message : 'Operation failed';
+      if (onError) onError(message);
+      else setError(message);
       if (run) {
         try {
           const latest = await api(`/api/runs/${run.id}`);
@@ -199,19 +211,22 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
 
   async function create(fixture: boolean) {
     await perform(async () => {
+      const email = successorEmailSchema.optional().safeParse(successorEmail.trim() || undefined);
+      if (!email.success) throw new Error('Enter a valid successor email or leave it blank.');
       if (!fixture && file && file.size > 10 * 1024 * 1024) throw new Error('Slack ZIP exceeds 10 MiB');
       const zipBase64 = !fixture && file ? await fileAsBase64(file) : undefined;
       const result = await api('/api/runs', {
         method: 'POST',
         body: JSON.stringify({
           recipient: recipient.trim() || undefined,
+          successorEmail: email.data,
           departingPerson: fixture ? 'maya' : departingPerson.trim() || undefined,
-          githubUsername: fixture ? 'maya' : departingPerson.trim() || undefined,
           targetRole: fixture ? 'Platform engineer' : targetRole.trim() || undefined,
           repo: fixture ? undefined : repo || undefined,
           zipBase64,
           fixture,
           localGit: !fixture && !!sources.localGit && useGit && !repo,
+          localDocs: !fixture && !!sources.localGit && useGit && !repo,
           slackChannelIds: fixture || file ? [] : slackIds,
           connectedSlack: !fixture && sources.slack && useSlack && !file && !slackIds.length,
         }),
@@ -220,16 +235,19 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
     });
   }
 
-  async function patch(body: object) {
+  async function patch(body: object, onError?: (message: string) => void) {
     if (!run) return;
+    let updated: Run | undefined;
     await perform(async () => {
-      const d = await api(`/api/runs/${run.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-      display(d.run);
+      const data = await api(`/api/runs/${run.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      updated = data.run;
+      display(data.run);
       if (graphEdges !== null) {
-        const g = await api(`/api/runs/${run.id}/graph`).catch(() => null);
-        if (g?.graph?.edges) setGraphEdges(g.graph.edges);
+        const graph = await api(`/api/runs/${run.id}/graph`).catch(() => null);
+        if (graph?.graph?.edges) setGraphEdges(graph.graph.edges);
       }
-    });
+    }, onError);
+    return updated;
   }
 
   async function updateSelection(next: string[]) {
@@ -336,12 +354,14 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
     }
   }
 
-  const commitIds = run?.artifacts.filter(source => source.kind === 'git_commit' || source.kind === 'github_commit').map(source => source.id) ?? [];
+  const commitIds = run?.artifacts.filter(source => source.kind === 'git_commit' || source.kind === 'git_document' || source.kind === 'github_commit').map(source => source.id) ?? [];
   const selectionWithCommits = [...new Set([...selected, ...commitIds])];
   const coverageWarnings = sourceWarnings(run?.warnings ?? []);
   const generationFailure = run?.warnings.filter(warning => warning.startsWith(generationFailurePrefix)).at(-1);
   const areas = run ? suggestedAreas(run) : [];
   const actions = run ? dayOneItems(run, items.filter(item => run.items.find(saved => saved.id === item.id)?.text === item.text)) : [];
+  const pendingShareIds = shareAnswers.filter(id =>
+    !run?.selectedIds.includes(id) && run?.gaps?.some(gap => gap.answerSourceId === id));
   const scopeChanged = Boolean((run?.departingPerson || run?.githubUsername) && takeoverScope.trim() !== (run.takeoverScope ?? ''));
 
   function getActiveStage(): number {
@@ -352,9 +372,27 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
     return 1;
   }
   const activeStage = getActiveStage();
+  const assignment = run && (
+    <form className="notice" onSubmit={event => {
+      event.preventDefault();
+      void patch({ action: 'assign_successor', email: successorEmail.trim() || null });
+    }}>
+      <h3>Assign successor</h3>
+      <label>Successor email<input type="email" value={successorEmail} maxLength={254}
+        placeholder="alex.vance@team.internal" onChange={event => setSuccessorEmail(event.target.value)} /></label>
+      <p className="footnote">Use the email they sign in with. Leave it blank to clear the assignment.</p>
+      <button type="submit" className="secondary" disabled={busy || JSON.stringify(items) !== JSON.stringify(run.items) || successorEmail.trim().toLowerCase() === (run.successorEmail ?? '')}>
+        Save successor assignment
+      </button>
+      {run.successorEmail && <p role="status">Assigned to {run.successorEmail}</p>}
+    </form>
+  );
+
 
   function resetToNewRun() {
     setRun(null);
+    setSuccessorEmail('');
+    setShowSuccessor(false);
     setSelected([]);
     setItems([]);
     setExportedMarkdown(null);
@@ -441,39 +479,22 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
                 <span className="step-icon">↗</span>
               </div>
 
-              <label>
-                Who’s leaving?
-                <input
-                  value={departingPerson}
-                  onChange={e => setDepartingPerson(e.target.value)}
-                  maxLength={120}
-                  placeholder="GitHub username or Git author name"
-                  list={useGit && !repo && sources.gitAuthors.length ? 'git-authors' : undefined}
-                />
-              </label>
+              <ContributorField value={departingPerson} onChange={setDepartingPerson}
+                authors={useGit && !repo ? sources.gitAuthors : []} repository={sources.localGit} />
 
-              {useGit && !repo && sources.gitAuthors.length > 0 && (
-                <>
-                  <datalist id="git-authors">
-                    {sources.gitAuthors.map(author => (
-                      <option key={author} value={author} />
-                    ))}
-                  </datalist>
-                  <p className="footnote">
-                    Choose an author from recent commits in {sources.localGit}, or enter a name.
-                  </p>
-                </>
-              )}
-
-              <label>
-                Contributor GitHub username <span className="muted">optional · without @</span>
-                <input
-                  value={departingPerson}
-                  onChange={e => setDepartingPerson(e.target.value)}
-                  maxLength={120}
-                  placeholder="octocat"
-                />
-              </label>
+              <div className="button-row">
+                <button type="button" className="secondary" aria-expanded={showSuccessor}
+                  aria-controls="initial-successor" onClick={() => setShowSuccessor(open => !open)}>
+                  Assign successor
+                </button>
+              </div>
+              <div id="initial-successor" hidden={!showSuccessor}>
+                <label>Successor email <span className="muted">optional</span>
+                  <input type="email" value={successorEmail} maxLength={254}
+                    placeholder="alex.vance@team.internal" onChange={event => setSuccessorEmail(event.target.value)} />
+                </label>
+                <p className="footnote">Use their sign-in email. The assignment is saved when you start the run.</p>
+              </div>
 
               <label>
                 Target role <span className="muted">optional</span>
@@ -505,7 +526,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
                     disabled={!!repo || busy}
                     onChange={e => setUseGit(e.target.checked)}
                   />{' '}
-                  Use local Git history from {sources.localGit}
+                  Use matching local Git commits and committed project docs from {sources.localGit}
                 </label>
               )}
 
@@ -683,7 +704,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
                     disabled={busy || selectionWithCommits.length === selected.length || selectionWithCommits.length > 500}
                     onClick={() => void updateSelection(selectionWithCommits)}
                   >
-                    Select all commits
+                    Select commits and repository docs
                   </button>
                   {selectionWithCommits.length > 500 && (
                     <small>Clear other sources to stay within the 500-source limit.</small>
@@ -825,6 +846,8 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
                 </div>
               )}
 
+              {assignment}
+              <DepartureInterview key={run.id} run={run} busy={busy} hasUnsavedEdits={JSON.stringify(items) !== JSON.stringify(run.items)} patch={patch} shareIds={shareAnswers} toggleShare={toggleShare} />
               {items.map(item => (
                 <div className="review-item" key={item.id}>
                   <div className="review-meta">
@@ -1028,7 +1051,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
                     <button
                       className={canApprove ? 'primary-action' : 'secondary'}
                       disabled={busy || !canApprove}
-                      onClick={() => patch({ action: 'approve', confirmAuthorisation: true })}
+                      onClick={() => patch({ action: 'approve', confirmAuthorisation: true, interviewAnswerIds: pendingShareIds })}
                     >
                       Approve current revision
                     </button>
@@ -1053,6 +1076,14 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
                 <span className="status-pill valid">APPROVED</span>
               </div>
 
+              {assignment}
+              <DepartureInterview key={run.id} run={run} busy={busy} patch={patch} shareIds={shareAnswers} toggleShare={toggleShare} />
+
+              {pendingShareIds.length > 0 && <button type="button" className="primary-action" disabled={busy}
+                onClick={() => patch({ action: 'approve', confirmAuthorisation: true, interviewAnswerIds: pendingShareIds })}>
+                Approve and share selected interview answers
+              </button>}
+
               <div className="m3-assignment-card">
                 <div className="m3-assignment-grid">
                   <div>
@@ -1067,7 +1098,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
                   </div>
                   <div>
                     <span className="m3-label-sm">ASSIGNED SUCCESSOR</span>
-                    <strong>Alex Vance (Successor Dev)</strong>
+                    <strong>{run.successorEmail ?? 'Unassigned'}</strong>
                     <p className="footnote">Recipient: {run.recipient}</p>
                   </div>
                 </div>

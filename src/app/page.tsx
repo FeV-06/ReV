@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from '@/lib/auth-context';
 import AppShell, { ActiveTab } from '@/components/AppShell';
 import LoginView from '@/components/auth/LoginView';
 import AdminWorkspace from '@/components/admin/AdminWorkspace';
+import DepartingWorkspace from '@/components/DepartingWorkspace';
 import DevDashboard from '@/components/dev/DevDashboard';
 import SettingsView from '@/components/settings/SettingsView';
 import AboutView from '@/components/about/AboutView';
@@ -21,9 +22,9 @@ function MainApp() {
   return (
     <AppShell activeTab={activeTab} onTabChange={setActiveTab}>
       {activeTab === 'projects' && (
-        role === 'admin' ? <AdminWorkspace /> : <DevDashboard />
+        role === 'admin' ? <AdminWorkspace /> : role === 'departing' ? <DepartingWorkspace /> : <DevDashboard />
       )}
-      {activeTab === 'settings' && <SettingsView />}
+      {activeTab === 'settings' && (role === 'departing' ? <DepartingWorkspace /> : <SettingsView />)}
       {activeTab === 'about' && <AboutView />}
     </AppShell>
   );

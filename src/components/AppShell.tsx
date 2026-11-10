@@ -85,7 +85,7 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
               <div className="m3-session-user-badge">
                 <span className="m3-session-avatar">{user.avatar}</span>
                 <span className="m3-session-name">{user.name}</span>
-                <span className="m3-session-role-tag">{user.role === 'admin' ? 'ADMIN' : 'DEV'}</span>
+                <span className="m3-session-role-tag">{user.role === 'admin' ? 'ADMIN' : user.role === 'departing' ? 'DEPARTING' : 'DEV'}</span>
               </div>
 
               <button

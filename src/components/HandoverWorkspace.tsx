@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react';
 import { dayOneItems, generationFailurePrefix, sourceWarnings, suggestedAreas } from '@/lib/handover';
 import type { Item, Run } from '@/lib/contracts';
+import ContributorField from '@/components/ContributorField';
+import DepartureInterview from '@/components/DepartureInterview';
 import ProjectDashboard from '@/components/ProjectDashboard';
 
 type RunSummary = Pick<Run, 'id'|'createdAt'|'recipient'|'state'>;
@@ -29,6 +31,10 @@ export default function HandoverWorkspace() {
   const [slackError,setSlackError] = useState('');
   const [slackBusy,setSlackBusy] = useState(true);
   const [busy,setBusy] = useState(false); const [error,setError] = useState('');
+  const [shareAnswers, setShareAnswers] = useState<string[]>([]);
+  function toggleShare(id: string) {
+    setShareAnswers(previous => previous.includes(id) ? previous.filter(value => value !== id) : [...previous, id]);
+  }
   async function refresh() { const data=await api('/api/runs'); setRuns(data.runs); setSources(data.sources); }
   useEffect(()=> { refresh().catch(e=>setError(e.message)); },[]);
   useEffect(() => {
@@ -66,14 +72,23 @@ export default function HandoverWorkspace() {
     setSlackIds(next);
     if (slack.workspaceId) localStorage.setItem(`rev-slack-channels:${slack.workspaceId}`, next.join(','));
   }
-  function display(r:Run) { setTakeoverScope(r.takeoverScope ?? ''); setRun(r); setSelected(r.selectedIds); setItems(r.items); setAuthorised(false); setRemote(false); setPartial(false); }
-  async function perform(fn:()=>Promise<void>) { setBusy(true); setError(''); try { await fn(); await refresh(); } catch(e) { setError(e instanceof Error ? e.message : 'Operation failed'); if (run) { try { const latest=await api(`/api/runs/${run.id}`); display(latest.run); await refresh(); } catch {} } } finally { setBusy(false); } }
+  function display(r:Run) { if (r.id !== run?.id) setShareAnswers([]); setTakeoverScope(r.takeoverScope ?? ''); setRun(r); setSelected(r.selectedIds); setItems(r.items); setAuthorised(false); setRemote(false); setPartial(false); }
+  async function perform(fn:()=>Promise<void>, onError?: (message: string) => void) { setBusy(true); setError(''); try { await fn(); await refresh(); } catch(e) { const message = e instanceof Error ? e.message : 'Operation failed'; if (onError) onError(message); else setError(message); if (run) { try { const latest=await api(`/api/runs/${run.id}`); display(latest.run); await refresh(); } catch {} } } finally { setBusy(false); } }
   async function create(fixture:boolean) { await perform(async()=>{
     if (!fixture && file && file.size > 10*1024*1024) throw new Error('Slack ZIP exceeds 10 MiB');
     const zipBase64=!fixture && file ? await fileAsBase64(file) : undefined;
-    const result=await api('/api/runs',{method:'POST',body:JSON.stringify({recipient:recipient.trim() || undefined,departingPerson:fixture ? 'maya' : departingPerson.trim() || undefined,githubUsername:fixture ? 'maya' : (departingPerson.trim() || undefined),targetRole:fixture ? 'Platform engineer' : (targetRole.trim() || undefined),repo:fixture?undefined:repo || undefined,zipBase64,fixture,localGit:!fixture && !!sources.localGit && useGit && !repo,slackChannelIds:fixture || file ? [] : slackIds,connectedSlack:!fixture && sources.slack && useSlack && !file && !slackIds.length})}); display(result.run);
+    const result=await api('/api/runs',{method:'POST',body:JSON.stringify({recipient:recipient.trim() || undefined,departingPerson:fixture ? 'maya' : departingPerson.trim() || undefined,targetRole:fixture ? 'Platform engineer' : (targetRole.trim() || undefined),repo:fixture?undefined:repo || undefined,zipBase64,fixture,localGit:!fixture && !!sources.localGit && useGit && !repo,slackChannelIds:fixture || file ? [] : slackIds,connectedSlack:!fixture && sources.slack && useSlack && !file && !slackIds.length})}); display(result.run);
   }); }
-  async function patch(body:object) { if(!run)return; await perform(async()=> { const d=await api(`/api/runs/${run.id}`,{method:'PATCH',body:JSON.stringify(body)}); display(d.run); }); }
+  async function patch(body: object, onError?: (message: string) => void) {
+    if (!run) return;
+    let updated: Run | undefined;
+    await perform(async () => {
+      const data = await api(`/api/runs/${run.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      updated = data.run;
+      display(data.run);
+    }, onError);
+    return updated;
+  }
   async function updateSelection(next: string[]) {
     if (!run || busy) return;
     setSelected(next); setBusy(true); setError(''); setAuthorised(false);
@@ -138,12 +153,9 @@ export default function HandoverWorkspace() {
         {error && <div role="alert" className="error">{error}</div>}
         <div className="grid"><div className="column">
           <section className="card entry-panel"><div className="card-head"><div><div className="eyebrow">01 / CONNECT</div><h2>Start a run</h2><p>Import only material you are authorised to use.</p></div><span className="step-icon">↗</span></div>
-          <label>Who’s leaving?<input value={departingPerson} onChange={e=>setDepartingPerson(e.target.value)} maxLength={120} placeholder="GitHub username or Git author name" list={useGit && !repo && sources.gitAuthors.length ? 'git-authors' : undefined}/></label>
-          {useGit && !repo && sources.gitAuthors.length > 0 && <>
-            <datalist id="git-authors">{sources.gitAuthors.map(author=><option key={author} value={author}/>)}</datalist>
-            <p className="footnote">Choose an author from recent commits in {sources.localGit}, or enter a name.</p>
-          </>}
-          <label>Contributor GitHub username <span className="muted">optional · without @</span><input value={departingPerson} onChange={e=>setDepartingPerson(e.target.value)} maxLength={120} placeholder="octocat"/></label>
+          <ContributorField value={departingPerson} onChange={setDepartingPerson}
+            authors={useGit && !repo ? sources.gitAuthors : []} repository={sources.localGit} />
+
           <label>Target role <span className="muted">optional</span><input value={targetRole} onChange={e=>setTargetRole(e.target.value)} maxLength={120} placeholder="Senior backend engineer"/></label>
           <details><summary>Optional settings</summary>
           <label>Incoming role<input value={recipient} onChange={e=>setRecipient(e.target.value)} maxLength={120}/></label>
@@ -193,6 +205,7 @@ export default function HandoverWorkspace() {
           <button className="primary-action" disabled={busy || !selected.length || !authorised || (!!coverageWarnings.length && !partial) || (run.mode!=='fixture' && !remote)} onClick={()=>patch({action:'generate',takeoverScope:run.departingPerson ? takeoverScope.trim() : undefined,selectedIds:selected,acceptPartial:partial,confirmAuthorisation:true,confirmRemote:remote,fixture:run.mode==='fixture'})}>Generate draft <span>→</span></button>
         </section>}
         {run && ['needs_review','approved'].includes(run.state) && <section className="card"><div className="card-head"><div><div className="eyebrow">03 / REVIEW</div><h2>Make it yours</h2><p>Check the meaning, not just the citation. Editing a claim marks it unverified.</p></div><span className="count">{items.length} ITEMS</span></div>
+          <DepartureInterview key={run.id} run={run} busy={busy} hasUnsavedEdits={JSON.stringify(items) !== JSON.stringify(run.items)} patch={patch} shareIds={shareAnswers} toggleShare={toggleShare} />
           {run.departingPerson && !scopeChanged && <div className="notice">
             <h3>Start here</h3>
             {actions.length ? <><p>{actions[0].text}</p><ul>{[...new Set(actions[0].citations.map(cite=>cite.sourceId))].map(id=>{
@@ -215,7 +228,7 @@ export default function HandoverWorkspace() {
 
             return <div className="button-row">
               <button className={hasPendingEdits ? 'primary-action' : 'secondary'} disabled={busy} onClick={()=>patch({action:'save',items})}>Save review</button>
-              <button className={canApprove ? 'primary-action' : 'secondary'} disabled={busy || !canApprove} onClick={()=>patch({action:'approve',confirmAuthorisation:true})}>Approve current revision</button>
+              <button className={canApprove ? 'primary-action' : 'secondary'} disabled={busy || !canApprove} onClick={()=>patch({action:'approve',confirmAuthorisation:true,interviewAnswerIds:shareAnswers.filter(id=>run.gaps?.some(gap=>gap.answerSourceId===id))})}>Approve current revision</button>
               <button className={canDownload ? 'primary-action' : 'secondary'} disabled={busy || !canDownload} onClick={download}>Download Markdown</button>
             </div>;
           })()}

@@ -91,10 +91,10 @@ export async function getVersionedRun(id: string): Promise<{run: Run; version: n
   return row ? {run: row.payload, version: Number(row.version)} : null;
 }
 export async function getRun(id: string): Promise<Run | null> { return (await getVersionedRun(id))?.run ?? null; }
-export async function listRuns(): Promise<Pick<Run, 'id'|'createdAt'|'recipient'|'state'>[]> {
+export async function listRuns(): Promise<Pick<Run, 'id'|'createdAt'|'recipient'|'state'|'successorEmail'>[]> {
   const db = await database();
   const result = await db.query<{payload: Run}>('SELECT payload FROM runs ORDER BY created_at DESC LIMIT 50');
-  return result.rows.map(({payload}) => ({ id: payload.id, createdAt: payload.createdAt, recipient: payload.recipient, state: payload.state }));
+  return result.rows.map(({payload}) => ({ id: payload.id, createdAt: payload.createdAt, recipient: payload.recipient, state: payload.state, successorEmail: payload.successorEmail }));
 }
 
 export async function compareAndUpdate(run: Run, expectedVersion: number): Promise<number> {

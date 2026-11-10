@@ -51,7 +51,9 @@ export async function connectedSources() {
   };
 }
 
-export async function importLocalGit() {
+export async function importLocalGit(authors: string[] = []) {
+  const identities = new Set(authors.map(author => author.trim().toLowerCase()));
+  let scanned = 0;
   const root = await localGitRoot();
   if (!root) throw new Error('No local Git checkout found. Check REV_GIT_DIR.');
   const limit = localCommitLimit;
@@ -60,7 +62,7 @@ export async function importLocalGit() {
   const fields = log.split('\0');
   const artifacts: Artifact[] = [];
   let i = 1;
-  while (i + 4 < fields.length && artifacts.length < limit) {
+  while (i + 4 < fields.length && scanned < limit) {
     const [sha, name, email, timestamp, text] = fields.slice(i, i + 5);
     i += 5;
     const paths: string[] = [];
@@ -69,10 +71,31 @@ export async function importLocalGit() {
       i++;
     }
     i++;
+    scanned++;
+    const author = gitAuthor(name, email);
+    if (identities.size && ![name, author].some(value => identities.has(value.trim().toLowerCase()))) continue;
     artifacts.push({ id: randomUUID(), kind: 'git_commit', externalId: sha, text: text.trim(),
-      author: gitAuthor(name, email), timestamp, paths: paths.slice(0, 100), url: null, sourceRef: `${basename(root)}@${sha}` });
+      author, timestamp, paths: paths.slice(0, 100), url: null, sourceRef: `${basename(root)}@${sha}` });
   }
   return { artifacts, warnings: i + 4 < fields.length ? ['Only the latest 100 commits reachable from HEAD were imported.'] : [] };
+}
+
+/** Read committed project notes only. Never read local files or untracked content. */
+export async function importLocalDocs() {
+  const revision = (await git('rev-parse', 'HEAD')).trim();
+  const files = (await git('ls-tree', '-r', '--name-only', '-z', revision, '--', 'README.md', 'ROADMAP.md', 'VERIFICATION.md', 'SPRINT_HANDOFF.md', 'docs')).split('\0');
+  const docs = files.filter(file => /^(?:[\w.-]+|docs\/[\w./-]+)\.md$/i.test(file) && !file.startsWith('docs/research/')).slice(0, 12);
+  const artifacts: Artifact[] = [];
+  for (const file of docs) {
+    const text = await git('show', `${revision}:${file}`);
+    if (!text.trim()) continue;
+    artifacts.push({
+      id: randomUUID(), kind: 'git_document', externalId: `${revision}:${file}`,
+      text: text.slice(0, 6000), author: null, timestamp: null, url: null,
+      sourceRef: `${file} @ ${revision.slice(0, 8)}`, paths: [file],
+    });
+  }
+  return { artifacts, warnings: [] };
 }
 
 const slackHistory = z.object({

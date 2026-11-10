@@ -51,7 +51,7 @@ Imports run when you click **Import sources**. The imported records start unsele
 
 ## Real generation
 
-Configure these variables in the daemon's process environment (see `.env.example` for names):
+Set these variables in `.env.local` in the ReV folder or export them before starting the daemon (see `.env.example` for names). Exported values take precedence.
 
 - `REV_MODEL_PROVIDER=openai` or `anthropic`.
 - `REV_MODEL_BASE_URL`: API base, e.g. `http://127.0.0.1:11434/v1` for a local OpenAI-compatible server or `https://api.anthropic.com/v1`.
@@ -59,7 +59,7 @@ Configure these variables in the daemon's process environment (see `.env.example
 - `REV_MODEL_API_KEY`: provider key if needed. Never commit `.env.local`.
 - `REV_GITHUB_TOKEN`: optional read-only GitHub token.
 
-Restart the daemon after changing its environment. The operator must explicitly consent before selected text is sent to the configured provider. Only configure endpoints you trust. The app does not send source data to a model until the recipient scope is selected and confirmed. The daemon currently reads variables from its process environment; `.env.local` is loaded by Next.js, not automatically by the standalone daemon.
+Restart the daemon after changing its environment. The operator must explicitly consent before selected text is sent to the configured provider. Only configure endpoints you trust. The app does not send source data to a model until the recipient scope is selected and confirmed.
 
 GitHub import covers up to 200 recent commits, PRs, review comments and issue comments per category, plus an additional author-filtered commit fetch when a username is supplied; patch fetches are separately capped. Slack accepts standard channel/day JSON exports in a ZIP (10 MiB compressed, 40 MiB declared expanded, 500 messages) as well as authorized live Slack channels (up to 5 channels, 15 messages each). Full source files, full history, full Slack threads, automated ACL mapping and continuous monitoring are not implemented. An experimental per-run evidence graph and gap/divergence actions exist, but are not the full project graph or a validated contradiction detector. Model inputs are limited to 120 KB; select fewer sources if exceeded. A source quote match validates a reference, not the truth of a claim. Human review is required.
 

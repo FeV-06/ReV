@@ -19,13 +19,17 @@ function settingsFilePath(): string {
   return path.join(dir, 'settings.json');
 }
 
-export async function loadSettings(): Promise<SystemSettings> {
+async function readSavedSettings(): Promise<SystemSettings | null> {
   try {
     const raw = await readFile(settingsFilePath(), 'utf8');
     return settingsSchema.parse(JSON.parse(raw));
   } catch {
-    return settingsSchema.parse({});
+    return null;
   }
+}
+
+export async function loadSettings(): Promise<SystemSettings> {
+  return (await readSavedSettings()) ?? settingsSchema.parse({});
 }
 
 export async function saveSettings(input: unknown): Promise<SystemSettings> {
@@ -41,8 +45,9 @@ export async function saveSettings(input: unknown): Promise<SystemSettings> {
  * Explicit Settings Hub values override environment defaults when configured.
  */
 export async function getEffectiveCoreEnv(): Promise<NodeJS.ProcessEnv> {
-  const settings = await loadSettings();
+  const settings = await readSavedSettings();
   const env: NodeJS.ProcessEnv = { ...process.env };
+  if (!settings) return env;
 
   if (settings.provider) env.REV_MODEL_PROVIDER = settings.provider;
   if (settings.baseUrl.trim()) env.REV_MODEL_BASE_URL = settings.baseUrl.trim();

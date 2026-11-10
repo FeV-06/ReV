@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const artifactSchema = z.object({
-  id: z.string().uuid(), kind: z.enum(['git_commit', 'github_commit', 'github_pr', 'github_review_comment', 'github_discussion_comment', 'github_commit_patch', 'slack_message', 'review_answer', 'review_redaction']),
+  id: z.string().uuid(), kind: z.enum(['git_commit', 'git_document', 'github_commit', 'github_pr', 'github_review_comment', 'github_discussion_comment', 'github_commit_patch', 'slack_message', 'review_answer', 'review_redaction']),
   externalId: z.string(), text: z.string(), author: z.string().nullable(),
   timestamp: z.string().nullable(), url: z.string().url().nullable(), sourceRef: z.string(),
   githubLogin: z.string().min(1).max(100).optional(),
@@ -29,15 +29,17 @@ export const graphEdgeSchema = z.object({id:z.string().uuid(),fromId:z.string().
 export type GraphEdge = z.infer<typeof graphEdgeSchema>;
 export const graphEventSchema = z.object({id:z.string().uuid(),type:z.enum(['edge_proposed','edge_confirmed','edge_rejected']),edge:graphEdgeSchema,at:z.string(),epoch:z.string().uuid().optional()});
 export type GraphEvent = z.infer<typeof graphEventSchema>;
-export const gapSchema=z.object({id:z.string().uuid(),itemId:z.string().uuid(),sourceIds:z.array(z.string().uuid()),question:z.string(),status:z.enum(['open','answered']),answerSourceId:z.string().uuid().optional()});
+export const gapSchema=z.object({id:z.string().uuid(),itemId:z.string().uuid().optional(),origin:z.enum(['interview','successor']).optional(),sourceIds:z.array(z.string().uuid()),question:z.string(),status:z.enum(['open','answered']),answerSourceId:z.string().uuid().optional()});
 export type Gap=z.infer<typeof gapSchema>;
 export const sourceEventSchema=z.object({id:z.string().uuid(),type:z.literal('source_redacted'),parentSourceId:z.string().uuid(),redactedSourceId:z.string().uuid(),at:z.string()});
 export type SourceEvent=z.infer<typeof sourceEventSchema>;
 export const githubUsernameSchema=z.string().min(1).max(39).regex(/^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/,'Enter a GitHub username without @');
 export const targetRoleSchema=z.string().min(1).max(120).regex(/\S/,'Target role must not be empty');
+export const successorEmailSchema = z.string().trim().max(254).email();
 export const runSchema = z.object({
   id: z.string().uuid(),
   recipient: z.string(),
+  successorEmail: successorEmailSchema.optional(),
   githubUsername: githubUsernameSchema.optional(),
   targetRole: targetRoleSchema.optional(),
   departingPerson: z.string().optional(),

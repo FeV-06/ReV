@@ -5,11 +5,17 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { z } from 'zod';
 import { readJsonLimited } from '@/lib/server/body';
-import { newRun, updateAction, readRun, readGraph, exportMarkdown, refreshRun, deleteRun, listRuns, clientError } from '@/lib/server/service';
+import { askHandover, newRun, updateAction, readRun, readGraph, exportMarkdown, refreshRun, deleteRun, listRuns, clientError } from '@/lib/server/service';
 import { closeDatabase, database } from '@/lib/server/store';
 import { getProject, listProjects, registerProject, removeProject, setProjectPaused } from '@/lib/server/projects';
 import { listProjectSnapshots, readLatestSnapshot, scanProject } from '@/lib/server/capture';
 import { connectedSources } from '@/lib/server/sources';
+
+try {
+  process.loadEnvFile('.env.local');
+} catch (error) {
+  if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+}
 
 const host='127.0.0.1';
 const requestedPort=Number(process.env.REV_DAEMON_PORT ?? '3078');
@@ -132,12 +138,13 @@ async function route(req:IncomingMessage,res:ServerResponse):Promise<void> {
       if(req.method==='GET'){json(res,200,{runs:await listRuns(),sources:await connectedSources()});return;}
       if(req.method==='POST'){json(res,201,{run:await newRun(await body(req,15_000_000))});return;}
     }
-    const match=/^\/v1\/runs\/([0-9a-fA-F-]+)(?:\/(graph|export|refresh))?$/.exec(url.pathname);
+    const match=/^\/v1\/runs\/([0-9a-fA-F-]+)(?:\/(graph|export|refresh|ask))?$/.exec(url.pathname);
     if(!match){json(res,404,{error:'Not found'});return;}
     const id=uuid(match[1]);const action=match[2];
     if(!action&&req.method==='GET'){json(res,200,{run:await readRun(id)});return;}
     if(!action&&req.method==='PATCH'){json(res,200,{run:await updateAction(id,await body(req,1_000_000))});return;}
     if(!action&&req.method==='DELETE'){await readRun(id);await deleteRun(id);json(res,200,{ok:true});return;}
+    if(action==='ask'&&req.method==='POST'){json(res,200,await askHandover(id,await body(req,8_000)));return;}
     if(action==='graph'&&req.method==='GET'){json(res,200,{graph:await readGraph(id)});return;}
     if(action==='refresh'&&req.method==='POST'){json(res,200,{run:await refreshRun(id,await body(req,4_000_000))});return;}
     if(action==='export'&&req.method==='GET'){
