@@ -66,18 +66,44 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
   const [syncTarget, setSyncTarget] = useState<'cloud' | 'local'>('cloud');
   const [syncingCloud, setSyncingCloud] = useState(false);
   const [hasSupabaseConfigured, setHasSupabaseConfigured] = useState(false);
+  const [gapAnswers, setGapAnswers] = useState<Record<string, string>>({});
+  const [graphEdges, setGraphEdges] = useState<Array<{ id: string; type: string; status: string; fromId: string; toId: string }> | null>(null);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('rev_system_settings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.postgresUri?.trim()) {
-          setHasSupabaseConfigured(true);
+    async function checkSupabase() {
+      try {
+        const res = await fetch('/api/settings', { headers: { 'X-Rev-Request': '1' } });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.hasSupabaseConfigured) {
+            setHasSupabaseConfigured(true);
+            return;
+          }
         }
-      }
-    } catch {}
+      } catch {}
+
+      try {
+        const saved = localStorage.getItem('rev_system_settings');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.postgresUri?.trim()) {
+            setHasSupabaseConfigured(true);
+          }
+        }
+      } catch {}
+    }
+    void checkSupabase();
   }, []);
+
+  async function loadGraph() {
+    if (!run) return;
+    try {
+      const data = await api(`/api/runs/${run.id}/graph`);
+      setGraphEdges(data.graph?.edges || []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load knowledge graph');
+    }
+  }
 
   async function refresh() {
     try {
@@ -199,6 +225,10 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
     await perform(async () => {
       const d = await api(`/api/runs/${run.id}`, { method: 'PATCH', body: JSON.stringify(body) });
       display(d.run);
+      if (graphEdges !== null) {
+        const g = await api(`/api/runs/${run.id}/graph`).catch(() => null);
+        if (g?.graph?.edges) setGraphEdges(g.graph.edges);
+      }
     });
   }
 
@@ -839,6 +869,124 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
                   </div>
                 </div>
               ))}
+
+              {/* Verification Tools: Gaps, Divergence & Evidence Graph */}
+              <details style={{ marginTop: '16px', marginBottom: '16px', padding: '12px 14px', borderRadius: '12px', background: '#f8faf8', border: '1px solid #d9e6dc' }}>
+                <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '13px', color: '#174a3d' }}>
+                  Verification Tools · Gaps ({run.gaps?.filter(g => g.status === 'open').length ?? 0}), Divergence &amp; Evidence Graph
+                </summary>
+                <div className="button-row" style={{ marginTop: '12px', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={busy}
+                    onClick={() => patch({ action: 'detect_gaps' })}
+                    style={{ fontSize: '12px', padding: '6px 12px' }}
+                  >
+                    Detect Evidence Gaps
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={busy || run.selectedIds.length < 2 || !remote}
+                    title={!remote ? 'Confirm remote model consent in Step 2 to compare divergence' : undefined}
+                    onClick={() => patch({ action: 'detect_divergence', selectedIds: run.selectedIds, confirmRemote: true })}
+                    style={{ fontSize: '12px', padding: '6px 12px' }}
+                  >
+                    Check Source Divergence
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={busy}
+                    onClick={() => void loadGraph()}
+                    style={{ fontSize: '12px', padding: '6px 12px' }}
+                  >
+                    Inspect Knowledge Graph
+                  </button>
+                </div>
+
+                {!!run.gaps?.length && (
+                  <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {run.gaps.map(gap => (
+                      <div key={gap.id} style={{ padding: '10px', borderRadius: '8px', background: '#fff', border: '1px solid #e2e8f0', fontSize: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <strong>{gap.question}</strong>
+                          <span className={`status-pill ${gap.status === 'answered' ? 'valid' : 'uncertain'}`}>{gap.status}</span>
+                        </div>
+                        {gap.status === 'open' && (
+                          <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                            <input
+                              type="text"
+                              placeholder="Provide clarification answer..."
+                              value={gapAnswers[gap.id] || ''}
+                              onChange={e => setGapAnswers(prev => ({ ...prev, [gap.id]: e.target.value }))}
+                              style={{ flex: 1, fontSize: '12px', padding: '6px 8px' }}
+                            />
+                            <button
+                              type="button"
+                              className="secondary"
+                              disabled={busy || !gapAnswers[gap.id]?.trim()}
+                              onClick={() =>
+                                patch({
+                                  action: 'answer_gap',
+                                  gapId: gap.id,
+                                  answer: gapAnswers[gap.id].trim(),
+                                  selectedIds: run.selectedIds,
+                                })
+                              }
+                              style={{ fontSize: '12px', padding: '6px 10px' }}
+                            >
+                              Submit Answer
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {graphEdges && (
+                  <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <small style={{ color: '#475569', fontWeight: 600 }}>
+                      Evidence Graph Edges ({graphEdges.length})
+                    </small>
+                    {graphEdges.length === 0 ? (
+                      <small className="footnote">No graph relationships recorded for this revision yet.</small>
+                    ) : (
+                      graphEdges.slice(0, 10).map(edge => (
+                        <div key={edge.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}>
+                          <span>
+                            <strong>{edge.type}</strong> · <span className={`status-pill ${edge.status === 'confirmed' ? 'valid' : 'uncertain'}`}>{edge.status}</span>
+                          </span>
+                          {edge.status === 'proposed' && (
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button
+                                type="button"
+                                className="secondary"
+                                disabled={busy}
+                                onClick={() => patch({ action: 'graph_review', edgeId: edge.id, decision: 'confirmed' })}
+                                style={{ fontSize: '11px', padding: '4px 8px' }}
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                type="button"
+                                className="secondary"
+                                disabled={busy}
+                                onClick={() => patch({ action: 'graph_review', edgeId: edge.id, decision: 'rejected' })}
+                                style={{ fontSize: '11px', padding: '4px 8px' }}
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </details>
 
               <div className="auth-guardrails">
                 <label className="check">

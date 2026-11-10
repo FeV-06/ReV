@@ -16,6 +16,8 @@ export default function SettingsView() {
   const [dbMode, setDbMode] = useState<'pglite' | 'supabase'>('pglite');
   const [postgresUri, setPostgresUri] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [syncingRuns, setSyncingRuns] = useState(false);
@@ -26,40 +28,84 @@ export default function SettingsView() {
   const [emailAlerts, setEmailAlerts] = useState(true);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('rev_system_settings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.provider) setProvider(parsed.provider);
-        if (parsed.apiKey) setApiKey(parsed.apiKey);
-        if (parsed.modelName) setModelName(parsed.modelName);
-        if (parsed.baseUrl) setBaseUrl(parsed.baseUrl);
-        if (parsed.githubToken) setGithubToken(parsed.githubToken);
-        if (parsed.dbMode) setDbMode(parsed.dbMode);
-        if (parsed.postgresUri) setPostgresUri(parsed.postgresUri);
+    async function load() {
+      try {
+        const res = await fetch('/api/settings', {
+          headers: { 'X-Rev-Request': '1' },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const s = data.settings;
+          if (s) {
+            if (s.provider) setProvider(s.provider);
+            if (s.apiKey !== undefined) setApiKey(s.apiKey);
+            if (s.modelName) setModelName(s.modelName);
+            if (s.baseUrl) setBaseUrl(s.baseUrl);
+            if (s.githubToken !== undefined) setGithubToken(s.githubToken);
+            if (s.dbMode) setDbMode(s.dbMode);
+            if (s.postgresUri !== undefined) setPostgresUri(s.postgresUri);
+            localStorage.setItem('rev_system_settings', JSON.stringify(s));
+            return;
+          }
+        }
+      } catch {
+        // Fall back to localStorage below
       }
-    } catch {
-      // Ignore
+
+      try {
+        const saved = localStorage.getItem('rev_system_settings');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.provider) setProvider(parsed.provider);
+          if (parsed.apiKey) setApiKey(parsed.apiKey);
+          if (parsed.modelName) setModelName(parsed.modelName);
+          if (parsed.baseUrl) setBaseUrl(parsed.baseUrl);
+          if (parsed.githubToken) setGithubToken(parsed.githubToken);
+          if (parsed.dbMode) setDbMode(parsed.dbMode);
+          if (parsed.postgresUri) setPostgresUri(parsed.postgresUri);
+        }
+      } catch {
+        // Ignore
+      }
     }
+    void load();
   }, []);
 
-  function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    setSavingSettings(true);
+    setSaveError('');
+    setSavedSuccess(false);
+    const settings = {
+      provider,
+      apiKey,
+      modelName,
+      baseUrl,
+      githubToken,
+      dbMode,
+      postgresUri,
+    };
+
     try {
-      const settings = {
-        provider,
-        apiKey,
-        modelName,
-        baseUrl,
-        githubToken,
-        dbMode,
-        postgresUri,
-      };
       localStorage.setItem('rev_system_settings', JSON.stringify(settings));
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Rev-Request': '1',
+        },
+        body: JSON.stringify(settings),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to persist settings to backend');
+      }
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3500);
-    } catch {
-      // Ignore
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Error saving settings');
+    } finally {
+      setSavingSettings(false);
     }
   }
 
@@ -158,7 +204,12 @@ export default function SettingsView() {
 
       {savedSuccess && (
         <div role="status" className="notice" style={{ marginBottom: '24px' }}>
-          ✓ Configuration settings saved successfully.
+          ✓ Configuration settings saved and synchronized with local backend.
+        </div>
+      )}
+      {saveError && (
+        <div role="alert" className="error" style={{ marginBottom: '24px' }}>
+          ⚠️ {saveError}
         </div>
       )}
 
@@ -457,8 +508,8 @@ export default function SettingsView() {
                 <div className="eyebrow">APPLY CHANGES</div>
                 <h3>Save Configuration</h3>
                 <p>Changes take effect immediately across all handover sessions.</p>
-                <button type="submit" className="primary-action">
-                  Save All Settings <span>✓</span>
+                <button type="submit" className="primary-action" disabled={savingSettings}>
+                  {savingSettings ? 'Saving to Backend...' : 'Save All Settings'} <span>✓</span>
                 </button>
               </section>
             </div>

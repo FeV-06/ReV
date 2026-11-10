@@ -1,4 +1,5 @@
 import { assertLocalRequest, clientError } from '@/lib/server/request-security';
+import { loadSettings } from '@/lib/server/settings';
 import { syncToSupabase, testPostgresConnection } from '@/lib/server/sync-supabase';
 
 export const runtime = 'nodejs';
@@ -8,8 +9,10 @@ export async function POST(request: Request) {
   try {
     assertLocalRequest(request);
     const body = await request.json().catch(() => ({}));
+    const savedSettings = await loadSettings();
     const connectionString =
       (body.connectionString as string | undefined)?.trim() ||
+      savedSettings.postgresUri.trim() ||
       process.env.SUPABASE_DB_URL ||
       process.env.DATABASE_URL ||
       '';
