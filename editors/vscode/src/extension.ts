@@ -46,6 +46,12 @@ export class RevExtensionManager {
       this.statusBarItem.backgroundColor = undefined;
 
       if (ws) {
+        try {
+          const { execFileSync } = await import('node:child_process');
+          const name = execFileSync('git', ['-C', ws, 'config', 'user.name'], { encoding: 'utf8' }).trim();
+          if (name) this.state.detectedUsername = name;
+        } catch {}
+
         const project = await this.client.findProjectByRoot(ws);
         this.state.project = project;
 
@@ -55,7 +61,10 @@ export class RevExtensionManager {
             const { runs } = await this.client.request<{ runs: any[] }>('/v1/runs', { workspaceRoot: ws });
             const activeRun = (runs || []).find((r: any) => {
               if (!r.projectRoot) return false;
-              return (r.projectRoot === ws || path.resolve(r.projectRoot) === path.resolve(ws)) && ['needs_review', 'approved'].includes(r.state);
+              return (
+                (r.projectRoot === ws || path.resolve(r.projectRoot) === path.resolve(ws)) &&
+                ['needs_review', 'approved'].includes(r.state)
+              );
             });
             if (activeRun) {
               const fullRun = await this.client.getRun(activeRun.id, ws);
@@ -84,15 +93,17 @@ export class RevExtensionManager {
     }
   }
 
-  async registerCurrentWorkspace(githubUsername = 'FeV-06'): Promise<Project | undefined> {
+  async registerCurrentWorkspace(githubUsername?: string): Promise<Project | undefined> {
     const ws = this.getActiveWorkspacePath();
     if (!ws) {
       vscode.window.showErrorMessage('No active workspace folder to register with ReV.');
       return undefined;
     }
 
+    const username = githubUsername || this.state.detectedUsername || 'contributor';
+
     try {
-      const project = await this.client.registerProject(ws, githubUsername, ws);
+      const project = await this.client.registerProject(ws, username, ws);
       this.state.project = project;
       this.state.error = undefined;
       try {
@@ -338,7 +349,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('rev.registerWorkspace', async () => {
       const username = await vscode.window.showInputBox({
         prompt: 'Enter your GitHub username to link with this project',
-        value: 'FeV-06',
+        value: manager['state'].detectedUsername || 'FeV-06',
       });
       if (username) void manager.registerCurrentWorkspace(username);
     }),

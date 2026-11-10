@@ -7,6 +7,7 @@ export interface WebviewState {
   daemonPort?: number;
   workspacePath?: string;
   project?: Project;
+  detectedUsername?: string;
   currentRun?: any;
   error?: string;
   loading?: boolean;
@@ -83,7 +84,7 @@ export function renderAppHtml(state: WebviewState): string {
     html += '  </div>';
     html += '  <div class="form-group">';
     html += '    <label class="form-label">GitHub Username</label>';
-    html += '    <input class="input-text" id="reg-username" type="text" placeholder="e.g. FeV-06" value="FeV-06" />';
+    html += `    <input class="input-text" id="reg-username" type="text" placeholder="e.g. your-github-handle" value="${escapeHtml(state.detectedUsername || '')}" />`;
     html += '  </div>';
     html += '  <div class="btn-row">';
     html += '    <button class="btn btn-primary" data-action="REGISTER_WORKSPACE">Register Folder with ReV</button>';

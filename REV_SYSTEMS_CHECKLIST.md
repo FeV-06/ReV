@@ -16,6 +16,7 @@
 - **Security boundary:** The current app is a local, single-operator tool. The operator manually confirms which sources a recipient may receive. It does **not** authenticate recipients or automatically verify GitHub/Slack access.
 - **Evidence boundary:** Matching a quote and byte range proves the reference exists in the stored snapshot; it does not establish that the claim is true. Time proximity alone does not establish causality.
 - **Fixture boundary:** The sample-data button uses clearly labeled deterministic output. A separate real-model run has been tested; do not present fixture output as model inference.
+- **Generalization & anti-hardcoding rule (mandatory after each stride):** After each stride of work on this checklist, audit the touched codebase and verify that nothing is hardcoded (no hardcoded directories, fixed user handles, baked-in repo names, synthetic-only paths, or rigid size caps). Everything must work generally across arbitrary repositories, configurable platforms, dynamic contributor identities, and live provider environments.
 
 ## System map and approved operating model
 
