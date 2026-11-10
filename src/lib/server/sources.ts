@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { z } from 'zod';
 import { readJsonLimited } from './body';
 import { activeSlackConnection, listSlackChannels } from './slack';
+import { analyzeGitSymbols } from './symbols';
 import type { Artifact } from '@/lib/contracts';
 
 const exec = promisify(execFile);
@@ -31,11 +32,15 @@ async function localGitAuthors() {
   }
   return [...authors.values()];
 }
-async function git(...args: string[]) {
-  const { stdout } = await exec('git', ['-C', process.env.REV_GIT_DIR || process.cwd(), ...args], {
-    timeout: 10_000, maxBuffer: 2_000_000,
+async function gitInDir(dir: string, ...args: string[]) {
+  const { stdout } = await exec('git', ['-C', dir, ...args], {
+    timeout: 15_000, maxBuffer: 4_000_000,
   });
   return stdout;
+}
+
+async function git(...args: string[]) {
+  return gitInDir(process.env.REV_GIT_DIR || process.cwd(), ...args);
 }
 
 function slackChannels() {
@@ -51,15 +56,17 @@ export async function connectedSources() {
   };
 }
 
-export async function importLocalGit() {
-  const root = await localGitRoot();
+export async function importLocalGit(projectDir?: string, contributor?: string) {
+  const root = projectDir || await localGitRoot();
   if (!root) throw new Error('No local Git checkout found. Check REV_GIT_DIR.');
   const limit = localCommitLimit;
-  const log = await git('--no-pager', 'log', '-z', '--no-notes', '--no-show-signature', `--max-count=${limit + 1}`, '--format=%x00%H%x00%aN%x00%aE%x00%aI%x00%B', '--name-only', 'HEAD', '--')
+  const log = await gitInDir(root, '--no-pager', 'log', '-z', '--no-notes', '--no-show-signature', `--max-count=${limit + 1}`, '--format=%x00%H%x00%aN%x00%aE%x00%aI%x00%B', '--name-only', 'HEAD', '--')
     .catch(() => { throw new Error('Could not read local Git history. Check that the checkout has commits.'); });
   const fields = log.split('\0');
   const artifacts: Artifact[] = [];
   let i = 1;
+  const recentShas: { sha: string; author: string; timestamp: string }[] = [];
+
   while (i + 4 < fields.length && artifacts.length < limit) {
     const [sha, name, email, timestamp, text] = fields.slice(i, i + 5);
     i += 5;
@@ -69,9 +76,68 @@ export async function importLocalGit() {
       i++;
     }
     i++;
-    artifacts.push({ id: randomUUID(), kind: 'git_commit', externalId: sha, text: text.trim(),
-      author: gitAuthor(name, email), timestamp, paths: paths.slice(0, 100), url: null, sourceRef: `${basename(root)}@${sha}` });
+    const author = gitAuthor(name, email);
+    artifacts.push({
+      id: randomUUID(),
+      kind: 'git_commit',
+      externalId: sha,
+      text: `Commit ${sha.slice(0, 7)}: ${text.trim()}`,
+      author,
+      timestamp,
+      paths: paths.slice(0, 100),
+      url: null,
+      sourceRef: `${basename(root)}@${sha}`,
+    });
+    if (recentShas.length < 5) {
+      recentShas.push({ sha, author, timestamp });
+    }
   }
+
+  // Extract changed AST symbols from recent commits
+  for (const { sha, author, timestamp } of recentShas) {
+    try {
+      const symReport = await analyzeGitSymbols(root, sha);
+      for (const f of symReport.files) {
+        for (const s of f.changedSymbols) {
+          artifacts.push({
+            id: randomUUID(),
+            kind: 'code_symbol',
+            externalId: `${sha.slice(0, 7)}:${f.filePath}:${s.symbol.name}`,
+            text: `Symbol ${s.symbol.name} (${s.symbol.kind}) ${s.changeKind} in ${f.filePath}. Signature: ${s.symbol.signature || s.symbol.name}`,
+            author,
+            timestamp,
+            paths: [f.filePath],
+            url: null,
+            sourceRef: `${f.filePath}#${s.symbol.name}`,
+          });
+        }
+      }
+    } catch {}
+  }
+
+  // Extract working modifications
+  try {
+    const statusOut = await gitInDir(root, 'status', '--porcelain=v1', '-z', '--untracked-files=all');
+    const entries = statusOut.split('\0').filter(Boolean);
+    for (const entry of entries.slice(0, 50)) {
+      if (entry.length >= 4) {
+        const filePath = entry.slice(3);
+        const code = entry.slice(0, 2).trim();
+        artifacts.push({
+          id: randomUUID(),
+          kind: 'working_change',
+          externalId: `working:${filePath}`,
+          text: `Working change in ${filePath} (${code === 'M' ? 'Modified' : 'Untracked'}) in ${basename(root)}.`,
+          author: contributor || 'local',
+          timestamp: new Date().toISOString(),
+          paths: [filePath],
+          url: null,
+          sourceRef: `working:${filePath}`,
+        });
+      }
+    }
+  } catch {}
+
   return { artifacts, warnings: i + 4 < fields.length ? ['Only the latest 100 commits reachable from HEAD were imported.'] : [] };
 }
 

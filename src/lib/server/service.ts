@@ -21,6 +21,7 @@ const createSchema = z.object({
   targetRole: targetRoleSchema.optional(),
   departingPerson: z.string().trim().min(1).max(120).optional(),
   repo: z.string().max(201).optional(),
+  projectRoot: z.string().optional(),
   zipBase64: z.string().max(14_000_000).optional(),
   fixture: z.boolean().default(false),
   localGit: z.boolean().default(false),
@@ -103,7 +104,7 @@ export async function newRun(raw: unknown): Promise<Run> {
     approvedRevision: null,
     acceptedPartial: false,
   };
-  if (!args.fixture && !args.repo && !args.zipBase64 && !args.localGit && !args.connectedSlack && !args.slackChannelIds.length) {
+  if (!args.fixture && !args.repo && !args.zipBase64 && !args.localGit && !args.projectRoot && !args.connectedSlack && !args.slackChannelIds.length) {
     throw new Error('Choose a connected source, GitHub repository or Slack export');
   }
   await createRun(run);
@@ -114,7 +115,7 @@ export async function newRun(raw: unknown): Promise<Run> {
     imports.push({ label: 'Synthetic GitHub', load: () => callCore({ op:'normalize_fixture', ...github }) }, { label:'Synthetic Slack', load: () => callCore({ op:'slack', zipBase64:zip.toString('base64') }) });
     run.mode = 'fixture';
   } else {
-    if (args.localGit) imports.push({label:'Local Git', load: importLocalGit});
+    if (args.localGit || args.projectRoot) imports.push({label:'Local Git & Workspace', load: () => importLocalGit(args.projectRoot, githubUsername)});
     if (args.repo) imports.push({label:'GitHub', load: () => callCore({op:'github', repo:args.repo, contributor:githubUsername})});
     if (args.connectedSlack || args.slackChannelIds.length) imports.push({label:'Connected Slack', load: () => importSlackChannels(args.slackChannelIds)});
     if (args.zipBase64) imports.push({label:'Slack', load: () => callCore({op:'slack', zipBase64:args.zipBase64})});

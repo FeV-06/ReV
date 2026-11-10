@@ -43,6 +43,18 @@ export class RevExtensionManager {
       if (ws) {
         const project = await this.client.findProjectByRoot(ws);
         this.state.project = project;
+
+        // Auto-hydrate latest active run if currentRun is not yet loaded
+        if (!this.state.currentRun) {
+          try {
+            const { runs } = await this.client.request<{ runs: any[] }>('/v1/runs', { workspaceRoot: ws });
+            const activeRun = (runs || []).find((r: any) => ['needs_review', 'approved'].includes(r.state));
+            if (activeRun) {
+              const fullRun = await this.client.getRun(activeRun.id, ws);
+              this.state.currentRun = fullRun;
+            }
+          } catch {}
+        }
       }
     } catch (err) {
       this.state.daemonStatus = 'disconnected';
@@ -110,66 +122,103 @@ export class RevExtensionManager {
     }
   }
 
-  async createHandover(recipient: string, targetRole: string, fixture = true): Promise<void> {
+  async createHandover(recipient: string, targetRole: string, fixture = false): Promise<void> {
     const ws = this.getActiveWorkspacePath();
     const username = this.state.project?.githubUsername || 'FeV-06';
 
-    try {
-      const run = await this.client.createRun({
-        recipient,
-        githubUsername: username,
-        targetRole,
-        fixture,
-      }, ws);
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'ReV: Synthesizing handover with OmniRoute (gemini-3.8-flash-high)...',
+        cancellable: false,
+      },
+      async () => {
+        try {
+          const run = await this.client.createRun(
+            {
+              recipient,
+              githubUsername: username,
+              targetRole,
+              projectRoot: ws,
+              localGit: true,
+              fixture,
+            },
+            ws
+          );
 
-      // Select all candidate artifacts and confirm scope first
-      const selectedIds = (run.artifacts || []).map((a: any) => a.id);
-      await this.client.updateRunAction(run.id, {
-        action: 'scope',
-        selectedIds,
-      }, ws);
+          // Select all candidate artifacts and confirm scope first
+          const selectedIds = (run.artifacts || []).map((a: any) => a.id);
+          await this.client.updateRunAction(
+            run.id,
+            {
+              action: 'scope',
+              selectedIds,
+            },
+            ws
+          );
 
-      const generated = await this.client.updateRunAction(run.id, {
-        action: 'generate',
-        selectedIds,
-        acceptPartial: true,
-        confirmAuthorisation: true,
-        confirmRemote: !fixture,
-        fixture,
-      }, ws);
+          const generated = await this.client.updateRunAction(
+            run.id,
+            {
+              action: 'generate',
+              selectedIds,
+              acceptPartial: true,
+              confirmAuthorisation: true,
+              confirmRemote: !fixture,
+              fixture,
+            },
+            ws
+          );
 
-      this.state.currentRun = generated;
-      this.state.error = undefined;
-      this.broadcastState();
-      vscode.window.showInformationMessage(`Synthesized handover for ${recipient} (${targetRole}) with ${generated.items?.length || 0} evidence-backed claims.`);
-    } catch (err: any) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.state.error = msg;
-      this.broadcastState();
-      vscode.window.showErrorMessage(`Handover synthesis failed: ${msg}`);
-    }
+          this.state.currentRun = generated;
+          this.state.error = undefined;
+          this.broadcastState();
+          vscode.window.showInformationMessage(
+            `Synthesized handover for ${recipient} (${targetRole}) with ${generated.items?.length || 0} evidence-backed claims.`
+          );
+        } catch (err: any) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.state.error = msg;
+          this.broadcastState();
+          vscode.window.showErrorMessage(`Handover synthesis failed: ${msg}`);
+        }
+      }
+    );
   }
 
   async approveHandover(): Promise<void> {
     if (!this.state.currentRun) return;
     const ws = this.getActiveWorkspacePath();
 
-    try {
-      const approved = await this.client.updateRunAction(this.state.currentRun.id, {
-        action: 'approve',
-        confirmAuthorisation: true,
-      }, ws);
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'ReV: Approving handover revision in PGlite...',
+        cancellable: false,
+      },
+      async () => {
+        try {
+          const approved = await this.client.updateRunAction(
+            this.state.currentRun.id,
+            {
+              action: 'approve',
+              confirmAuthorisation: true,
+            },
+            ws
+          );
 
-      this.state.currentRun = approved;
-      this.state.error = undefined;
-      this.broadcastState();
-      vscode.window.showInformationMessage('Handover revision approved and sealed.');
-    } catch (err: any) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.state.error = msg;
-      this.broadcastState();
-      vscode.window.showErrorMessage(`Approval failed: ${msg}`);
-    }
+          this.state.currentRun = approved;
+          this.state.error = undefined;
+          this.broadcastState();
+          vscode.window.showInformationMessage('Handover revision approved and sealed.');
+        } catch (err: any) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.state.error = msg;
+          this.broadcastState();
+          vscode.window.showErrorMessage(`Approval failed: ${msg}`);
+        }
+      }
+    );
   }
 
   async exportHandover(): Promise<void> {

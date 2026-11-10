@@ -113,7 +113,7 @@ export class DaemonClient {
       method: options.method || 'GET',
       headers,
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(180_000),
     });
 
     if (!response.ok) {
@@ -179,6 +179,8 @@ export class DaemonClient {
     githubUsername: string;
     targetRole: string;
     repo?: string;
+    projectRoot?: string;
+    localGit?: boolean;
     fixture?: boolean;
   }, workspaceRoot?: string): Promise<any> {
     const res = await this.request<{ run: any }>('/v1/runs', {

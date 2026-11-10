@@ -37,6 +37,7 @@ const { mockStatusBar, mockWebview, mockPanel, mockVsCode } = vi.hoisted(() => {
       createWebviewPanel: vi.fn(() => mockPanel),
       showTextDocument: vi.fn(),
       registerWebviewViewProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      withProgress: vi.fn((_opts, task) => task({ report: vi.fn() })),
     },
     workspace: {
       workspaceFolders: [{ uri: { fsPath: '/home/fev/projects/test-project' } }],
@@ -57,6 +58,7 @@ const { mockStatusBar, mockWebview, mockPanel, mockVsCode } = vi.hoisted(() => {
     },
     StatusBarAlignment: { Right: 2 },
     ViewColumn: { One: 1 },
+    ProgressLocation: { Notification: 15, SourceControl: 1, Window: 10 },
     ThemeColor: class {
       constructor(public id: string) {}
     },
@@ -218,7 +220,9 @@ describe('RevExtensionManager lifecycle and UI interactions', () => {
       recipient: 'Successor Lead',
       githubUsername: 'FeV-06',
       targetRole: 'Backend engineer',
-      fixture: true,
+      projectRoot: '/home/fev/projects/test-project',
+      localGit: true,
+      fixture: false,
     }, '/home/fev/projects/test-project');
 
     expect(mockClient.updateRunAction).toHaveBeenCalledWith('run-1', {
@@ -231,8 +235,8 @@ describe('RevExtensionManager lifecycle and UI interactions', () => {
       selectedIds: ['art-1'],
       acceptPartial: true,
       confirmAuthorisation: true,
-      confirmRemote: false,
-      fixture: true,
+      confirmRemote: true,
+      fixture: false,
     }, '/home/fev/projects/test-project');
 
     expect((manager as any).state.currentRun.state).toBe('review');

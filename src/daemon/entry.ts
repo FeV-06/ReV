@@ -2,8 +2,14 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { chmod, mkdir, readFile, rename, rm, rmdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { existsSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { z } from 'zod';
+
+const localEnv = path.resolve(process.cwd(), '.env.local');
+if (existsSync(localEnv)) {
+  try { process.loadEnvFile(localEnv); } catch {}
+}
 import { readJsonLimited } from '@/lib/server/body';
 import { newRun, updateAction, readRun, readGraph, exportMarkdown, refreshRun, deleteRun, listRuns, clientError } from '@/lib/server/service';
 import { closeDatabase, database } from '@/lib/server/store';

@@ -396,8 +396,20 @@ pub async fn generate_with_instructions(
         field(&body, "/choices/0/message/content")
     }
     .context("Model response contained no text")?;
+    let clean_content = content.trim();
+    let json_str = if clean_content.starts_with("```") {
+        let stripped = clean_content.trim_start_matches('`');
+        let after_lang = if stripped.starts_with("json") {
+            &stripped[4..]
+        } else {
+            stripped
+        };
+        after_lang.trim_end_matches('`').trim()
+    } else {
+        clean_content
+    };
     let value: Value =
-        serde_json::from_str(content).context("Model did not return the requested JSON object")?;
+        serde_json::from_str(json_str).context("Model did not return the requested JSON object")?;
     let items: Vec<Candidate> = serde_json::from_value(
         value
             .get("items")

@@ -21,6 +21,8 @@
             "github_review_comment",
             "github_discussion_comment",
             "github_commit_patch",
+            "code_symbol",
+            "working_change",
             "slack_message",
             "review_answer",
             "review_redaction"
@@ -229,6 +231,8 @@
                   "github_review_comment",
                   "github_discussion_comment",
                   "github_commit_patch",
+                  "code_symbol",
+                  "working_change",
                   "slack_message",
                   "review_answer",
                   "review_redaction"
@@ -475,6 +479,8 @@
                   "github_review_comment",
                   "github_discussion_comment",
                   "github_commit_patch",
+                  "code_symbol",
+                  "working_change",
                   "slack_message",
                   "review_answer",
                   "review_redaction"
