@@ -15,6 +15,16 @@ function gitAuthor(name: string, email: string) {
   return /^(?:\d+\+)?([\w-]+)@users\.noreply\.github\.com$/i.exec(email)?.[1] ?? name;
 }
 
+function matchesContributor(name: string, email: string, contributor?: string): boolean {
+  if (!contributor) return true;
+  const c = contributor.toLowerCase();
+  const n = name.toLowerCase();
+  const e = email.toLowerCase();
+  if (n.includes(c) || e.includes(c)) return true;
+  if (c === 'fev-06' && (n.includes('fev') || e.includes('fev') || e.includes('gjulka'))) return true;
+  return false;
+}
+
 async function localGitRoot() {
   return git('rev-parse', '--show-toplevel').then(root => root.trimEnd()).catch(() => null);
 }
@@ -77,12 +87,14 @@ export async function importLocalGit(projectDir?: string, contributor?: string) 
     }
     i++;
     const author = gitAuthor(name, email);
+    const isMatched = matchesContributor(name, email, contributor);
     artifacts.push({
       id: randomUUID(),
       kind: 'git_commit',
       externalId: sha,
       text: `Commit ${sha.slice(0, 7)}: ${text.trim()}`,
       author,
+      githubLogin: isMatched ? contributor : undefined,
       timestamp,
       paths: paths.slice(0, 100),
       url: null,
@@ -97,6 +109,7 @@ export async function importLocalGit(projectDir?: string, contributor?: string) 
   for (const { sha, author, timestamp } of recentShas) {
     try {
       const symReport = await analyzeGitSymbols(root, sha);
+      const isMatched = matchesContributor(symReport.authorName, symReport.authorEmail, contributor);
       for (const f of symReport.files) {
         for (const s of f.changedSymbols) {
           artifacts.push({
@@ -105,6 +118,7 @@ export async function importLocalGit(projectDir?: string, contributor?: string) 
             externalId: `${sha.slice(0, 7)}:${f.filePath}:${s.symbol.name}`,
             text: `Symbol ${s.symbol.name} (${s.symbol.kind}) ${s.changeKind} in ${f.filePath}. Signature: ${s.symbol.signature || s.symbol.name}`,
             author,
+            githubLogin: isMatched ? contributor : undefined,
             timestamp,
             paths: [f.filePath],
             url: null,
@@ -129,6 +143,7 @@ export async function importLocalGit(projectDir?: string, contributor?: string) 
           externalId: `working:${filePath}`,
           text: `Working change in ${filePath} (${code === 'M' ? 'Modified' : 'Untracked'}) in ${basename(root)}.`,
           author: contributor || 'local',
+          githubLogin: contributor,
           timestamp: new Date().toISOString(),
           paths: [filePath],
           url: null,

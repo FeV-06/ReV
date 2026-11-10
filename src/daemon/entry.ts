@@ -142,7 +142,7 @@ async function route(req:IncomingMessage,res:ServerResponse):Promise<void> {
     if(!match){json(res,404,{error:'Not found'});return;}
     const id=uuid(match[1]);const action=match[2];
     if(!action&&req.method==='GET'){json(res,200,{run:await readRun(id)});return;}
-    if(!action&&req.method==='PATCH'){json(res,200,{run:await updateAction(id,await body(req,1_000_000))});return;}
+    if(!action&&req.method==='PATCH'){json(res,200,{run:await updateAction(id,await body(req,15_000_000))});return;}
     if(!action&&req.method==='DELETE'){await readRun(id);await deleteRun(id);json(res,200,{ok:true});return;}
     if(action==='graph'&&req.method==='GET'){json(res,200,{graph:await readGraph(id)});return;}
     if(action==='refresh'&&req.method==='POST'){json(res,200,{run:await refreshRun(id,await body(req,4_000_000))});return;}

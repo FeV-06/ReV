@@ -41,6 +41,7 @@ export const runSchema = z.object({
   githubUsername: githubUsernameSchema.optional(),
   targetRole: targetRoleSchema.optional(),
   departingPerson: z.string().optional(),
+  projectRoot: z.string().optional(),
   takeoverScope: z.string().optional(),
   createdAt: z.string(),
   state: runStateSchema,

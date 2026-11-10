@@ -328,8 +328,15 @@ pub async fn generate_with_instructions(
     }
     let source_json = serde_json::to_string(sources)?;
     let context_json = serde_json::to_string(&context.unwrap_or(&Value::Null))?;
-    if source_json.len().saturating_add(context_json.len()) > 120_000 {
-        bail!("Selected sources exceed the 120 KB generation limit; select a smaller set");
+    let max_gen_bytes = std::env::var("REV_GENERATION_LIMIT_BYTES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(4_000_000);
+    if source_json.len().saturating_add(context_json.len()) > max_gen_bytes {
+        bail!(
+            "Selected sources exceed the {} KB generation limit; select a smaller set",
+            max_gen_bytes / 1024
+        );
     }
 
     let user_content = format!(

@@ -93,6 +93,7 @@ export async function newRun(raw: unknown): Promise<Run> {
     githubUsername,
     targetRole: args.targetRole,
     departingPerson,
+    projectRoot: args.projectRoot,
     createdAt: new Date().toISOString(),
     state: 'importing',
     artifacts: [],

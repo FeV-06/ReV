@@ -40,7 +40,7 @@ export function renderAppHtml(state: WebviewState): string {
   html += '    <span class="brand-title">ReV Handover</span>';
   html += `    <span class="pill ${statusClass}">${statusText}</span>`;
   html += '  </div>';
-  html += '  <button class="btn btn-secondary" onclick="postAction(\'CHECK_STATUS\')">Refresh</button>';
+  html += '  <button class="btn btn-secondary" data-action="CHECK_STATUS">Refresh</button>';
   html += '</div>';
 
   // Notifications / Errors
@@ -65,8 +65,8 @@ export function renderAppHtml(state: WebviewState): string {
     html += '  <div class="card-title">Daemon Disconnected</div>';
     html += '  <p style="font-size: 12px; opacity: 0.8; margin-bottom: 12px;">Start the ReV daemon to enable continuous capture and handover generation.</p>';
     html += '  <div class="btn-row">';
-    html += '    <button class="btn btn-primary" onclick="postAction(\'START_DAEMON\')">Start Local Daemon</button>';
-    html += '    <button class="btn btn-secondary" onclick="postAction(\'CHECK_STATUS\')">Check Again</button>';
+    html += '    <button class="btn btn-primary" data-action="START_DAEMON">Start Local Daemon</button>';
+    html += '    <button class="btn btn-secondary" data-action="CHECK_STATUS">Check Again</button>';
     html += '  </div>';
     html += '</div>';
     return html;
@@ -86,7 +86,7 @@ export function renderAppHtml(state: WebviewState): string {
     html += '    <input class="input-text" id="reg-username" type="text" placeholder="e.g. FeV-06" value="FeV-06" />';
     html += '  </div>';
     html += '  <div class="btn-row">';
-    html += '    <button class="btn btn-primary" onclick="registerProject()">Register Folder with ReV</button>';
+    html += '    <button class="btn btn-primary" data-action="REGISTER_WORKSPACE">Register Folder with ReV</button>';
     html += '  </div>';
     html += '</div>';
     return html;
@@ -121,8 +121,8 @@ export function renderAppHtml(state: WebviewState): string {
   html += '  </div>';
 
   html += '  <div class="btn-row">';
-  html += '    <button class="btn btn-secondary" onclick="postAction(\'TRIGGER_SCAN\')">Sync & Scan Now</button>';
-  html += '    <button class="btn btn-secondary" onclick="postAction(\'OPEN_DASHBOARD\')">Open Dashboard</button>';
+  html += '    <button class="btn btn-secondary" data-action="TRIGGER_SCAN">Sync & Scan Now</button>';
+  html += '    <button class="btn btn-secondary" data-action="OPEN_DASHBOARD">Open Dashboard</button>';
   html += '  </div>';
   html += '</div>';
 
@@ -146,7 +146,7 @@ export function renderAppHtml(state: WebviewState): string {
     html += '    </select>';
     html += '  </div>';
     html += '  <div class="btn-row">';
-    html += '    <button class="btn btn-primary" onclick="createHandover()">Generate Handover</button>';
+    html += '    <button class="btn btn-primary" data-action="CREATE_HANDOVER">Generate Handover</button>';
     html += '  </div>';
   } else {
     // Active Handover Review
@@ -181,10 +181,10 @@ export function renderAppHtml(state: WebviewState): string {
 
     html += '  <div class="btn-row" style="margin-top:14px;">';
     if (run.state !== 'approved') {
-      html += '    <button class="btn btn-primary" onclick="approveHandover()">Approve Handover</button>';
+      html += '    <button class="btn btn-primary" data-action="APPROVE_HANDOVER">Approve Handover</button>';
     }
-    html += `    <button class="btn btn-secondary" onclick="exportHandover()" ${run.state !== 'approved' ? 'disabled' : ''}>Export HANDOVER.md</button>`;
-    html += '    <button class="btn btn-secondary" onclick="postAction(\'RESET_RUN\')">New Handover</button>';
+    html += `    <button class="btn btn-secondary" data-action="EXPORT_HANDOVER" ${run.state !== 'approved' ? 'disabled' : ''}>Export HANDOVER.md</button>`;
+    html += '    <button class="btn btn-secondary" data-action="RESET_RUN">New Handover</button>';
     html += '  </div>';
   }
 
@@ -439,47 +439,57 @@ export function generateWebviewHtml(webview: vscode.Webview, state: WebviewState
     const vscode = acquireVsCodeApi();
     let state = ${serializedState};
 
-    function escapeHtml(str) {
-      if (!str) return '';
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-    }
-
     function postAction(type, payload = {}) {
       vscode.postMessage({ type, ...payload });
     }
 
-    function registerProject() {
-      const usernameInput = document.getElementById('reg-username');
-      const githubUsername = usernameInput ? usernameInput.value.trim() : 'FeV-06';
-      postAction('REGISTER_WORKSPACE', { githubUsername });
-    }
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn || btn.disabled) return;
+      const action = btn.getAttribute('data-action');
+      if (action === 'REGISTER_WORKSPACE') {
+        const usernameInput = document.getElementById('reg-username');
+        const githubUsername = usernameInput ? usernameInput.value.trim() : 'FeV-06';
+        btn.disabled = true;
+        btn.innerText = 'Registering...';
+        postAction('REGISTER_WORKSPACE', { githubUsername });
+      } else if (action === 'CREATE_HANDOVER') {
+        const recipientInput = document.getElementById('target-recipient');
+        const roleSelect = document.getElementById('target-role');
+        const recipient = recipientInput ? recipientInput.value.trim() : 'Successor Engineer';
+        const targetRole = roleSelect ? roleSelect.value : 'Backend engineer';
+        btn.disabled = true;
+        btn.innerText = 'Synthesizing with OmniRoute...';
+        postAction('CREATE_HANDOVER', { recipient, targetRole });
+      } else if (action === 'APPROVE_HANDOVER') {
+        btn.disabled = true;
+        btn.innerText = 'Approving...';
+        postAction('APPROVE_HANDOVER');
+      } else if (action === 'EXPORT_HANDOVER') {
+        postAction('EXPORT_HANDOVER');
+      } else if (action === 'TRIGGER_SCAN') {
+        btn.disabled = true;
+        btn.innerText = 'Scanning...';
+        postAction('TRIGGER_SCAN');
+      } else if (action === 'RESET_RUN') {
+        postAction('RESET_RUN');
+      } else if (action === 'OPEN_DASHBOARD') {
+        postAction('OPEN_DASHBOARD');
+      } else if (action === 'CHECK_STATUS') {
+        postAction('CHECK_STATUS');
+      } else if (action === 'START_DAEMON') {
+        postAction('START_DAEMON');
+      }
+    });
 
-    function createHandover() {
-      const recipientInput = document.getElementById('target-recipient');
-      const roleSelect = document.getElementById('target-role');
-      const recipient = recipientInput ? recipientInput.value.trim() : 'Successor Engineer';
-      const targetRole = roleSelect ? roleSelect.value : 'Backend engineer';
-      postAction('CREATE_HANDOVER', { recipient, targetRole });
-    }
-
-    function approveHandover() {
-      postAction('APPROVE_HANDOVER');
-    }
-
-    function exportHandover() {
-      postAction('EXPORT_HANDOVER');
-    }
-
-    window.addEventListener('message', event => {
+    window.addEventListener('message', (event) => {
       const message = event.data;
       if (message.type === 'SET_STATE') {
-        state = { ...state, ...message.state };
-        // Client can re-render if DOM elements need updating
+        if (message.state) state = { ...state, ...message.state };
+        if (message.html) {
+          const app = document.getElementById('app');
+          if (app) app.innerHTML = message.html;
+        }
       }
     });
   </script>

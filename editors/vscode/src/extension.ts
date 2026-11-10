@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import path from 'node:path';
 import { DaemonClient, type Project } from './daemonClient';
-import { generateWebviewHtml, type WebviewState } from './webviewPanel';
+import { generateWebviewHtml, renderAppHtml, type WebviewState } from './webviewPanel';
 
 export class RevExtensionManager {
   private client: DaemonClient;
@@ -30,6 +30,11 @@ export class RevExtensionManager {
 
   async checkStatus(): Promise<void> {
     const ws = this.getActiveWorkspacePath();
+    if (this.state.workspacePath && ws && this.state.workspacePath !== ws) {
+      this.state.project = undefined;
+      this.state.currentRun = undefined;
+      this.state.exportSuccess = undefined;
+    }
     this.state.workspacePath = ws;
     this.state.error = undefined;
 
@@ -44,11 +49,14 @@ export class RevExtensionManager {
         const project = await this.client.findProjectByRoot(ws);
         this.state.project = project;
 
-        // Auto-hydrate latest active run if currentRun is not yet loaded
+        // Auto-hydrate latest active run strictly for THIS project root
         if (!this.state.currentRun) {
           try {
             const { runs } = await this.client.request<{ runs: any[] }>('/v1/runs', { workspaceRoot: ws });
-            const activeRun = (runs || []).find((r: any) => ['needs_review', 'approved'].includes(r.state));
+            const activeRun = (runs || []).find((r: any) => {
+              if (!r.projectRoot) return false;
+              return (r.projectRoot === ws || path.resolve(r.projectRoot) === path.resolve(ws)) && ['needs_review', 'approved'].includes(r.state);
+            });
             if (activeRun) {
               const fullRun = await this.client.getRun(activeRun.id, ws);
               this.state.currentRun = fullRun;
@@ -67,13 +75,12 @@ export class RevExtensionManager {
   }
 
   private broadcastState(): void {
+    const html = renderAppHtml(this.state);
     if (this.currentPanel) {
-      this.currentPanel.webview.html = generateWebviewHtml(this.currentPanel.webview, this.state);
-      this.currentPanel.webview.postMessage({ type: 'SET_STATE', state: this.state });
+      this.currentPanel.webview.postMessage({ type: 'SET_STATE', state: this.state, html });
     }
     if (this.sidebarView) {
-      this.sidebarView.webview.html = generateWebviewHtml(this.sidebarView.webview, this.state);
-      this.sidebarView.webview.postMessage({ type: 'SET_STATE', state: this.state });
+      this.sidebarView.webview.postMessage({ type: 'SET_STATE', state: this.state, html });
     }
   }
 
@@ -88,6 +95,10 @@ export class RevExtensionManager {
       const project = await this.client.registerProject(ws, githubUsername, ws);
       this.state.project = project;
       this.state.error = undefined;
+      try {
+        const snapshot = await this.client.scanProject(project.id, ws);
+        this.state.project.snapshot = snapshot;
+      } catch {}
       this.broadcastState();
       vscode.window.showInformationMessage(`Registered ${path.basename(ws)} with ReV daemon.`);
       return project;

@@ -443,6 +443,9 @@
         "departingPerson": {
           "type": "string"
         },
+        "projectRoot": {
+          "type": "string"
+        },
         "takeoverScope": {
           "type": "string"
         },
