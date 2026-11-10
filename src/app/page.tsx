@@ -13,13 +13,9 @@ function MainApp() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('projects');
   const { user, role } = useAuth();
 
-  // If user is not logged in, show Login Screen (or About tab if clicked)
+  // If user is not logged in, render the standalone full-bleed LoginView (no top nav, header, or footer)
   if (!user) {
-    return (
-      <AppShell activeTab={activeTab} onTabChange={setActiveTab}>
-        {activeTab === 'about' ? <AboutView /> : <LoginView />}
-      </AppShell>
-    );
+    return <LoginView />;
   }
 
   return (

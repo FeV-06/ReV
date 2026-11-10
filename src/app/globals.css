@@ -904,8 +904,129 @@ footer span { padding: 0 6px; }
 }
 
 /* ==========================================================================
-   AUTHENTICATION & DEV SUPERUSER PORTAL (Material 3 Expressive)
+   AUTHENTICATION & DEV SUPERUSER PORTAL (Material 3 Expressive 60/40 Split)
    ========================================================================== */
+
+.auth-split-container {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  overflow: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  background-color: #f3f0e8;
+}
+
+.auth-split-left {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .auth-split-left {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 60%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    background-color: #f3f0e8;
+  }
+}
+
+.auth-hero-container {
+  position: relative;
+  z-index: 10;
+  padding: 0 48px;
+  user-select: none;
+  max-width: 660px;
+}
+
+.auth-hero-title {
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-size: clamp(3.25rem, 5.2vw, 4.85rem);
+  font-weight: 400;
+  line-height: 1.06;
+  letter-spacing: -0.025em;
+  color: #132a24;
+  margin: 0;
+  text-align: left;
+}
+
+.auth-hero-accent {
+  color: #174a3d;
+}
+
+.auth-split-right {
+  width: 100%;
+  height: 100%;
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 20;
+  overflow-y: auto;
+  padding: 28px 24px;
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.03);
+}
+
+@media (min-width: 1024px) {
+  .auth-split-right {
+    width: 40%;
+  }
+}
+
+.auth-dag-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.auth-form-wrapper {
+  width: 100%;
+  max-width: 420px;
+  margin: auto 0;
+}
+
+.auth-split-right .m3-auth-card {
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  background: transparent;
+  max-width: 100%;
+}
+
+.auth-split-right .m3-auth-header {
+  margin-bottom: 16px;
+}
+
+.auth-split-right .m3-fast-dev-box {
+  margin-bottom: 14px;
+  padding: 12px;
+}
+
+.auth-split-right .m3-auth-separator {
+  margin: 12px 0;
+}
+
+.auth-split-right .m3-segmented-control {
+  margin-bottom: 14px;
+}
+
+.auth-split-right .m3-form-stack {
+  gap: 10px;
+}
+
+.auth-split-right .m3-auth-footer {
+  margin-top: 14px;
+}
 
 .m3-auth-page {
   min-height: calc(100vh - 180px);
