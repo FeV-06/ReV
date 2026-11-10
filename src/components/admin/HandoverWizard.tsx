@@ -63,6 +63,8 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
   const [error, setError] = useState('');
   const [publishedNotice, setPublishedNotice] = useState('');
   const [exportedMarkdown, setExportedMarkdown] = useState<string | null>(null);
+  const [syncTarget, setSyncTarget] = useState<'cloud' | 'local'>('cloud');
+  const [syncingCloud, setSyncingCloud] = useState(false);
 
   async function refresh() {
     try {
@@ -238,7 +240,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
     });
   }
 
-  function publishToDevPortal() {
+  async function publishToDevPortal() {
     if (!run) return;
     try {
       const published = JSON.parse(localStorage.getItem('rev_published_handovers') || '[]');
@@ -249,11 +251,43 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
         targetRole: run.targetRole || 'Software Engineer',
         publishedAt: new Date().toISOString(),
         publishedBy: 'Jordan Rivera (Admin)',
+        storageMode: syncTarget,
       };
       const updated = [entry, ...published.filter((p: { id: string }) => p.id !== run.id)];
       localStorage.setItem('rev_published_handovers', JSON.stringify(updated));
-      setPublishedNotice('Successfully published to the Successor Developer Portal!');
-      setTimeout(() => setPublishedNotice(''), 4000);
+
+      if (syncTarget === 'cloud') {
+        setSyncingCloud(true);
+        try {
+          const savedSettings = JSON.parse(localStorage.getItem('rev_system_settings') || '{}');
+          const connectionString = savedSettings.postgresUri?.trim() || undefined;
+
+          const res = await fetch('/api/sync/supabase', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Rev-Request': '1',
+            },
+            body: JSON.stringify({ runId: run.id, connectionString }),
+          });
+          const syncRes = await res.json();
+          if (syncRes.success) {
+            setPublishedNotice('Successfully published to Successor Portal & synced to Supabase!');
+          } else {
+            setPublishedNotice(
+              `Published locally in PGlite. (${syncRes.fallback === 'local' ? 'Local mode active' : 'Remote sync pending'})`
+            );
+          }
+        } catch {
+          setPublishedNotice('Published locally in PGlite (cloud unreachable, safe local fallback).');
+        } finally {
+          setSyncingCloud(false);
+        }
+      } else {
+        setPublishedNotice('Published to Successor Portal (Local Sovereignty preserved in PGlite).');
+      }
+
+      setTimeout(() => setPublishedNotice(''), 5000);
     } catch {
       // Ignore
     }
@@ -877,13 +911,52 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
                   </div>
                 </div>
 
+                {/* Storage Sovereignty vs Cloud Sync Radio at Final Submission */}
+                <div style={{ marginTop: '18px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
+                  <div className="eyebrow" style={{ marginBottom: '8px' }}>STORAGE & SOVEREIGNTY TARGET</div>
+                  <div className="m3-storage-picker" style={{ gap: '8px' }}>
+                    <label className={`m3-storage-option ${syncTarget === 'cloud' ? 'active' : ''}`} style={{ cursor: 'pointer', padding: '12px 14px' }}>
+                      <input
+                        type="radio"
+                        name="submissionSyncTarget"
+                        value="cloud"
+                        checked={syncTarget === 'cloud'}
+                        onChange={() => setSyncTarget('cloud')}
+                      />
+                      <div>
+                        <strong>Sync to Cloud & Supabase (Default)</strong>
+                        <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#475569' }}>
+                          Store in local PGlite and automatically sync to central team Supabase repository.
+                        </p>
+                      </div>
+                    </label>
+
+                    <label className={`m3-storage-option ${syncTarget === 'local' ? 'active' : ''}`} style={{ cursor: 'pointer', padding: '12px 14px' }}>
+                      <input
+                        type="radio"
+                        name="submissionSyncTarget"
+                        value="local"
+                        checked={syncTarget === 'local'}
+                        onChange={() => setSyncTarget('local')}
+                      />
+                      <div>
+                        <strong>Keep Local Only (PGlite Sovereignty)</strong>
+                        <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#475569' }}>
+                          Prevent cloud transfer. This handover will remain strictly local on this machine.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
                 <div className="button-row" style={{ marginTop: '18px' }}>
                   <button
                     type="button"
                     className="primary-action"
                     onClick={publishToDevPortal}
+                    disabled={syncingCloud}
                   >
-                    🚀 Publish to Successor Portal
+                    {syncingCloud ? 'Syncing & Publishing...' : '🚀 Publish to Successor Portal'}
                   </button>
                   <button
                     type="button"

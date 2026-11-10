@@ -16,6 +16,10 @@ export default function SettingsView() {
   const [dbMode, setDbMode] = useState<'pglite' | 'supabase'>('pglite');
   const [postgresUri, setPostgresUri] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [syncingRuns, setSyncingRuns] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Developer Preferences State
   const [editorPreference, setEditorPreference] = useState('vscode');
@@ -56,6 +60,80 @@ export default function SettingsView() {
       setTimeout(() => setSavedSuccess(false), 3500);
     } catch {
       // Ignore
+    }
+  }
+
+  async function handleTestConnection() {
+    if (!postgresUri.trim()) return;
+    setTestingConnection(true);
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/sync/supabase', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Rev-Request': '1',
+        },
+        body: JSON.stringify({
+          testOnly: true,
+          connectionString: postgresUri.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTestResult({
+          success: true,
+          message: `Connected successfully! PostgreSQL ${data.version || 'Supabase ready'}`.trim(),
+        });
+      } else {
+        setTestResult({
+          success: false,
+          message: data.error || 'Connection failed. ReV will remain safe in local PGlite mode.',
+        });
+      }
+    } catch (err) {
+      setTestResult({
+        success: false,
+        message: (err as Error).message || 'Network error during connection test',
+      });
+    } finally {
+      setTestingConnection(false);
+    }
+  }
+
+  async function handleManualSync() {
+    setSyncingRuns(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch('/api/sync/supabase', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Rev-Request': '1',
+        },
+        body: JSON.stringify({
+          connectionString: postgresUri.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSyncResult({
+          success: true,
+          message: `✓ Successfully synced ${data.runsSynced ?? 0} runs to remote Supabase instance.`,
+        });
+      } else {
+        setSyncResult({
+          success: false,
+          message: data.error || 'Sync failed. Local data remains intact in PGlite.',
+        });
+      }
+    } catch (err) {
+      setSyncResult({
+        success: false,
+        message: (err as Error).message || 'Sync error occurred',
+      });
+    } finally {
+      setSyncingRuns(false);
     }
   }
 
@@ -262,16 +340,115 @@ export default function SettingsView() {
                   </label>
                 </div>
 
+                {dbMode === 'pglite' && (
+                  <div
+                    style={{
+                      marginTop: '14px',
+                      padding: '12px 14px',
+                      borderRadius: '12px',
+                      background: '#f0fdf4',
+                      border: '1px solid #bbf7d0',
+                      fontSize: '13px',
+                      color: '#166534',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                    }}
+                  >
+                    <span style={{ fontSize: '18px' }}>🛡️</span>
+                    <div>
+                      <strong>Local Sovereignty Active</strong>
+                      <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#15803d' }}>
+                        All handovers and graph events remain entirely within local PGlite WASM. Zero cloud egress.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {dbMode === 'supabase' && (
-                  <label style={{ marginTop: '16px' }}>
-                    PostgreSQL Connection URI
-                    <input
-                      type="password"
-                      value={postgresUri}
-                      onChange={e => setPostgresUri(e.target.value)}
-                      placeholder="postgres://user:password@db.supabase.co:5432/postgres"
-                    />
-                  </label>
+                  <div style={{ marginTop: '16px' }}>
+                    <label>
+                      Supabase / PostgreSQL Connection URI
+                      <input
+                        type="password"
+                        value={postgresUri}
+                        onChange={e => {
+                          setPostgresUri(e.target.value);
+                          setTestResult(null);
+                        }}
+                        placeholder="postgres://postgres.xxx:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres"
+                      />
+                      <span className="footnote">
+                        Connection pooling URI from Supabase Dashboard &gt; Project Settings &gt; Database.
+                      </span>
+                    </label>
+
+                    <div className="button-row" style={{ marginTop: '12px', gap: '8px' }}>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={handleTestConnection}
+                        disabled={testingConnection || !postgresUri.trim()}
+                        style={{ fontSize: '13px', padding: '8px 14px' }}
+                      >
+                        {testingConnection ? 'Testing Connection...' : '🔌 Test Connection'}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={handleManualSync}
+                        disabled={syncingRuns || !postgresUri.trim()}
+                        style={{ fontSize: '13px', padding: '8px 14px' }}
+                      >
+                        {syncingRuns ? 'Syncing...' : '☁️ Sync Local Runs to Supabase'}
+                      </button>
+                    </div>
+
+                    {testResult && (
+                      <div
+                        style={{
+                          marginTop: '12px',
+                          padding: '10px 14px',
+                          borderRadius: '10px',
+                          background: testResult.success ? '#ecfdf5' : '#fef2f2',
+                          color: testResult.success ? '#065f46' : '#991b1b',
+                          fontSize: '13px',
+                          border: testResult.success ? '1px solid #a7f3d0' : '1px solid #fecaca',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}
+                      >
+                        <span>{testResult.success ? '✓' : '⚠️'}</span>
+                        <span>{testResult.message}</span>
+                      </div>
+                    )}
+
+                    {syncResult && (
+                      <div
+                        style={{
+                          marginTop: '10px',
+                          padding: '10px 14px',
+                          borderRadius: '10px',
+                          background: syncResult.success ? '#ecfdf5' : '#fef2f2',
+                          color: syncResult.success ? '#065f46' : '#991b1b',
+                          fontSize: '13px',
+                          border: syncResult.success ? '1px solid #a7f3d0' : '1px solid #fecaca',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}
+                      >
+                        <span>{syncResult.success ? '✓' : '⚠️'}</span>
+                        <span>{syncResult.message}</span>
+                      </div>
+                    )}
+
+                    <p className="footnote" style={{ marginTop: '12px', color: '#6b7280' }}>
+                      <strong>Safe Fallback:</strong> If remote Supabase is unreachable or unconfigured, ReV continues operating seamlessly in local PGlite with zero interruption.
+                    </p>
+                  </div>
                 )}
               </section>
 
