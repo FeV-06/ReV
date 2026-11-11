@@ -1,0 +1,246 @@
+/**
+ * teamSyncPanel.css - self-contained styles for TeamSyncPanel.
+ *
+ * Inherit the host page theme: every color resolves to a --md-sys-color-* token
+ * from globals.css. No hardcoded page font - typography inherits from the host
+ * (font-family: inherit), so the panel skins correctly in the web dashboard and
+ * a VS Code webview alike.
+ */
+
+.tsp-title {
+  margin: 0 0 4px;
+  font-family: inherit;
+  font-size: 1.4rem;
+  color: var(--md-sys-color-on-surface);
+}
+
+.tsp-subtitle,
+.tsp-muted {
+  margin: 4px 0;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.875rem;
+}
+
+.tsp-header {
+  margin-bottom: 12px;
+}
+
+.tsp-statusline {
+  min-height: 1.4em;
+  margin-bottom: 8px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.tsp-statusline[data-state="busy"] {
+  color: var(--md-sys-color-on-surface);
+  font-weight: 600;
+}
+
+.tsp-error {
+  border: 1px solid var(--md-sys-color-error);
+  background: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-surface);
+  padding: 8px 12px;
+  margin: 8px 0;
+  border-radius: 8px;
+}
+
+.tsp-card {
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface-container);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 12px 0;
+}
+
+.tsp-card-title {
+  margin: 0 0 8px;
+  font-family: inherit;
+  font-size: 1.1rem;
+  color: var(--md-sys-color-on-surface);
+}
+
+.tsp-card-subtitle {
+  margin: 16px 0 8px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: var(--md-sys-color-on-surface);
+}
+
+.tsp-statusgrid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 8px 0;
+}
+
+.tsp-statusgrid dt {
+  color: var(--md-sys-color-on-surface-variant);
+  font-weight: 600;
+}
+
+.tsp-statusgrid dd {
+  margin: 0;
+  color: var(--md-sys-color-on-surface);
+}
+
+.tsp-conflictlist,
+.tsp-runlist {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+}
+
+.tsp-conflict {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.tsp-conflict-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.tsp-button {
+  font-family: inherit;
+  font-size: 0.875rem;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--md-sys-color-outline);
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+  cursor: pointer;
+}
+
+.tsp-button:hover:not(:disabled) {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  border-color: var(--md-sys-color-primary);
+}
+
+.tsp-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tsp-button-primary {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  border-color: var(--md-sys-color-primary);
+  font-weight: 600;
+}
+
+.tsp-button-primary:hover:not(:disabled) {
+  background: var(--md-sys-color-on-primary-container);
+  color: var(--md-sys-color-on-primary);
+}
+
+.tsp-field {
+  margin: 10px 0;
+}
+
+.tsp-field label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.tsp-field input[type="text"],
+.tsp-field input[type="password"],
+.tsp-field input[type="url"] {
+  font-family: inherit;
+  font-size: 0.875rem;
+  padding: 8px 10px;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: 8px;
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  width: min(420px, 100%);
+}
+
+.tsp-field input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--md-sys-color-primary);
+}
+
+.tsp-check {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: normal;
+  cursor: pointer;
+}
+
+.tsp-check span {
+  color: var(--md-sys-color-on-surface);
+  font-size: 0.875rem;
+}
+
+.tsp-runlist .tsp-check {
+  display: inline-flex;
+}
+
+/* Manifest table */
+.tsp-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 0.8125rem;
+}
+
+.tsp-table caption {
+  text-align: left;
+  color: var(--md-sys-color-on-surface-variant);
+  margin-bottom: 4px;
+}
+
+.tsp-table th,
+.tsp-table td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  color: var(--md-sys-color-on-surface);
+}
+
+.tsp-table th {
+  color: var(--md-sys-color-on-surface-variant);
+  font-weight: 600;
+}
+
+/* Backend-flagged sensitive rows get a warning tint. */
+.tsp-table tr[data-sensitive] {
+  background: var(--md-sys-color-warning-container);
+}
+
+.tsp-table tr[data-sensitive] td {
+  color: var(--md-sys-color-warning);
+}
+
+.tsp-monospace {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125em;
+}
+
+.tsp-warning {
+  border: 1px solid var(--md-sys-color-warning);
+  background: var(--md-sys-color-warning-container);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 8px 0;
+}
+
+.tsp-warning ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.tsp-warning-text {
+  color: var(--md-sys-color-warning);
+}

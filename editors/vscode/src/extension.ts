@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import path from 'node:path';
 import { DaemonClient, type Project } from './daemonClient';
 import { generateWebviewHtml, renderAppHtml, type WebviewState } from './webviewPanel';
+import { TeamWebviewController, createTeamDaemonDeps } from './team/teamWebviewController';
+import { generateTeamPanelHtml } from './team/teamPanelHtml';
 
 export class RevExtensionManager {
   private client: DaemonClient;
@@ -11,6 +13,10 @@ export class RevExtensionManager {
   private state: WebviewState = {
     daemonStatus: 'connecting',
   };
+  private teamPanel: vscode.WebviewPanel | undefined;
+  private teamController: TeamWebviewController | undefined;
+  private teamWorkspaceAtOpen: string | undefined;
+  private workspaceSwitchDisposables: vscode.Disposable[] = [];
 
   constructor(private context: vscode.ExtensionContext, client?: DaemonClient) {
     this.client = client || new DaemonClient();
@@ -339,6 +345,93 @@ export class RevExtensionManager {
     webviewView.webview.onDidReceiveMessage(msg => this.handleWebviewMessage(msg));
     void this.checkStatus();
   }
+
+  /**
+   * Opens (or reveals) the Team Sync panel hosting the shared React component.
+   * The webview never receives daemon tokens; every request flows through the
+   * host bridge with the active workspace root injected server-side.
+   */
+  async openTeamPanel(): Promise<vscode.WebviewPanel> {
+    const ws = this.getActiveWorkspacePath();
+
+    if (this.teamPanel) {
+      // Workspace switched since the panel opened: rebuild for the new root.
+      if (this.teamWorkspaceAtOpen !== ws) {
+        this.disposeTeamPanel();
+      } else {
+        this.teamPanel.reveal(vscode.ViewColumn.One);
+        return this.teamPanel;
+      }
+    }
+
+    const distDir = path.join(this.context.extensionUri.fsPath, 'dist');
+    const panel = vscode.window.createWebviewPanel(
+      'revTeamSync',
+      'ReV Team Sync',
+      vscode.ViewColumn.One,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+        localResourceRoots: [vscode.Uri.file(distDir)],
+      }
+    );
+    this.teamPanel = panel;
+    this.teamWorkspaceAtOpen = ws;
+
+    const scriptOnDisk = vscode.Uri.file(path.join(distDir, 'teamWebview.js'));
+    const scriptUri = panel.webview.asWebviewUri(scriptOnDisk).toString();
+    const styleOnDisk = vscode.Uri.file(path.join(distDir, 'teamWebview.css'));
+    const styleUri = panel.webview.asWebviewUri(styleOnDisk).toString();
+
+    panel.webview.html = generateTeamPanelHtml({
+      cspSource: panel.webview.cspSource,
+      scriptUri,
+      styleUri,
+      workspacePath: ws,
+    });
+
+    this.teamController = new TeamWebviewController(createTeamDaemonDeps(this.client, () => this.getActiveWorkspacePath()), panel.webview, {
+      workspacePath: ws,
+    });
+    panel.onDidDispose(() => this.disposeTeamPanel());
+    return panel;
+  }
+
+  private disposeTeamPanel(): void {
+    this.teamController?.dispose();
+    this.teamController = undefined;
+    if (this.teamPanel) {
+      try {
+        this.teamPanel.dispose();
+      } catch {}
+      this.teamPanel = undefined;
+    }
+    this.teamWorkspaceAtOpen = undefined;
+  }
+
+  /** Clears pending team messages/state on workspace switch (per isolation contract). */
+  private handleWorkspaceSwitch(): void {
+    this.disposeTeamPanel();
+    this.state.project = undefined;
+    this.state.currentRun = undefined;
+    this.state.exportSuccess = undefined;
+    this.broadcastState();
+  }
+
+  watchWorkspaceSwitches(): vscode.Disposable | undefined {
+    // Defensive: subscribe only when the host exposes the event (keeps older
+    // API surfaces and minimal mocks working).
+    if (typeof vscode.workspace.onDidChangeWorkspaceFolders !== 'function') return undefined;
+    const sub = vscode.workspace.onDidChangeWorkspaceFolders(() => this.handleWorkspaceSwitch());
+    this.workspaceSwitchDisposables.push(sub);
+    return sub;
+  }
+
+  dispose(): void {
+    for (const d of this.workspaceSwitchDisposables) d.dispose();
+    this.workspaceSwitchDisposables = [];
+    this.disposeTeamPanel();
+  }
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -364,10 +457,14 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('rev.createHandover', () => manager.createHandover('Successor Engineer', 'Backend engineer')),
     vscode.commands.registerCommand('rev.approveHandover', () => manager.approveHandover()),
     vscode.commands.registerCommand('rev.exportHandover', () => manager.exportHandover()),
+    vscode.commands.registerCommand('rev.openTeamSync', () => manager.openTeamPanel()),
     vscode.window.registerWebviewViewProvider('rev.sidebarView', {
       resolveWebviewView: (view: vscode.WebviewView) => manager.resolveWebviewView(view),
     })
   );
+
+  context.subscriptions.push(manager.watchWorkspaceSwitches() ?? { dispose: () => undefined });
+  context.subscriptions.push({ dispose: () => manager.dispose() });
 }
 
 export function deactivate(): void {}

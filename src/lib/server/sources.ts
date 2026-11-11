@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { z } from 'zod';
 import { readJsonLimited } from './body';
 import { activeSlackConnection, listSlackChannels } from './slack';
-import { analyzeGitSymbols } from './symbols';
+import { getOrAnalyzeCommit } from './team-local';
 import type { Artifact } from '@/lib/contracts';
 
 const exec = promisify(execFile);
@@ -97,7 +97,7 @@ export async function importLocalGit(input: LocalGitOptions | string[] = { inclu
   if (options.includeSymbols !== false) {
     for (const { sha, author, timestamp } of recentShas) {
       try {
-        const symReport = await analyzeGitSymbols(root, sha);
+        const symReport = await getOrAnalyzeCommit(root, sha);
         const username = /^(?:\d+\+)?([\w-]+)@users\.noreply\.github\.com$/i.exec(symReport.authorEmail)?.[1];
         const githubLogin = username && /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/.test(username) ? username : undefined;
         for (const f of symReport.files) {

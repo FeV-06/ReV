@@ -8,6 +8,8 @@ type AdminViewMode = 'projects' | 'wizard';
 
 export default function AdminWorkspace() {
   const [viewMode, setViewMode] = useState<AdminViewMode>('projects');
+  // Run explicitly opened from the projects list ("Edit in Studio"); null = fresh studio.
+  const [wizardRunId, setWizardRunId] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -20,13 +22,25 @@ export default function AdminWorkspace() {
     }
   }, []);
 
-  function switchMode(mode: AdminViewMode) {
-    setViewMode(mode);
+  function persistView(mode: AdminViewMode) {
     try {
       localStorage.setItem('rev_admin_view', mode);
     } catch {
       // Ignore
     }
+  }
+
+  function switchMode(mode: AdminViewMode) {
+    // Reaching the studio via the tab/pill always starts without a preloaded run.
+    if (mode === 'wizard') setWizardRunId(null);
+    setViewMode(mode);
+    persistView(mode);
+  }
+
+  function openRunInWizard(runId: string) {
+    setWizardRunId(runId);
+    setViewMode('wizard');
+    persistView('wizard');
   }
 
   return (
@@ -78,11 +92,12 @@ export default function AdminWorkspace() {
       {viewMode === 'projects' ? (
         <ProjectList
           onStartNewHandover={() => switchMode('wizard')}
-          onOpenRunInWizard={() => switchMode('wizard')}
+          onOpenRunInWizard={openRunInWizard}
         />
       ) : (
         <HandoverWizard
           onBackToProjects={() => switchMode('projects')}
+          initialRunId={wizardRunId}
         />
       )}
     </div>

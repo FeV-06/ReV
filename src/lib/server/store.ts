@@ -1,10 +1,12 @@
 import { PGlite } from '@electric-sql/pglite';
+import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import type { Run } from '@/lib/contracts';
 import type { RunArchive } from '@/lib/server/archive';
 
 const schemaVersion = 1;
+export type RunAuthority = { userId: string; teamId: string; role: 'leader' | 'member' };
 const globalDb = globalThis as typeof globalThis & {
   revDb?: Promise<PGlite>;
   revDbSchema?: { version: number; ready: Promise<PGlite> };
@@ -73,17 +75,50 @@ async function migrate(db: PGlite): Promise<void> {
     SELECT r.id,(e.value->>'id')::uuid,e.value
     FROM runs r CROSS JOIN LATERAL jsonb_array_elements(COALESCE(r.payload->'graphEvents','[]'::jsonb)) e(value)
     ON CONFLICT (event_id) DO NOTHING;
-  UPDATE runs SET payload = payload - 'graphEvents' WHERE payload ? 'graphEvents';`);
+  UPDATE runs SET payload = payload - 'graphEvents' WHERE payload ? 'graphEvents';
+  CREATE TABLE IF NOT EXISTS run_permissions (
+    run_id UUID PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+    team_id UUID NOT NULL, owner_id UUID NOT NULL,
+    visibility TEXT NOT NULL CHECK (visibility IN ('private', 'lead')),
+    revision BIGINT NOT NULL DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS run_permission_events (
+    id UUID PRIMARY KEY, run_id UUID NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    team_id UUID NOT NULL, actor_id UUID NOT NULL, old_visibility TEXT,
+    new_visibility TEXT NOT NULL, at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`);
 }
 
 async function recoverInterruptedRuns(db: PGlite): Promise<void> {
   await db.exec(`UPDATE runs SET payload = jsonb_set(jsonb_set(payload, '{state}', '"failed"'::jsonb), '{warnings}', COALESCE(payload->'warnings','[]'::jsonb) || '["Run was interrupted by a server restart; retry generation or import."]'::jsonb), version = version + 1
   WHERE payload->>'state' IN ('importing','reconstructing');`);
 }
-export async function createRun(run: Run): Promise<void> {
+export async function createRun(run: Run, authority?: RunAuthority): Promise<void> {
   const db = await database();
-  await db.query('INSERT INTO runs (id, created_at, payload) VALUES ($1, $2, $3::jsonb)', [run.id, run.createdAt, JSON.stringify(run)]);
+  await db.transaction(async tx => {
+    await tx.query('INSERT INTO runs (id, created_at, payload) VALUES ($1, $2, $3::jsonb)', [run.id, run.createdAt, JSON.stringify(run)]);
+    if (authority) {
+      await tx.query("INSERT INTO run_permissions(run_id,team_id,owner_id,visibility) VALUES($1,$2,$3,'private')", [run.id, authority.teamId, authority.userId]);
+      await tx.query("INSERT INTO run_permission_events(id,run_id,team_id,actor_id,old_visibility,new_visibility) VALUES($1,$2,$3,$4,NULL,'private')", [randomUUID(), run.id, authority.teamId, authority.userId]);
+    }
+  });
 }
+/** Refresh inherits the source run's owner and visibility, never the editor's identity. */
+export async function createRefreshedRun(run: Run, sourceId: string, expectedRevision: number, authority: RunAuthority): Promise<void> {
+  const db = await database();
+  await db.transaction(async tx => {
+    const source = await tx.query<{owner_id: string; team_id: string; visibility: string}>(`SELECT p.owner_id,p.team_id,p.visibility FROM run_permissions p JOIN runs r ON r.id=p.run_id
+      WHERE p.run_id=$1 AND p.team_id=$2 AND (p.owner_id=$3 OR ($4='leader' AND p.visibility='lead'))
+      AND (r.payload->>'revision')::bigint=$5 FOR UPDATE OF r,p`,
+      [sourceId,authority.teamId,authority.userId,authority.role,expectedRevision]);
+    if (!source.rows[0]) throw new Error('Handover changed or access was revoked');
+    const prior = source.rows[0];
+    await tx.query('INSERT INTO runs (id, created_at, payload) VALUES ($1, $2, $3::jsonb)', [run.id, run.createdAt, JSON.stringify(run)]);
+    await tx.query('INSERT INTO run_permissions(run_id,team_id,owner_id,visibility) VALUES($1,$2,$3,$4)', [run.id, prior.team_id, prior.owner_id, prior.visibility]);
+    await tx.query('INSERT INTO run_permission_events(id,run_id,team_id,actor_id,old_visibility,new_visibility) VALUES($1,$2,$3,$4,NULL,$5)', [randomUUID(),run.id,prior.team_id,authority.userId,prior.visibility]);
+  });
+}
+
 export async function getVersionedRun(id: string): Promise<{run: Run; version: number} | null> {
   const db = await database();
   const result = await db.query<{payload: Run; version: string|number}>(`SELECT r.payload || jsonb_build_object('graphEvents', COALESCE((SELECT jsonb_agg(g.event ORDER BY g.seq) FROM graph_events g WHERE g.run_id=r.id),'[]'::jsonb), 'sourceEvents', COALESCE((SELECT jsonb_agg(s.event ORDER BY s.seq) FROM source_events s WHERE s.run_id=r.id),'[]'::jsonb)) AS payload, r.version FROM runs r WHERE r.id = $1`, [id]);
@@ -97,29 +132,52 @@ export async function listRuns(): Promise<Pick<Run, 'id'|'createdAt'|'recipient'
   return result.rows.map(({payload}) => ({ id: payload.id, createdAt: payload.createdAt, recipient: payload.recipient, state: payload.state, successorEmail: payload.successorEmail, projectRoot: payload.projectRoot }));
 }
 
-export async function compareAndUpdate(run: Run, expectedVersion: number): Promise<number> {
+export async function listRunsForAuthority(authority: RunAuthority): Promise<Pick<Run, 'id'|'createdAt'|'recipient'|'state'|'successorEmail'|'projectRoot'>[]> {
+  const db = await database();
+  const result = await db.query<{payload: Run}>(`SELECT r.payload FROM runs r JOIN run_permissions p ON p.run_id=r.id
+    WHERE p.team_id=$1 AND (p.owner_id=$2 OR ($3='leader' AND p.visibility='lead')) ORDER BY r.created_at DESC LIMIT 50`,
+    [authority.teamId, authority.userId, authority.role]);
+  return result.rows.map(({payload}) => ({ id: payload.id, createdAt: payload.createdAt, recipient: payload.recipient, state: payload.state, successorEmail: payload.successorEmail, projectRoot: payload.projectRoot }));
+}
+
+export async function assertRunAuthority(id: string, authority: RunAuthority, action: 'read' | 'edit' | 'delete' = 'read'): Promise<void> {
+  const db = await database();
+  const result = await db.query(`SELECT 1 FROM run_permissions p WHERE p.run_id=$1 AND p.team_id=$2
+    AND (p.owner_id=$3 OR ($4='leader' AND p.visibility='lead' AND $5 <> 'delete'))`,
+    [id, authority.teamId, authority.userId, authority.role, action]);
+  if (!result.rows.length) throw new Error('Handover not found or access denied');
+}
+
+export async function compareAndUpdate(run: Run, expectedVersion: number, authority?: RunAuthority): Promise<number> {
   const db = await database();
   return db.transaction(async tx=>{
     const {graphEvents,sourceEvents,...payload}=run;
-    const result = await tx.query<{version: string|number}>('UPDATE runs SET payload = $2::jsonb, version = version + 1 WHERE id = $1 AND version = $3 RETURNING version', [run.id, JSON.stringify(payload), expectedVersion]);
+    const result = await tx.query<{version: string|number}>(`UPDATE runs SET payload = $2::jsonb, version = version + 1 WHERE id = $1 AND version = $3
+      AND ($4::uuid IS NULL OR EXISTS (SELECT 1 FROM run_permissions p WHERE p.run_id=runs.id AND p.team_id=$4 AND (p.owner_id=$5 OR ($6='leader' AND p.visibility='lead')))) RETURNING version`,
+      [run.id, JSON.stringify(payload), expectedVersion, authority?.teamId ?? null, authority?.userId ?? null, authority?.role ?? null]);
     if (!result.rows[0]) throw new Error('Run changed in another request. Reload before continuing.');
     for(const event of graphEvents||[]) await tx.query('INSERT INTO graph_events (run_id,event_id,event) VALUES ($1,$2,$3::jsonb) ON CONFLICT (event_id) DO NOTHING',[run.id,event.id,JSON.stringify(event)]);
     for(const event of sourceEvents||[]) await tx.query('INSERT INTO source_events (run_id,event_id,event) VALUES ($1,$2,$3::jsonb) ON CONFLICT (event_id) DO NOTHING',[run.id,event.id,JSON.stringify(event)]);
     return Number(result.rows[0].version);
   });
 }
-export async function approveRun(run: Run, expectedVersion: number): Promise<void> {
+export async function approveRun(run: Run, expectedVersion: number, authority?: RunAuthority): Promise<void> {
   const db = await database();
   await db.transaction(async tx => {
     const {graphEvents,sourceEvents,...payload}=run;
-    const result = await tx.query('UPDATE runs SET payload = $2::jsonb, version = version + 1 WHERE id = $1 AND version = $3 RETURNING version', [run.id, JSON.stringify(payload), expectedVersion]);
+    const result = await tx.query(`UPDATE runs SET payload = $2::jsonb, version = version + 1 WHERE id = $1 AND version = $3
+      AND ($4::uuid IS NULL OR EXISTS (SELECT 1 FROM run_permissions p WHERE p.run_id=runs.id AND p.team_id=$4 AND (p.owner_id=$5 OR ($6='leader' AND p.visibility='lead')))) RETURNING version`,
+      [run.id, JSON.stringify(payload), expectedVersion, authority?.teamId ?? null, authority?.userId ?? null, authority?.role ?? null]);
     if (!result.rows.length) throw new Error('Run changed in another request. Reload before continuing.');
     await tx.query('INSERT INTO approved_revisions (run_id, revision, approved_at, payload) VALUES ($1, $2, $3, $4::jsonb)', [run.id, run.revision, new Date().toISOString(), JSON.stringify(run)]);
   });
 }
-export async function deleteRun(id: string): Promise<void> {
+export async function deleteRun(id: string, authority?: RunAuthority): Promise<void> {
   const db = await database();
-  await db.query('DELETE FROM runs WHERE id = $1', [id]);
+  const result = await db.query(`DELETE FROM runs WHERE id = $1 AND ($2::uuid IS NULL OR EXISTS
+    (SELECT 1 FROM run_permissions p WHERE p.run_id=runs.id AND p.team_id=$2 AND p.owner_id=$3)) RETURNING id`,
+    [id, authority?.teamId ?? null, authority?.userId ?? null]);
+  if (authority && !result.rows.length) throw new Error('Handover not found or access denied');
 }
 
 export async function exportArchive():Promise<RunArchive>{

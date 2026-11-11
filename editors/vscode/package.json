@@ -56,6 +56,11 @@
         "command": "rev.exportHandover",
         "title": "Export HANDOVER.md",
         "category": "ReV"
+      },
+      {
+        "command": "rev.openTeamSync",
+        "title": "Open Team Sync Panel",
+        "category": "ReV"
       }
     ],
     "viewsContainers": {

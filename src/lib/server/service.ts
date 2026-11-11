@@ -9,7 +9,7 @@ import { answerSuccessor, appendQuestions, prepareInterview, visibleGaps } from 
 import { detectGaps } from '@/lib/server/gaps';
 import { attachVerifiedCitations } from '@/lib/server/citations';
 import { applyRefresh } from '@/lib/server/refresh';
-import { approveRun, compareAndUpdate, createRun, deleteRun, getRun, getVersionedRun, listRuns } from '@/lib/server/store';
+import { approveRun, assertRunAuthority, compareAndUpdate, createRefreshedRun, createRun, deleteRun, getRun, getVersionedRun, listRuns, type RunAuthority } from '@/lib/server/store';
 
 import { dayOneItems, generationFailurePrefix, sourceWarnings } from '@/lib/handover';
 import { slackChannelId } from '@/lib/server/slack';
@@ -95,7 +95,7 @@ export function exportMarkdown(run: Run): string {
   return lines.join('\n');
 }
 export { assertLocalRequest, clientError } from '@/lib/server/request-security';
-export async function newRun(raw: unknown): Promise<Run> {
+export async function newRun(raw: unknown, authority?: RunAuthority): Promise<Run> {
   const args = createSchema.parse(raw);
   const departingPerson = args.departingPerson || args.githubUsername;
   const githubUsername = args.githubUsername ?? githubUsernameSchema.safeParse(args.departingPerson).data;
@@ -121,7 +121,7 @@ export async function newRun(raw: unknown): Promise<Run> {
   if (!args.fixture && !args.repo && !args.zipBase64 && !args.localGit && !args.projectRoot && !args.connectedSlack && !args.slackChannelIds.length) {
     throw new Error('Choose a connected source, GitHub repository or Slack export');
   }
-  await createRun(run);
+  await createRun(run, authority);
   const imports: {label: string; load: () => Promise<unknown>}[] = [];
   if (args.fixture) {
     const github = JSON.parse(await readFile(path.join(process.cwd(), 'fixtures/github.json'), 'utf8'));
@@ -164,11 +164,11 @@ export async function newRun(raw: unknown): Promise<Run> {
     }
   }
   run.state = run.artifacts.length ? 'awaiting_scope_confirmation' : 'failed';
-  await compareAndUpdate(run, 0);
+  await compareAndUpdate(run, 0, authority);
   return run;
 }
-export async function updateAction(id: string, raw: unknown): Promise<Run> {
-  idSchema.parse(id); const stored = await getVersionedRun(id); if (!stored) throw new Error('Run not found');
+export async function updateAction(id: string, raw: unknown, authority?: RunAuthority): Promise<Run> {
+  idSchema.parse(id); if (authority) await assertRunAuthority(id, authority, 'edit'); const stored = await getVersionedRun(id); if (!stored) throw new Error('Run not found');
   const {run} = stored; let version = stored.version;
   const args = actionSchema.parse(raw);
   if (args.action === 'assign_successor') {
@@ -183,7 +183,7 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
     const changed = [...args.selectedIds].sort().join(',') !== [...run.selectedIds].sort().join(',');
     if (changed) {
       run.selectedIds = args.selectedIds; run.items = []; run.graphEpoch = randomUUID(); run.approvedRevision = null; run.revision++; run.state = 'awaiting_scope_confirmation';
-      await compareAndUpdate(run, version);
+      await compareAndUpdate(run, version, authority);
     }
     return publicRun(run);
   } else if (args.action === 'generate') {
@@ -199,7 +199,7 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
     const takeoverScope = (args.takeoverScope ?? run.takeoverScope) || undefined;
     run.takeoverScope = takeoverScope;
     run.warnings = coverageWarnings;
-    run.items = []; run.graphEpoch = randomUUID(); run.approvedRevision = null; run.revision++; run.state = 'reconstructing'; run.acceptedPartial = args.acceptPartial; version = await compareAndUpdate(run, version);
+    run.items = []; run.graphEpoch = randomUUID(); run.approvedRevision = null; run.revision++; run.state = 'reconstructing'; run.acceptedPartial = args.acceptPartial; version = await compareAndUpdate(run, version, authority);
     try {
       const sources = run.artifacts.filter(a => args.selectedIds.includes(a.id)).map(a => artifactSchema.parse(a));
       const handoverContext = {
@@ -217,7 +217,7 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
       }));
       run.items = result.items.map(item => ({...item, derivationSourceIds: [...run.selectedIds]})); run.mode = args.fixture ? 'fixture' : 'model'; run.state = 'needs_review';
       run.graphEvents=[...(run.graphEvents||[]),...suggestEvidenceEdges(run)];
-    } catch (error) { run.state = 'failed'; run.warnings.push(`${generationFailurePrefix}${error instanceof Error ? error.message : 'Unknown error'}`); await compareAndUpdate(run, version); throw error; }
+    } catch (error) { run.state = 'failed'; run.warnings.push(`${generationFailurePrefix}${error instanceof Error ? error.message : 'Unknown error'}`); await compareAndUpdate(run, version, authority); throw error; }
   } else if (args.action === 'save') {
     if (!['needs_review','approved'].includes(run.state)) throw new Error('Generate a draft before reviewing');
     if (args.items.length !== run.items.length || new Set(args.items.map(i => i.id)).size !== run.items.length) throw new Error('Review must contain every draft item exactly once');
@@ -297,17 +297,18 @@ export async function updateAction(id: string, raw: unknown): Promise<Run> {
     if (selectedIds.length !== run.selectedIds.length) run.revision++;
     run.selectedIds = selectedIds;
     run.state = 'approved'; run.approvedRevision = run.revision;
-    await approveRun(run, version); return publicRun(run);
+    await approveRun(run, version, authority); return publicRun(run);
   }
-  await compareAndUpdate(run, version); return publicRun(run);
+  await compareAndUpdate(run, version, authority); return publicRun(run);
 }
 async function readRawRun(id:string):Promise<Run> { idSchema.parse(id); const run=await getRun(id); if(!run) throw new Error('Run not found'); return run; }
 function publicRun(run:Run):Run {
   const scope=new Set(run.selectedIds);
   return {...run,graphEvents:(run.graphEvents||[]).filter(e=>(!run.graphEpoch||e.epoch===run.graphEpoch)&&e.edge.evidenceSourceIds.every(id=>scope.has(id))),gaps:visibleGaps(run)};
 }
-export async function askHandover(id: string, raw: unknown) {
+export async function askHandover(id: string, raw: unknown, authority?: RunAuthority) {
   idSchema.parse(id);
+  if (authority) await assertRunAuthority(id, authority, 'edit');
   const { question, confirmRemote } = z.object({
     question: z.string().trim().min(1).max(1000), confirmRemote: z.boolean().default(false),
   }).parse(raw);
@@ -325,17 +326,20 @@ export async function askHandover(id: string, raw: unknown) {
     appendQuestions(run, [{
       id: randomUUID(), origin: 'successor', question: response.followUp, sourceIds: [], status: 'open',
     }]);
-    await compareAndUpdate(run, version);
+    await compareAndUpdate(run, version, authority);
   } else if ((await getVersionedRun(id))?.version !== version) {
     throw new Error('The handover changed while answering. Ask again using the current revision');
   }
   return response;
 }
-export async function readRun(id: string): Promise<Run> { return publicRun(await readRawRun(id)); }
-export async function readGraph(id: string) { return buildGraph(await readRawRun(id)); }
-export async function refreshRun(id:string,raw:unknown):Promise<Run>{
+export async function readRun(id: string, authority?: RunAuthority): Promise<Run> { if (authority) await assertRunAuthority(id, authority); return publicRun(await readRawRun(id)); }
+export async function readGraph(id: string, authority?: RunAuthority) { if (authority) await assertRunAuthority(id, authority); return buildGraph(await readRawRun(id)); }
+export async function refreshRun(id:string,raw:unknown,authority?: RunAuthority):Promise<Run>{
+  if (authority) await assertRunAuthority(id, authority, 'edit');
   const args=z.object({sources:z.array(artifactSchema).max(1000),revokedIds:z.array(idSchema).max(1000),expectedRevision:z.number().int().nonnegative()}).parse(raw);
   const prior=await readRawRun(id);if(prior.revision!==args.expectedRevision)throw new Error('Run changed; reload before refreshing');
-  const next=applyRefresh(prior,args.sources,args.revokedIds);await createRun(next);return publicRun(next);
+  const next=applyRefresh(prior,args.sources,args.revokedIds);next.projectRoot=prior.projectRoot;
+  if (authority) await createRefreshedRun(next,id,args.expectedRevision,authority); else await createRun(next);
+  return publicRun(next);
 }
 export { listRuns, deleteRun };

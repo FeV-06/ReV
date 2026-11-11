@@ -14,5 +14,11 @@ describe('handover export',()=>{
 });
 describe('local request boundary',()=>{
   it('allows same-origin POST with marker',()=>expect(()=>assertLocalRequest(new Request('http://127.0.0.1:3077/api/runs',{method:'POST',headers:{host:'127.0.0.1:3077',origin:'http://127.0.0.1:3077','x-rev-request':'1'}}))).not.toThrow());
+  it('allows public tunnel host and HTTPS origin when configured',()=>{
+    process.env.REV_PUBLIC_HOST = 'rev.fev06.xyz,fev06.xyz';
+    expect(()=>assertLocalRequest(new Request('https://rev.fev06.xyz/api/runs',{method:'POST',headers:{host:'rev.fev06.xyz',origin:'https://rev.fev06.xyz','x-rev-request':'1'}}))).not.toThrow();
+    expect(()=>assertLocalRequest(new Request('https://rev.fev06.xyz/api/runs',{method:'POST',headers:{host:'rev.fev06.xyz',origin:'https://malicious.com','x-rev-request':'1'}}))).toThrow();
+    delete process.env.REV_PUBLIC_HOST;
+  });
   it('rejects cross-origin and missing marker',()=>{expect(()=>assertLocalRequest(new Request('http://127.0.0.1:3077/api/runs',{method:'POST',headers:{host:'127.0.0.1:3077',origin:'https://evil.example','x-rev-request':'1'}}))).toThrow();expect(()=>assertLocalRequest(new Request('http://127.0.0.1:3077/api/runs',{headers:{host:'127.0.0.1:3077','sec-fetch-site':'same-origin'}}))).toThrow();});
 });

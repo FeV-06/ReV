@@ -9,6 +9,7 @@ import DepartingWorkspace from '@/components/DepartingWorkspace';
 import DevDashboard from '@/components/dev/DevDashboard';
 import SettingsView from '@/components/settings/SettingsView';
 import AboutView from '@/components/about/AboutView';
+import TeamSyncPanel from '@/components/team/TeamSyncPanel';
 
 function MainApp() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('projects');
@@ -24,7 +25,7 @@ function MainApp() {
       {activeTab === 'projects' && (
         role === 'admin' ? <AdminWorkspace /> : role === 'departing' ? <DepartingWorkspace /> : <DevDashboard />
       )}
-      {activeTab === 'settings' && (role === 'departing' ? <DepartingWorkspace /> : <SettingsView />)}
+      {activeTab === 'settings' && (role === 'departing' ? <DepartingWorkspace /> : <><TeamSyncPanel endpoint="/api/team-sync" /><SettingsView /></>)}
       {activeTab === 'about' && <AboutView />}
     </AppShell>
   );

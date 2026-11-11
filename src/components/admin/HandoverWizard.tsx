@@ -9,6 +9,8 @@ import ProjectDashboard from '@/components/ProjectDashboard';
 
 type RunSummary = Pick<Run, 'id' | 'createdAt' | 'recipient' | 'state'>;
 
+type RegisteredProject = { id: string; root: string; githubUsername: string };
+
 async function api(url: string, options: RequestInit = {}) {
   const response = await fetch(url, {
     ...options,
@@ -31,9 +33,11 @@ function fileAsBase64(file: File): Promise<string> {
 interface HandoverWizardProps {
   onBackToProjects?: () => void;
   onSelectRunForDetail?: (run: Run) => void;
+  /** Run to load from the server on mount (set when opened from the projects list). */
+  initialRunId?: string | null;
 }
 
-export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail }: HandoverWizardProps) {
+export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail, initialRunId }: HandoverWizardProps) {
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [run, setRun] = useState<Run | null>(null);
   const [recipient, setRecipient] = useState('Incoming engineer');
@@ -41,6 +45,12 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
   const [targetRole, setTargetRole] = useState('');
   const [takeoverScope, setTakeoverScope] = useState('');
   const [repo, setRepo] = useState('');
+  // Workspace picker: choose a locally registered daemon project as the run's projectRoot.
+  // 'custom' means the raw absolute-path field below holds the value.
+  const [projects, setProjects] = useState<RegisteredProject[]>([]);
+  const [projectsError, setProjectsError] = useState('');
+  const [projectSelection, setProjectSelection] = useState<string>('');
+  const [customProjectRoot, setCustomProjectRoot] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [items, setItems] = useState<Item[]>([]);
@@ -103,6 +113,41 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail 
     }
     void checkSupabase();
   }, []);
+
+  // Load daemon-registered projects for the workspace picker (real /api/projects surface).
+  useEffect(() => {
+    let cancelled = false;
+    async function loadProjects() {
+      try {
+        setProjectsError('');
+        const data = await api('/api/projects');
+        if (!cancelled) setProjects(data.projects || []);
+      } catch (e) {
+        if (!cancelled) setProjectsError(e instanceof Error ? e.message : 'Could not load registered projects');
+      }
+    }
+    void loadProjects();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Open a specific run requested by the projects list ("Edit in Studio").
+  useEffect(() => {
+    if (!initialRunId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setError('');
+        const data = await api(`/api/runs/${initialRunId}`);
+        if (cancelled || data?.run?.id !== initialRunId) return;
+        display(data.run);
+        await refresh();
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not open the selected run');
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialRunId]);
 
   async function loadGraph() {
     if (!run) return;

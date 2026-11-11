@@ -7,12 +7,14 @@ import { z } from 'zod';
 
 import { readJsonLimited } from '@/lib/server/body';
 import { askHandover, newRun, updateAction, readRun, readGraph, exportMarkdown, refreshRun, deleteRun, listRuns, clientError } from '@/lib/server/service';
-import { closeDatabase, database } from '@/lib/server/store';
+import { closeDatabase, database, listRunsForAuthority, type RunAuthority } from '@/lib/server/store';
 import { getProject, listProjects, registerProject, removeProject, setProjectPaused } from '@/lib/server/projects';
 import { listProjectSnapshots, readLatestSnapshot, scanProject } from '@/lib/server/capture';
 import { connectedSources } from '@/lib/server/sources';
-import { syncToSupabase, testPostgresConnection } from '@/lib/server/sync-supabase';
-import { loadSettings } from '@/lib/server/settings';
+import { teamAction } from '@/lib/server/team-sync';
+import { TeamAuthService } from '@/lib/server/team-auth-service';
+import { validateSupabaseProjectUrl } from '@/lib/server/team-remote';
+import { changeRunVisibility, readPermission } from '@/lib/server/run-permissions';
 
 try {
   process.loadEnvFile('.env.local');
@@ -30,6 +32,13 @@ const lockOwnerPath=path.join(lockPath,'owner.json');
 const tokenPath=path.join(dataDir,'daemon.token');
 const statePath=path.join(dataDir,'daemon.json');
 const token=randomBytes(32).toString('hex');
+const teamMode=process.env.REV_TEAM_MODE === '1';
+const teamConfig=teamMode?{
+  url:validateSupabaseProjectUrl(z.string().url().parse(process.env.REV_SUPABASE_URL)),
+  publishableKey:z.string().startsWith('sb_publishable_').max(2048).parse(process.env.REV_SUPABASE_PUBLISHABLE_KEY),
+  teamId:z.string().uuid().parse(process.env.REV_TEAM_ID),
+}:undefined;
+const teamAuth=new TeamAuthService(fetch,teamConfig);
 const launchNonce=randomBytes(16).toString('hex');
 let activePort=0;
 let closing=false;
@@ -107,8 +116,47 @@ async function route(req:IncomingMessage,res:ServerResponse):Promise<void> {
   active++;
   try {
     const url=new URL(req.url || '/',`http://${host}:${activePort}`);if(url.search||url.hash){json(res,400,{error:'Query parameters are not supported'});return;}
-    if(req.method==='GET'&&url.pathname==='/v1/health'){json(res,200,{status:'ok',protocol:1});return;}
+    if(req.method==='GET'&&url.pathname==='/v1/health'){json(res,200,{status:'ok',protocol:1,teamMode});return;}
     if(req.method==='POST'&&url.pathname==='/v1/shutdown'){json(res,200,{ok:true});setImmediate(()=>void shutdown());return;}
+    const userCredential=typeof req.headers['x-rev-user-session']==='string'?req.headers['x-rev-user-session']:undefined;
+    if (url.pathname.startsWith('/v1/auth/')) {
+      if (!teamMode) { json(res,404,{error:'Team authentication is not enabled'});return; }
+      if (url.pathname==='/v1/auth/sign-in' && req.method==='POST') {
+        try { const result=await teamAuth.signIn(await body(req,16_000));json(res,200,result); }
+        catch { json(res,401,{error:'Sign-in failed or team access is unavailable'}); }
+        return;
+      }
+      if (url.pathname==='/v1/auth/session' && req.method==='GET') {
+        try { json(res,200,{session:await teamAuth.current(userCredential)}); }
+        catch { json(res,401,{error:'Authentication required or team membership unavailable'}); }
+        return;
+      }
+      if (url.pathname==='/v1/auth/sign-out' && req.method==='POST') {
+        try { teamAuth.signOut(userCredential);json(res,200,{ok:true}); }
+        catch { json(res,401,{error:'Authentication required'}); }
+        return;
+      }
+      json(res,404,{error:'Not found'});return;
+    }
+    let authority:RunAuthority|undefined;
+    if (teamMode) {
+      try { authority=await teamAuth.require(userCredential); }
+      catch { json(res,401,{error:'Authentication required or team membership unavailable'});return; }
+      if (url.pathname.startsWith('/v1/projects') || url.pathname==='/v1/team-sync') {
+        json(res,403,{error:'Team project and sync access is not yet available'});return;
+      }
+    }
+    if (req.method === 'POST' && url.pathname === '/v1/team-sync') {
+      const input = z.object({ action: z.enum(['configure', 'status', 'preview', 'sync', 'disconnect']), payload: z.unknown() }).strict().parse(await body(req, 100_000));
+      try {
+        const result = await teamAction(input.action, input.payload);
+        json(res, 200, { ok: true, action: input.action, result });
+      } catch (error) {
+        const message = error instanceof z.ZodError ? 'Invalid team request' : error instanceof Error ? error.message : 'Team operation failed';
+        json(res, 400, { ok: false, action: input.action, error: message });
+      }
+      return;
+    }
     if(url.pathname==='/v1/projects'){
       if(req.method==='GET'){
         const projects=await listProjects();
@@ -138,10 +186,22 @@ async function route(req:IncomingMessage,res:ServerResponse):Promise<void> {
       }
     }
     if(url.pathname==='/v1/runs'){
-      if(req.method==='GET'){json(res,200,{runs:await listRuns(),sources:await connectedSources()});return;}
-      if(req.method==='POST'){json(res,201,{run:await newRun(await body(req,15_000_000))});return;}
+      if(req.method==='GET'){json(res,200,{runs:authority?await listRunsForAuthority(authority):await listRuns(),sources:authority?{localGit:null,gitAuthors:[],slack:false}:await connectedSources()});return;}
+      if(req.method==='POST'){
+        const input=await body(req,15_000_000);
+        if(authority){
+          const safe=z.object({fixture:z.literal(true)}).passthrough().safeParse(input);
+          if(!safe.success || safe.data.localGit || safe.data.localDocs || safe.data.projectRoot || safe.data.repo || safe.data.connectedSlack || safe.data.slackChannelIds || safe.data.zipBase64){
+            json(res,403,{error:'Team source imports are not available until project access controls are complete'});return;
+          }
+        }
+        json(res,201,{run:await newRun(input,authority)});return;
+      }
     }
     if(url.pathname==='/v1/sync/supabase'&&req.method==='POST'){
+      json(res, 403, { success: false, error: 'Legacy bulk sync is disabled: it cannot enforce per-user team permissions.' });
+      return;
+      /* Legacy implementation retained temporarily for reference until the team migration is verified.
       const args=await body(req,64_000);
       const parsed=z.object({testOnly:z.boolean().optional(),confirmSync:z.boolean().optional(),connectionString:z.string().max(2_000).optional(),runId:z.string().uuid().optional()}).strict().safeParse(args);
       if(!parsed.success){json(res,400,{error:'Invalid sync request'});return;}
@@ -169,18 +229,32 @@ async function route(req:IncomingMessage,res:ServerResponse):Promise<void> {
       const result=await syncToSupabase(connectionString,payload.runId);
       json(res,result.success?200:400,result);
       return;
+      */
     }
-    const match=/^\/v1\/runs\/([0-9a-fA-F-]+)(?:\/(graph|export|refresh|ask))?$/.exec(url.pathname);
+    const match=/^\/v1\/runs\/([0-9a-fA-F-]+)(?:\/(graph|export|refresh|ask|visibility))?$/.exec(url.pathname);
     if(!match){json(res,404,{error:'Not found'});return;}
     const id=uuid(match[1]);const action=match[2];
-    if(!action&&req.method==='GET'){json(res,200,{run:await readRun(id)});return;}
-    if(!action&&req.method==='PATCH'){json(res,200,{run:await updateAction(id,await body(req,15_000_000))});return;}
-    if(!action&&req.method==='DELETE'){await readRun(id);await deleteRun(id);json(res,200,{ok:true});return;}
-    if(action==='ask'&&req.method==='POST'){json(res,200,await askHandover(id,await body(req,8_000)));return;}
-    if(action==='graph'&&req.method==='GET'){json(res,200,{graph:await readGraph(id)});return;}
-    if(action==='refresh'&&req.method==='POST'){json(res,200,{run:await refreshRun(id,await body(req,4_000_000))});return;}
+    if(!action&&req.method==='GET'){json(res,200,{run:await readRun(id,authority)});return;}
+    if(!action&&req.method==='PATCH'){json(res,200,{run:await updateAction(id,await body(req,15_000_000),authority)});return;}
+    if(!action&&req.method==='DELETE'){await readRun(id,authority);await deleteRun(id,authority);json(res,200,{ok:true});return;}
+    if(action==='ask'&&req.method==='POST'){json(res,200,await askHandover(id,await body(req,8_000),authority));return;}
+    if(action==='graph'&&req.method==='GET'){json(res,200,{graph:await readGraph(id,authority)});return;}
+    if(action==='refresh'&&req.method==='POST'){
+      if(authority){json(res,403,{error:'Team refresh is not available until source access controls are complete'});return;}
+      json(res,200,{run:await refreshRun(id,await body(req,4_000_000),authority)});return;
+    }
+    if(action==='visibility'&&req.method==='GET'&&authority){
+      await readRun(id,authority);json(res,200,{permission:await readPermission(id)});return;
+    }
+    if(action==='visibility'&&req.method==='PATCH'&&authority){
+      const args=z.object({visibility:z.enum(['private','lead']),expectedRevision:z.number().int().nonnegative()}).strict().parse(await body(req,4_000));
+      const permission=await changeRunVisibility(id,{id:authority.userId,teamId:authority.teamId},args.visibility,args.expectedRevision,async()=>{
+        const refreshed=await teamAuth.require(userCredential);
+        return refreshed.userId===authority!.userId&&refreshed.teamId===authority!.teamId?refreshed.role:null;
+      });json(res,200,{permission});return;
+    }
     if(action==='export'&&req.method==='GET'){
-      const result=exportMarkdown(await readRun(id));res.writeHead(200,{'content-type':'text/markdown; charset=utf-8','content-disposition':'attachment; filename="rev-handover.md"','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(result);return;
+      const result=exportMarkdown(await readRun(id,authority));res.writeHead(200,{'content-type':'text/markdown; charset=utf-8','content-disposition':'attachment; filename="rev-handover.md"','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(result);return;
     }
     json(res,405,{error:'Method not allowed'});
   } catch(error){json(res,400,{error:clientError(error)});} finally {active--;}
@@ -213,6 +287,7 @@ function stopCaptureLoop():void {
 
 async function shutdown():Promise<void> {
   if(closing)return;closing=true;
+  teamAuth.clear();
   stopCaptureLoop();
   try {
     await new Promise<void>(resolve=>server.close(()=>resolve()));
