@@ -46,8 +46,7 @@ function DagBackground() {
           </marker>
         </defs>
 
-        {/* ================= TOP-RIGHT DAG CLUSTER ================= */}
-        {/* Soft distant edges near center */}
+        {/* Top-Right DAG Cluster */}
         <g stroke="#174a3d" strokeOpacity="0.14" strokeWidth="1.2" markerEnd="url(#dag-arrow-soft)">
           <line x1="440" y1="185" x2="575" y2="115" />
           <line x1="440" y1="185" x2="540" y2="275" />
@@ -57,7 +56,6 @@ function DagBackground() {
           <line x1="575" y1="115" x2="735" y2="20" />
         </g>
 
-        {/* Crisp prominent foreground edges */}
         <g stroke="#174a3d" strokeOpacity="0.45" strokeWidth="1.35" markerEnd="url(#dag-arrow-strong)">
           <line x1="575" y1="115" x2="650" y2="195" />
           <line x1="650" y1="195" x2="738" y2="215" />
@@ -77,7 +75,7 @@ function DagBackground() {
           <line x1="735" y1="20" x2="740" y2="210" />
         </g>
 
-        {/* Top-Right Nodes */}
+        {/* Nodes */}
         <g fill="#174a3d">
           <circle cx="440" cy="185" r="3.5" fillOpacity="0.18" />
           <circle cx="540" cy="275" r="3.5" fillOpacity="0.18" />
@@ -94,8 +92,7 @@ function DagBackground() {
           <circle cx="905" cy="475" r="4.5" fillOpacity="0.55" />
         </g>
 
-        {/* ================= BOTTOM-LEFT DAG CLUSTER ================= */}
-        {/* Soft outer edges */}
+        {/* Bottom-Left DAG Cluster */}
         <g stroke="#174a3d" strokeOpacity="0.18" strokeWidth="1.2" markerEnd="url(#dag-arrow-soft)">
           <line x1="0" y1="485" x2="105" y2="520" />
           <line x1="0" y1="620" x2="105" y2="520" />
@@ -106,7 +103,6 @@ function DagBackground() {
           <line x1="430" y1="710" x2="545" y2="780" />
         </g>
 
-        {/* Crisp prominent foreground edges */}
         <g stroke="#174a3d" strokeOpacity="0.42" strokeWidth="1.35" markerEnd="url(#dag-arrow-strong)">
           <line x1="105" y1="520" x2="168" y2="605" />
           <line x1="105" y1="520" x2="155" y2="668" />
@@ -118,33 +114,15 @@ function DagBackground() {
           <line x1="290" y1="645" x2="430" y2="570" />
           <line x1="290" y1="645" x2="345" y2="720" />
           <line x1="345" y1="720" x2="430" y2="710" />
-          <line x1="345" y1="720" x2="275" y2="795" />
-          <line x1="155" y1="668" x2="135" y2="795" />
-        </g>
-
-        {/* Bottom-Left Nodes */}
-        <g fill="#174a3d">
-          <circle cx="105" cy="520" r="4.5" fillOpacity="0.55" />
-          <circle cx="168" cy="605" r="5" fillOpacity="0.75" />
-          <circle cx="155" cy="668" r="5" fillOpacity="0.75" />
-          <circle cx="290" cy="645" r="4.5" fillOpacity="0.65" />
-          <circle cx="320" cy="570" r="4.5" fillOpacity="0.45" />
-          <circle cx="345" cy="720" r="4.5" fillOpacity="0.5" />
-          <circle cx="430" cy="570" r="4.5" fillOpacity="0.6" />
-          <circle cx="430" cy="710" r="4" fillOpacity="0.35" />
-          <circle cx="545" cy="625" r="3.5" fillOpacity="0.2" />
         </g>
       </svg>
     </div>
   );
 }
 
-/**
- * Slotted Authentication Form Component
- * Preserves the exact existing form inputs, superuser quick logins, and validation logic.
- */
-export function AuthForm() {
-  const { loginAsSuperuser, loginWithCredentials } = useAuth();
+function EvaluationGateways() {
+  const { loginAsSuperuser } = useAuth();
+  const [showAltAuth, setShowAltAuth] = useState(false);
   const [tab, setTab] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -152,21 +130,22 @@ export function AuthForm() {
   const [selectedRole, setSelectedRole] = useState<UserRole>('admin');
   const [error, setError] = useState('');
 
+  const { loginWithCredentials } = useAuth();
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    if (!email.trim() || !password.trim()) {
-      setError('Please enter your email and password.');
+    if (!email || !password) {
+      setError('Please fill in email and password.');
       return;
     }
-    if (tab === 'signup' && !name.trim()) {
-      setError('Please enter your full name.');
+    if (tab === 'signup' && !name) {
+      setError('Please provide your name.');
       return;
     }
-
     loginWithCredentials(
-      tab === 'signup' ? name.trim() : email.split('@')[0],
-      email.trim(),
+      tab === 'signup' ? name : email.split('@')[0],
+      email,
       selectedRole
     );
   }
@@ -177,173 +156,223 @@ export function AuthForm() {
       <div className="m3-auth-header">
         <div className="m3-auth-brand-mark" aria-hidden="true">R</div>
         <h1 className="m3-auth-title">ReV</h1>
-        <p className="m3-auth-tagline">Knowledge, carried forward</p>
+        <p className="m3-auth-tagline">Evidence-Backed Developer Handover Engine</p>
       </div>
 
-      {/* Superuser Fast Dev Access Section */}
-      <div className="m3-fast-dev-box">
-        <div className="m3-fast-dev-header">
-          <span className="m3-fast-dev-pill">DEVELOPMENT</span>
-          <span className="m3-fast-dev-title">One-Click Superuser Access</span>
+      <div className="m3-eval-intro">
+        <span className="m3-eval-eyebrow">HACKATHON EVALUATION GATEWAY</span>
+        <h3>Select Evaluation Experience</h3>
+        <p>
+          Switch modes anytime via the persistent header toggle.
+        </p>
+      </div>
+
+      {/* Gateway Cards Grid */}
+      <div className="m3-eval-grid">
+        {/* Gateway 1: Demo Mode */}
+        <div className="m3-eval-card demo-card">
+          <div className="m3-eval-card-header">
+            <span className="m3-eval-pill demo">⚡ INSTANT DEMO</span>
+            <span className="m3-eval-subtag">0s Latency · Guided Walkthrough</span>
+          </div>
+          <h4>Instant Guided Showcase</h4>
+          <p>
+            Zero-latency walkthrough across all 4 stages. Demonstrates Tree-Sitter AST symbols, exact citation verification, and interactive Departure Interview Q&A with real-time UI spotlights.
+          </p>
+          <div className="m3-eval-actions">
+            <button
+              type="button"
+              className="m3-eval-btn primary"
+              onClick={() => loginAsSuperuser('admin', 'demo')}
+              id="btn-eval-demo-admin"
+            >
+              <span>👑 Launch Admin Studio Demo</span>
+              <span className="arrow">→</span>
+            </button>
+            <button
+              type="button"
+              className="m3-eval-btn tonal"
+              onClick={() => loginAsSuperuser('developer', 'demo')}
+              id="btn-eval-demo-dev"
+            >
+              <span>👤 Launch Successor Reader Demo</span>
+              <span className="arrow">→</span>
+            </button>
+          </div>
         </div>
 
-        <div className="m3-fast-dev-grid">
-          <button
-            type="button"
-            className="m3-fast-access-card admin"
-            onClick={() => loginAsSuperuser('admin')}
-            id="btn-login-superuser-admin"
-          >
-            <div className="m3-access-icon">👑</div>
-            <div className="m3-access-info">
-              <strong>Admin / Superuser</strong>
-              <small>Jordan Rivera · Full Workspace & Audit</small>
-            </div>
-            <div className="m3-access-arrow">→</div>
-          </button>
-
-          <button
-            type="button"
-            className="m3-fast-access-card dev"
-            onClick={() => loginAsSuperuser('developer')}
-            id="btn-login-superuser-dev"
-          >
-            <div className="m3-access-icon">👤</div>
-            <div className="m3-access-info">
-              <strong>Successor Developer</strong>
-              <small>Alex Vance · Onboarding & Checklist</small>
-            </div>
-            <div className="m3-access-arrow">→</div>
-          </button>
-          <button type="button" className="m3-fast-access-card dev" onClick={() => loginAsSuperuser('departing')}>
-            <div className="m3-access-icon" aria-hidden="true">✎</div>
-            <div className="m3-access-info">
-              <strong>Departing Person</strong>
-              <small>Open your interview and answer questions</small>
-            </div>
-            <div className="m3-access-arrow" aria-hidden="true">→</div>
-          </button>
+        {/* Gateway 2: Live Engine */}
+        <div className="m3-eval-card live-card">
+          <div className="m3-eval-card-header">
+            <span className="m3-eval-pill live">🔬 LIVE ENGINE</span>
+            <span className="m3-eval-subtag">gemini-3.8-flash-high</span>
+          </div>
+          <h4>Real GitHub & Native AST Engine</h4>
+          <p>
+            Connected to the local background daemon (:3078). Ingest any public GitHub repository, parse Tree-Sitter AST symbols in Rust, and synthesize handovers with live reasoning.
+          </p>
+          <div className="m3-eval-actions">
+            <button
+              type="button"
+              className="m3-eval-btn live-btn"
+              onClick={() => loginAsSuperuser('admin', 'live')}
+              id="btn-eval-live-engine"
+            >
+              <span>🚀 Launch Live GitHub Studio</span>
+              <span className="arrow">→</span>
+            </button>
+          </div>
+          <div className="m3-eval-specs">
+            <small>● Daemon: Connected</small>
+            <small>● AST: Tree-Sitter Core</small>
+            <small>● Model: OmniRoute :20128</small>
+          </div>
         </div>
       </div>
 
-      {/* Divider */}
-      <div className="m3-auth-separator">
-        <span>OR SIGN IN WITH ACCOUNT</span>
-      </div>
-
-      {/* Segmented Tab Switcher */}
-      <div className="m3-segmented-control" role="tablist">
+      {/* Alternative Access Toggle */}
+      <div className="m3-alt-auth-section">
         <button
           type="button"
-          className={`m3-segment-btn ${tab === 'signin' ? 'active' : ''}`}
-          onClick={() => { setTab('signin'); setError(''); }}
-          role="tab"
-          aria-selected={tab === 'signin'}
+          className="m3-alt-toggle-btn"
+          onClick={() => setShowAltAuth(prev => !prev)}
+          aria-expanded={showAltAuth}
         >
-          Sign In
+          <span>{showAltAuth ? '▾ Hide standard login & interview options' : '▸ Alternative: Departing Teammate Interview or Custom Login'}</span>
         </button>
-        <button
-          type="button"
-          className={`m3-segment-btn ${tab === 'signup' ? 'active' : ''}`}
-          onClick={() => { setTab('signup'); setError(''); }}
-          role="tab"
-          aria-selected={tab === 'signup'}
-        >
-          Create Account
-        </button>
-      </div>
 
-      {error && <div role="alert" className="m3-auth-error">{error}</div>}
+        {showAltAuth && (
+          <div className="m3-alt-auth-content m3-slide-in">
+            <div className="m3-fast-dev-grid" style={{ marginBottom: '16px' }}>
+              <button
+                type="button"
+                className="m3-fast-access-card dev"
+                onClick={() => loginAsSuperuser('departing', 'demo')}
+              >
+                <div className="m3-access-icon" aria-hidden="true">✎</div>
+                <div className="m3-access-info">
+                  <strong>Departing Teammate</strong>
+                  <small>Open interview questions and record answers</small>
+                </div>
+                <div className="m3-access-arrow" aria-hidden="true">→</div>
+              </button>
+            </div>
 
-      {/* Credentials Form */}
-      <form onSubmit={handleSubmit} className="m3-form-stack">
-        {tab === 'signup' && (
-          <div className="m3-field">
-            <label htmlFor="auth-name">Full Name</label>
-            <input
-              id="auth-name"
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Jordan Rivera"
-              required
-            />
+            <div className="m3-segmented-control" role="tablist">
+              <button
+                type="button"
+                className={`m3-segment-btn ${tab === 'signin' ? 'active' : ''}`}
+                onClick={() => { setTab('signin'); setError(''); }}
+                role="tab"
+                aria-selected={tab === 'signin'}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                className={`m3-segment-btn ${tab === 'signup' ? 'active' : ''}`}
+                onClick={() => { setTab('signup'); setError(''); }}
+                role="tab"
+                aria-selected={tab === 'signup'}
+              >
+                Create Account
+              </button>
+            </div>
+
+            {error && <div role="alert" className="m3-auth-error">{error}</div>}
+
+            <form onSubmit={handleSubmit} className="m3-form-stack">
+              {tab === 'signup' && (
+                <div className="m3-field">
+                  <label htmlFor="auth-name">Full Name</label>
+                  <input
+                    id="auth-name"
+                    type="text"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Jordan Rivera"
+                    required
+                  />
+                </div>
+              )}
+
+              <div className="m3-field">
+                <label htmlFor="auth-email">Work Email</label>
+                <input
+                  id="auth-email"
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="name@team.internal"
+                  required
+                />
+              </div>
+
+              <div className="m3-field">
+                <label htmlFor="auth-password">Password</label>
+                <input
+                  id="auth-password"
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+
+              <div className="m3-field">
+                <label htmlFor="auth-role">Role</label>
+                <select
+                  id="auth-role"
+                  value={selectedRole}
+                  onChange={e => setSelectedRole(e.target.value as UserRole)}
+                >
+                  <option value="admin">👑 Admin / Tech Lead (Creator & Auditor)</option>
+                  <option value="developer">👤 Successor Developer (Onboarder)</option>
+                </select>
+              </div>
+
+              <button type="submit" className="m3-auth-submit-btn">
+                {tab === 'signin' ? 'Sign In to Workspace →' : 'Create Account & Enter →'}
+              </button>
+            </form>
           </div>
         )}
-
-        <div className="m3-field">
-          <label htmlFor="auth-email">Work Email</label>
-          <input
-            id="auth-email"
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="name@team.internal"
-            required
-          />
-        </div>
-
-        <div className="m3-field">
-          <label htmlFor="auth-password">Password</label>
-          <input
-            id="auth-password"
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-          />
-        </div>
-
-        <div className="m3-field">
-          <label htmlFor="auth-role">Role</label>
-          <select
-            id="auth-role"
-            value={selectedRole}
-            onChange={e => setSelectedRole(e.target.value as UserRole)}
-          >
-            <option value="admin">👑 Admin / Tech Lead (Creator & Auditor)</option>
-            <option value="developer">👤 Successor Developer (Onboarder)</option>
-          </select>
-        </div>
-
-        <button type="submit" className="m3-auth-submit-btn">
-          {tab === 'signin' ? 'Sign In to Workspace →' : 'Create Account & Enter →'}
-        </button>
-      </form>
+      </div>
 
       <div className="m3-auth-footer">
-        <span>Local Engine · No external telemetry</span>
+        <span>Local Engine · Zero external telemetry · Material 3 Expressive</span>
       </div>
     </div>
   );
 }
 
 /**
- * Full-Bleed 60/40 Split-Screen Authentication Page
+ * Full-Bleed Split-Screen Authentication Page
  */
 export default function LoginView() {
   return (
     <div className="h-screen w-screen flex overflow-hidden auth-split-container">
-      {/* Left Pane (60% - The Hero & DAG Background) */}
-      <div className="hidden lg:flex lg:w-[60%] relative flex-col justify-center items-center overflow-hidden bg-[#f3f0e8] auth-split-left">
-        {/* Abstract DAG Lineage Background */}
+      {/* Left Pane (45% - The Hero & DAG Background) */}
+      <div className="hidden lg:flex lg:w-[45%] relative flex-col justify-center items-center overflow-hidden bg-[#f3f0e8] auth-split-left">
         <DagBackground />
 
-        {/* Foreground Hero Typography */}
         <div className="auth-hero-container">
           <h1 className="auth-hero-title">
             Knowledge,
             <br />
             <span className="auth-hero-accent">carried forward.</span>
           </h1>
+          <p style={{ marginTop: '14px', fontSize: '12pt', color: '#3d5248', maxWidth: '380px', lineHeight: 1.5 }}>
+            Turning fragmented codebases and departing engineer context into verifiable, cited handovers.
+          </p>
         </div>
       </div>
 
-      {/* Right Pane (40% - The Auth Form Slot) */}
-      <div className="w-full lg:w-[40%] h-full bg-white flex flex-col items-center relative z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.03)] overflow-y-auto px-6 py-8 auth-split-right">
-        <div className="w-full max-w-md auth-form-wrapper">
-          <AuthForm />
+      {/* Right Pane (55% - The Gateways Slot) */}
+      <div className="w-full lg:w-[55%] h-full bg-white flex flex-col items-center relative z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.03)] overflow-y-auto px-6 py-8 auth-split-right">
+        <div className="w-full max-w-xl auth-form-wrapper">
+          <EvaluationGateways />
         </div>
       </div>
     </div>

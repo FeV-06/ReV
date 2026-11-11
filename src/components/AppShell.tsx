@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import DemoSpotlightTour from '@/components/demo/DemoSpotlightTour';
 
 export type ActiveTab = 'projects' | 'settings' | 'about';
 
@@ -12,7 +13,7 @@ interface AppShellProps {
 }
 
 export default function AppShell({ activeTab, onTabChange, children }: AppShellProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, evalMode, setEvalMode } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
@@ -78,8 +79,30 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
           </nav>
         )}
 
-        {/* Right Section: User & Sign Out */}
+        {/* Right Section: Evaluation Switcher & User Session */}
         <div className="m3-app-bar-right">
+          {/* Mode Switcher */}
+          <div className="m3-mode-selector" role="group" aria-label="Evaluation mode selector">
+            <button
+              type="button"
+              className={`m3-mode-pill ${evalMode === 'demo' ? 'active-demo' : ''}`}
+              onClick={() => setEvalMode('demo')}
+              title="Switch to Instant Guided Demo (Zero-Latency Showcase)"
+            >
+              <span className="m3-mode-pill-ico">⚡</span>
+              <span>Demo</span>
+            </button>
+            <button
+              type="button"
+              className={`m3-mode-pill ${evalMode === 'live' ? 'active-live' : ''}`}
+              onClick={() => setEvalMode('live')}
+              title="Switch to Live Engine (Real Public GitHub & AST Analysis)"
+            >
+              <span className="m3-mode-pill-ico">🔬</span>
+              <span>Live</span>
+            </button>
+          </div>
+
           {user ? (
             <div className="m3-session-cluster">
               <div className="m3-session-user-badge">
@@ -177,6 +200,9 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
       <main className="m3-viewport">
         {children}
       </main>
+
+      {/* Floating Demo Spotlight Tour */}
+      <DemoSpotlightTour />
 
       {/* Footer */}
       <footer className="m3-footer">

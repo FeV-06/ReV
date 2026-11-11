@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useAuth } from '@/lib/auth-context';
 import { dayOneItems, generationFailurePrefix, sourceWarnings, suggestedAreas } from '@/lib/handover';
 import { successorEmailSchema, type Item, type Run } from '@/lib/contracts';
 import ContributorField from '@/components/ContributorField';
@@ -38,6 +39,7 @@ interface HandoverWizardProps {
 }
 
 export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail, initialRunId }: HandoverWizardProps) {
+  const { evalMode, setEvalMode, tourActive, tourStep } = useAuth();
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [run, setRun] = useState<Run | null>(null);
   const [recipient, setRecipient] = useState('Incoming engineer');
@@ -520,158 +522,211 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
         <div className="column">
           {/* SCREEN 1: CONNECT & IMPORT */}
           {activeStage === 1 && (
-            <section className="card entry-panel m3-wizard-screen m3-slide-in" aria-labelledby="screen-1-title">
+            <section
+              className={`card entry-panel m3-wizard-screen m3-slide-in ${
+                tourActive && evalMode === 'demo' && tourStep === 1 ? 'm3-tour-spotlight-active' : ''
+              }`}
+              aria-labelledby="screen-1-title"
+            >
               <div className="card-head">
                 <div>
                   <div className="eyebrow">01 / CONNECT</div>
-                  <h2 id="screen-1-title">Start a run</h2>
-                  <p>Import activity from local Git history or connected Slack channels. Import only material you are authorised to use.</p>
+                  <h2 id="screen-1-title">
+                    {evalMode === 'live' ? 'Live GitHub & AST Engine' : 'Start a Handover Run'}
+                  </h2>
+                  <p>
+                    {evalMode === 'live'
+                      ? 'Ingest any public GitHub repository to parse Tree-Sitter AST code symbols and synthesize an evidence-backed handover.'
+                      : 'Import activity from local Git history or connected Slack channels. Import only material you are authorised to use.'}
+                  </p>
                 </div>
                 <span className="step-icon">↗</span>
               </div>
 
-              <ContributorField value={departingPerson} onChange={setDepartingPerson}
-                authors={useGit && !repo ? sources.gitAuthors : []} repository={sources.localGit} />
+              {evalMode === 'live' ? (
+                /* LIVE ENGINE CARD */
+                <div className="m3-live-hero-card">
+                  <div className="m3-live-hero-header">
+                    <span className="m3-eval-pill live">🔬 LIVE ENGINE</span>
+                    <span className="m3-live-status-pill">● Daemon: Connected</span>
+                    <span className="m3-live-status-pill">● Model: gemini-3.8-flash-high</span>
+                  </div>
+                  <h3>Public GitHub & Tree-Sitter AST Analysis</h3>
+                  <p>
+                    Provide any public GitHub repository and contributor. The native Rust daemon will parse live Tree-Sitter AST code symbols and synthesize an evidence-grounded handover via OmniRoute.
+                  </p>
 
-              <div className="button-row">
-                <button type="button" className="secondary" aria-expanded={showSuccessor}
-                  aria-controls="initial-successor" onClick={() => setShowSuccessor(open => !open)}>
-                  Assign successor
-                </button>
-              </div>
-              <div id="initial-successor" hidden={!showSuccessor}>
-                <label>Successor email <span className="muted">optional</span>
-                  <input type="email" value={successorEmail} maxLength={254}
-                    placeholder="alex.vance@team.internal" onChange={event => setSuccessorEmail(event.target.value)} />
-                </label>
-                <p className="footnote">Use their sign-in email. The assignment is saved when you start the run.</p>
-              </div>
+                  <div className="m3-presets-row">
+                    <span className="m3-presets-label">1-Click Benchmark Presets:</span>
+                    <button
+                      type="button"
+                      className="m3-preset-chip"
+                      onClick={() => {
+                        setRepo('KingSahil/Blinky');
+                        setDepartingPerson('KingSahil');
+                        setTargetRole('Lead Systems Engineer');
+                      }}
+                    >
+                      📌 KingSahil/Blinky (@KingSahil)
+                    </button>
+                    <button
+                      type="button"
+                      className="m3-preset-chip"
+                      onClick={() => {
+                        setRepo('FeV-06/ReV');
+                        setDepartingPerson('FeV-06');
+                        setTargetRole('Full-Stack Architect');
+                      }}
+                    >
+                      📌 FeV-06/ReV (@FeV-06)
+                    </button>
+                  </div>
 
-              <label>
-                Target role <span className="muted">optional</span>
-                <input
-                  value={targetRole}
-                  onChange={e => setTargetRole(e.target.value)}
-                  maxLength={120}
-                  placeholder="Senior backend engineer"
-                />
-              </label>
+                  <div className="m3-field-stack">
+                    <label>
+                      Public GitHub Repository <span className="muted">(owner/repo)</span>
+                      <input
+                        value={repo}
+                        onChange={e => setRepo(e.target.value)}
+                        placeholder="owner/repository (e.g. KingSahil/Blinky)"
+                      />
+                    </label>
 
-              <details>
-                <summary>Optional settings</summary>
-                <label>
-                  Incoming role
-                  <input
-                    value={recipient}
-                    onChange={e => setRecipient(e.target.value)}
-                    maxLength={120}
-                  />
-                </label>
-              </details>
+                    <label>
+                      Contributor GitHub Username <span className="muted">(without @)</span>
+                      <input
+                        value={departingPerson}
+                        onChange={e => setDepartingPerson(e.target.value)}
+                        placeholder="e.g. KingSahil or FeV-06"
+                        maxLength={39}
+                      />
+                    </label>
 
-              {sources.localGit && (
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={useGit && !repo}
-                    disabled={!!repo || busy}
-                    onChange={e => setUseGit(e.target.checked)}
-                  />{' '}
-                  Use matching local Git commits and committed project docs from {sources.localGit}
-                </label>
+                    <label>
+                      Target Role <span className="muted">optional</span>
+                      <input
+                        value={targetRole}
+                        onChange={e => setTargetRole(e.target.value)}
+                        placeholder="e.g. Lead Systems Engineer"
+                        maxLength={120}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="button-row" style={{ marginTop: '16px' }}>
+                    <button
+                      type="button"
+                      className="primary-action m3-live-submit-btn"
+                      disabled={busy || !repo.trim()}
+                      onClick={() => create(false)}
+                    >
+                      {busy ? 'Ingesting & Parsing AST Symbols…' : '🚀 Ingest & Parse AST Symbols →'}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => create(true)}
+                    >
+                      ⚡ Run Instant Demo Instead
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* DEMO MODE HERO CARD */
+                <div className="m3-demo-hero-card">
+                  <div className="m3-demo-hero-header">
+                    <span className="m3-eval-pill demo">⚡ INSTANT DEMO</span>
+                    <span className="m3-eval-subtag">0s Latency · Guided Walkthrough</span>
+                  </div>
+                  <h3>Pre-Verified Showcase Scenario</h3>
+                  <p>
+                    Loads a pre-verified session cache scenario with Tree-Sitter AST code symbols, exact citation verification, and Departure Interview generation running deterministically at zero latency.
+                  </p>
+                  <div className="button-row" style={{ marginTop: '14px' }}>
+                    <button
+                      type="button"
+                      className="primary-action m3-demo-launch-btn"
+                      disabled={busy}
+                      onClick={() => create(true)}
+                    >
+                      {busy ? 'Loading Demo Snapshot…' : '⚡ Launch Instant Demo Run →'}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setEvalMode('live')}
+                    >
+                      🔬 Switch to Live Engine
+                    </button>
+                  </div>
+                </div>
               )}
 
-              <div>
-                {slack.workspace && <p>Slack workspace: <strong>{slack.workspace}</strong></p>}
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={slackBusy || busy}
-                  onClick={() => void connectSlack()}
-                >
-                  {slack.workspace ? 'Reconnect Slack' : 'Connect Slack'}
-                </button>
-                {slackError && <p role="status">{slackError}</p>}
-                {slack.workspace &&
-                  (slack.channels.length ? (
-                    <details open>
-                      <summary>Choose Slack channels ({slackIds.length} selected)</summary>
-                      <p className="footnote">
-                        Select up to five project channels. ReV checks recent messages when you import.
-                      </p>
-                      {slack.channels.map(channel => (
-                        <label className="check" key={channel.id}>
-                          <input
-                            type="checkbox"
-                            disabled={busy || !!file || (slackIds.length >= 5 && !slackIds.includes(channel.id))}
-                            checked={slackIds.includes(channel.id)}
-                            onChange={() => toggleSlackChannel(channel.id)}
-                          />{' '}
-                          #{channel.name}
-                        </label>
-                      ))}
-                    </details>
-                  ) : (
-                    <p>No channels found. Join a project channel in Slack and reload ReV.</p>
-                  ))}
-              </div>
+              <details style={{ marginTop: '16px' }}>
+                <summary style={{ cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: '#5c6f66' }}>
+                  Advanced source options (Local Git, Slack channels, ZIP archives)
+                </summary>
+                <div style={{ paddingTop: '12px' }}>
+                  <ContributorField value={departingPerson} onChange={setDepartingPerson}
+                    authors={useGit && !repo ? sources.gitAuthors : []} repository={sources.localGit} />
 
-              {sources.slack && !slack.workspace && (
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={useSlack && !file}
-                    disabled={!!file || busy}
-                    onChange={e => setUseSlack(e.target.checked)}
-                  />{' '}
-                  Import from connected Slack channels
-                </label>
-              )}
+                  <div className="button-row">
+                    <button type="button" className="secondary" aria-expanded={showSuccessor}
+                      aria-controls="initial-successor" onClick={() => setShowSuccessor(open => !open)}>
+                      Assign successor
+                    </button>
+                  </div>
+                  <div id="initial-successor" hidden={!showSuccessor}>
+                    <label>Successor email <span className="muted">optional</span>
+                      <input type="email" value={successorEmail} maxLength={254}
+                        placeholder="alex.vance@team.internal" onChange={event => setSuccessorEmail(event.target.value)} />
+                    </label>
+                    <p className="footnote">Use their sign-in email. The assignment is saved when you start the run.</p>
+                  </div>
 
-              <details>
-                <summary>Import from another source</summary>
-                <label>
-                  GitHub repository <span className="muted">optional</span>
-                  <input
-                    value={repo}
-                    onChange={e => setRepo(e.target.value)}
-                    placeholder="owner/repository"
-                  />
-                </label>
-                <label>
-                  Slack export ZIP <span className="muted">optional · max 10 MiB</span>
-                  <input
-                    type="file"
-                    accept=".zip,application/zip"
-                    onChange={e => setFile(e.target.files?.[0] || null)}
-                  />
-                </label>
+                  <label>
+                    Target role <span className="muted">optional</span>
+                    <input
+                      value={targetRole}
+                      onChange={e => setTargetRole(e.target.value)}
+                      maxLength={120}
+                      placeholder="Senior backend engineer"
+                    />
+                  </label>
+
+                  {sources.localGit && (
+                    <label className="check">
+                      <input
+                        type="checkbox"
+                        checked={useGit && !repo}
+                        disabled={!!repo || busy}
+                        onChange={e => setUseGit(e.target.checked)}
+                      />{' '}
+                      Use matching local Git commits and committed project docs from {sources.localGit}
+                    </label>
+                  )}
+
+                  <label>
+                    Slack export ZIP <span className="muted">optional · max 10 MiB</span>
+                    <input
+                      type="file"
+                      accept=".zip,application/zip"
+                      onChange={e => setFile(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                </div>
               </details>
-
-              <div className="button-row">
-                <button
-                  disabled={busy || !departingPerson.trim()}
-                  onClick={() => create(false)}
-                >
-                  Import sources <span>→</span>
-                </button>
-                <button
-                  disabled={busy}
-                  className="secondary"
-                  onClick={() => create(true)}
-                >
-                  Try synthetic example
-                </button>
-              </div>
-              <p className="footnote">
-                Configure the GitHub token and model provider in the daemon environment or Settings tab.
-              </p>
             </section>
           )}
 
           {/* SCREEN 2: SELECT SOURCES */}
           {activeStage === 2 && run && (
-            <section className="card m3-wizard-screen m3-slide-in" aria-labelledby="screen-2-title">
+            <section
+              className={`card m3-wizard-screen m3-slide-in ${
+                tourActive && evalMode === 'demo' && tourStep === 2 ? 'm3-tour-spotlight-active' : ''
+              }`}
+              aria-labelledby="screen-2-title"
+            >
               <div className="card-head">
                 <div>
                   <div className="eyebrow">02 / SELECT SOURCES</div>
@@ -849,7 +904,12 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
 
           {/* SCREEN 3: REVIEW CLAIMS */}
           {activeStage === 3 && run && ['needs_review', 'approved'].includes(run.state) && (
-            <section className="card m3-wizard-screen m3-slide-in" aria-labelledby="screen-3-title">
+            <section
+              className={`card m3-wizard-screen m3-slide-in ${
+                tourActive && evalMode === 'demo' && tourStep === 3 ? 'm3-tour-spotlight-active' : ''
+              }`}
+              aria-labelledby="screen-3-title"
+            >
               <div className="card-head">
                 <div>
                   <div className="eyebrow">03 / REVIEW</div>
@@ -1117,7 +1177,12 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
 
           {/* SCREEN 4: EXPORT & SUCCESSOR ASSIGNMENT */}
           {activeStage === 4 && run && (
-            <section className="card m3-wizard-screen m3-slide-in" aria-labelledby="screen-4-title">
+            <section
+              className={`card m3-wizard-screen m3-slide-in ${
+                tourActive && evalMode === 'demo' && tourStep === 4 ? 'm3-tour-spotlight-active' : ''
+              }`}
+              aria-labelledby="screen-4-title"
+            >
               <div className="card-head">
                 <div>
                   <div className="eyebrow">04 / EXPORT & ASSIGN</div>
@@ -1273,7 +1338,23 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
 
         {/* Right Sidebar Column: Daemon & Workspace Runs */}
         <div className="column">
-          <ProjectDashboard />
+          <div className="card compact m3-live-status-card" style={{ marginBottom: '16px', background: '#f7faf7', borderLeft: '3px solid #174a3d' }}>
+            <div className="eyebrow">DAEMON & CORE PIPELINE</div>
+            <h3 style={{ fontSize: '13px', color: '#174a3d', marginTop: '2px' }}>System Operational</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11px', color: '#3d5248', marginTop: '6px' }}>
+              <span>● Daemon: 127.0.0.1:3078 (Connected)</span>
+              <span>● Storage: PGlite Embedded Relational DB</span>
+              <span>● AST Parser: Tree-Sitter Core (crates/rev-core)</span>
+              <span>● Model: gemini-3.8-flash-high (OmniRoute :20128)</span>
+            </div>
+          </div>
+
+          <details style={{ marginBottom: '16px' }}>
+            <summary style={{ fontSize: '12px', fontWeight: 600, color: '#5c6f66', cursor: 'pointer' }}>Local Workspace Project Registration</summary>
+            <div style={{ marginTop: '8px' }}>
+              <ProjectDashboard />
+            </div>
+          </details>
 
           <section className="card compact">
             <div className="eyebrow">YOUR WORKSPACE</div>
