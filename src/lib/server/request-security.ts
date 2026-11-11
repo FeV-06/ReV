@@ -32,7 +32,8 @@ function getOrigin(request: Request): boolean {
 
 export function assertLocalRequest(request: Request): void {
   if (!getOrigin(request)) throw new Error('Forbidden: request origin or host is not authorized');
-  if (request.headers.get('x-rev-request') !== '1') throw new Error('Forbidden: missing request header');
+  const isNav = request.method === 'GET' && (request.headers.get('sec-fetch-dest') === 'document' || request.headers.get('sec-fetch-mode') === 'navigate');
+  if (!isNav && request.headers.get('x-rev-request') !== '1') throw new Error('Forbidden: missing request header');
 }
 
 export function clientError(error: unknown): string {

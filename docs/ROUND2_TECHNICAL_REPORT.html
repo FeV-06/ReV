@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ReV — Round 2 Technical Report: The Build</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 14mm 14mm 16mm 14mm;
+      @bottom-right {
+        content: counter(page) " / " counter(pages);
+        font-family: 'DM Sans', system-ui, sans-serif;
+        font-size: 8pt;
+        color: #5c6f66;
+      }
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 9.5pt;
+      line-height: 1.45;
+      color: #17211d;
+      background-color: #ffffff;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Page Breaks */
+    .page-break {
+      page-break-after: always;
+      break-after: page;
+    }
+
+    /* Typography */
+    h1, h2, h3, h4 {
+      font-family: 'Georgia', 'DM Serif Display', serif;
+      color: #0f352b;
+      font-weight: 700;
+    }
+
+    h1 {
+      font-size: 22pt;
+      line-height: 1.15;
+      margin-bottom: 3pt;
+    }
+
+    h2 {
+      font-size: 13.5pt;
+      line-height: 1.25;
+      margin-top: 14pt;
+      margin-bottom: 6pt;
+      padding-bottom: 3pt;
+      border-bottom: 1.5pt solid #d9ebda;
+      display: flex;
+      align-items: center;
+      gap: 6pt;
+    }
+
+    h3 {
+      font-size: 10.5pt;
+      margin-top: 8pt;
+      margin-bottom: 3pt;
+      color: #174a3d;
+    }
+
+    p {
+      margin-bottom: 6pt;
+      text-align: justify;
+    }
+
+    strong {
+      color: #0f352b;
+    }
+
+    code, pre {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+      font-size: 8.5pt;
+    }
+
+    code {
+      background: #eaf1ec;
+      padding: 1pt 3pt;
+      border-radius: 3pt;
+      color: #0f352b;
+    }
+
+    /* Header & Meta Card */
+    .header-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2pt solid #174a3d;
+      padding-bottom: 10pt;
+      margin-bottom: 12pt;
+    }
+
+    .brand-title {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .badge-tag {
+      display: inline-block;
+      background: #174a3d;
+      color: #ffffff;
+      font-size: 7.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8pt;
+      padding: 2pt 6pt;
+      border-radius: 4pt;
+      margin-bottom: 4pt;
+      width: fit-content;
+    }
+
+    .meta-card {
+      background: #f5f7f2;
+      border: 1pt solid #dbe5dd;
+      border-radius: 8pt;
+      padding: 8pt 12pt;
+      font-size: 8.5pt;
+      min-width: 210pt;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      row-gap: 3pt;
+      column-gap: 8pt;
+    }
+
+    .meta-label {
+      color: #5c6f66;
+      font-weight: 600;
+    }
+
+    .meta-value {
+      color: #0f352b;
+      font-weight: 700;
+    }
+
+    .meta-value a {
+      color: #174a3d;
+      text-decoration: underline;
+    }
+
+    /* Grid & Cards */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10pt;
+      margin-bottom: 8pt;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8pt;
+      margin-bottom: 8pt;
+    }
+
+    .card {
+      background: #ffffff;
+      border: 1pt solid #dbe5dd;
+      border-radius: 8pt;
+      padding: 8pt 10pt;
+      box-shadow: 0 1pt 3pt rgba(0,0,0,0.02);
+    }
+
+    .card-highlight {
+      background: #f7faf7;
+      border-left: 3pt solid #174a3d;
+    }
+
+    .card-title {
+      font-size: 9.5pt;
+      font-weight: 700;
+      color: #174a3d;
+      margin-bottom: 3pt;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .card p {
+      font-size: 8.5pt;
+      margin-bottom: 0;
+      text-align: left;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8.5pt;
+      margin-top: 6pt;
+      margin-bottom: 10pt;
+    }
+
+    th, td {
+      border: 1pt solid #dbe5dd;
+      padding: 5pt 7pt;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #eaf1ec;
+      color: #0f352b;
+      font-weight: 700;
+      font-size: 8.5pt;
+    }
+
+    tr:nth-child(even) td {
+      background: #fcfdfc;
+    }
+
+    /* Feature List */
+    .feature-item {
+      margin-bottom: 5pt;
+      padding-left: 12pt;
+      position: relative;
+      font-size: 8.7pt;
+      text-align: left;
+    }
+
+    .feature-item::before {
+      content: "✔";
+      position: absolute;
+      left: 0;
+      color: #1b633b;
+      font-size: 8pt;
+      font-weight: bold;
+    }
+
+    /* Callout & Quotes */
+    .callout {
+      background: #e6f4ea;
+      border: 1pt solid #b6dfc4;
+      border-radius: 6pt;
+      padding: 8pt 10pt;
+      margin: 8pt 0;
+      font-size: 8.7pt;
+      color: #0f352b;
+    }
+
+    .callout-warning {
+      background: #fff7e7;
+      border: 1pt solid #f1d497;
+      color: #634300;
+    }
+
+    .pill {
+      display: inline-block;
+      font-size: 7pt;
+      font-weight: 700;
+      padding: 1pt 5pt;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.5pt;
+    }
+
+    .pill-green {
+      background: #d9ebda;
+      color: #0f352b;
+    }
+
+    .pill-gold {
+      background: #fff0c7;
+      color: #7a5200;
+    }
+
+    .pill-blue {
+      background: #e1effe;
+      color: #1e429f;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- PAGE 1: HEADER & CORE SYSTEM ARCHITECTURE -->
+  <header class="header-container">
+    <div class="brand-title">
+      <span class="badge-tag">CodersInPune 2026 · Round 2: The Build</span>
+      <h1>ReV — Handover Engine</h1>
+      <p style="font-size: 10pt; color: #5c6f66; margin-bottom: 0;">Evidence-Backed Knowledge Transfer & Developer Offboarding Platform</p>
+    </div>
+    <div class="meta-card">
+      <div class="meta-grid">
+        <span class="meta-label">Team:</span>
+        <span class="meta-value">ReV Team</span>
+        <span class="meta-label">Live Link:</span>
+        <span class="meta-value"><a href="https://rev.fev06.xyz" target="_blank">https://rev.fev06.xyz</a></span>
+        <span class="meta-label">Source Code:</span>
+        <span class="meta-value"><a href="https://github.com/FeV-06/ReV" target="_blank">github.com/FeV-06/ReV (Public)</a></span>
+        <span class="meta-label">Model Provider:</span>
+        <span class="meta-value">OmniRoute / gemini-3.8-flash-high</span>
+      </div>
+    </div>
+  </header>
+
+  <h2>1. Executive Summary & Core Mission</h2>
+  <p>
+    When an experienced engineer leaves a software team, they take weeks of undocumented architectural decisions, recovery procedures, and edge-case warnings with them. Traditional handovers fail because static markdown docs become stale within days, and free-form chats suffer from severe hallucinations.
+  </p>
+  <p>
+    <strong>ReV (Relaying to Everyone Virtually)</strong> solves this crisis by transforming fragmented commit histories, Tree-Sitter AST code symbols, and Slack discussions into an <strong>evidence-linked, human-verified developer handover</strong>. ReV enforces mathematical citation integrity: every claim must cite an exact substring from an authorized source artifact.
+  </p>
+
+  <h2>2. System Architecture: The Three-Tier Local-First Model</h2>
+  <p>
+    ReV is engineered as a hybrid local-first system that decouples native CPU-bound code analysis from client presentation and persistent team synchronization:
+  </p>
+
+  <div class="grid-3">
+    <div class="card card-highlight">
+      <div class="card-title">
+        <span>1. Headless Daemon</span>
+        <span class="pill pill-green">:3078</span>
+      </div>
+      <p>
+        Node 22+ background service bound to loopback. Owns persistent PGlite relational storage, orchestrates Git watchers, and executes native Rust core tasks.
+      </p>
+    </div>
+    <div class="card card-highlight">
+      <div class="card-title">
+        <span>2. Web Dashboard</span>
+        <span class="pill pill-green">:3077</span>
+      </div>
+      <p>
+        Next.js 16 / React 19 UI following Google’s <strong>Material 3 Expressive</strong> tokens. Features a 4-stage screen-advancing Studio and Successor Reader.
+      </p>
+    </div>
+    <div class="card card-highlight">
+      <div class="card-title">
+        <span>3. VS Code Extension</span>
+        <span class="pill pill-blue">IDE Native</span>
+      </div>
+      <p>
+        Dual-bundle extension (Node host + Browser IIFE) embedding the shared React Team Sync panel and workspace-scoped telemetry inside the developer's editor.
+      </p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top: 6pt;">
+    <div class="card-title">
+      <span>Native Rust Core Engine (crates/rev-core)</span>
+      <span class="pill pill-gold">High Performance</span>
+    </div>
+    <p style="font-size: 8.5pt;">
+      Compiled native binary that executes Tree-Sitter AST symbol parsing (TypeScript, Rust, and Python fallback), git blame ownership and churn heuristics (<code>analyze_local_risk</code>), and verifies verbatim citation quotes before generating candidates.
+    </p>
+  </div>
+
+  <h2>3. Completed Round 2 Feature Deliverables</h2>
+  <div class="grid-2" style="margin-top: 6pt;">
+    <div>
+      <div class="feature-item"><strong>4-Stage Material 3 Creation Wizard:</strong> Sequential screen-advancing studio (Workspace & Contributor ➔ Scope Confirmation ➔ Synthesis & Interview ➔ Export & Sovereignty).</div>
+      <div class="feature-item"><strong>Tree-Sitter AST Code Symbol Mapping:</strong> Extracts changed functions, classes, and types from diffs, linking AST symbols directly to Git commit authors.</div>
+      <div class="feature-item"><strong>Grounded Departure Interview Engine:</strong> Core generates standalone gap questions by cross-referencing commit history with repository documentation.</div>
+      <div class="feature-item"><strong>Interactive Successor Q&A Assistant:</strong> Answers successor questions by citing exact verbatim excerpts from codebase artifacts and interview answers.</div>
+    </div>
+    <div>
+      <div class="feature-item"><strong>Priority Day-1 Onboarding Checklist:</strong> Successor portal task tracker for verified codebase setup, credentials, and deployment runbooks with local state.</div>
+      <div class="feature-item"><strong>Local Data Sovereignty Controls:</strong> Dynamic toggle allowing teams to keep handovers strictly local in PGlite or sync to remote Supabase.</div>
+      <div class="feature-item"><strong>Multi-Source Scoping & Granular Invalidation:</strong> Real-time selection of commits and Slack messages; scope edits atomically invalidate prior approvals.</div>
+      <div class="feature-item"><strong>One-Click Cited Markdown Export:</strong> Generates publication-ready <code>HANDOVER.md</code> complete with verifiable source citations and next steps.</div>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- PAGE 2: EVOLUTION, DISCLOSURES & ROUND 3 COMMITMENTS -->
+  <h2>4. What Changed Since Round 1 (And Why)</h2>
+  <p>
+    Rather than treating Round 1 as an unchangeable specification, we evolved ReV based on realistic operational challenges encountered during early testing:
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 22%;">Pillar / Area</th>
+        <th style="width: 38%;">Round 1 Proposal</th>
+        <th style="width: 40%;">Shipped in Round 2 (The Build)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>System Architecture</strong></td>
+        <td>Single monolithic web form running purely in-browser against local files.</td>
+        <td><strong>Decoupled Three-Tier Architecture:</strong> Headless Desktop Daemon (:3078), Next.js M3 Web Studio (:3077), and native VS Code Extension.</td>
+      </tr>
+      <tr>
+        <td><strong>Database & Sync</strong></td>
+        <td>Local-only single-session storage; no sharing between team members.</td>
+        <td><strong>Hybrid PGlite + Supabase Sync:</strong> Local-first PGlite relational storage augmented with Supabase cloud sync and an explicit sovereignty toggle.</td>
+      </tr>
+      <tr>
+        <td><strong>Handover Generation</strong></td>
+        <td>Static LLM text reconstruction without active questioning or follow-ups.</td>
+        <td><strong>Departure Interviews & Cited Q&A:</strong> Proactive gap generator asking departing engineers tough architectural questions, plus successor assistant.</td>
+      </tr>
+      <tr>
+        <td><strong>User Experience</strong></td>
+        <td>Stacked single-page forms with developer persona buttons cluttering views.</td>
+        <td><strong>Material 3 Expressive System:</strong> Clean role-tailored portals (Admin Studio vs. Successor Onboarding Reader) with animated slide transitions.</td>
+      </tr>
+      <tr>
+        <td><strong>Code Intelligence</strong></td>
+        <td>Basic commit message and diff grep regex matching.</td>
+        <td><strong>Tree-Sitter AST Analysis:</strong> Multi-language AST parsing extracting exact functions, structs, and methods directly impacted by commit churn.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>5. Transparent Operational Disclosures ("What Does NOT Work Yet")</h2>
+  <div class="callout callout-warning">
+    <strong>Transparency Notice:</strong> ReV is an evidence-backed product. Below is the honest, unvarnished status of work-in-progress boundaries:
+  </div>
+
+  <ul style="margin-left: 14pt; margin-bottom: 10pt; font-size: 8.7pt;">
+    <li style="margin-bottom: 4pt;">
+      <strong>Multi-Tenant Route Authorization Gating:</strong> While the isolated Supabase RLS and SQL membership suites pass 38 unit tests, legacy bulk sync is permanently disabled (HTTP 403) and team sync network calls fail closed until per-user route authorization is completely wired across every endpoint.
+    </li>
+    <li style="margin-bottom: 4pt;">
+      <strong>Live Slack OAuth Configuration:</strong> Connecting a live Slack workspace requires pre-configured OAuth bot client credentials. For zero-config evaluation, ReV provides full synthetic ZIP archive ingestion.
+    </li>
+    <li style="margin-bottom: 4pt;">
+      <strong>Unauthenticated GitHub API Bounds:</strong> Without a configured GitHub personal access token (<code>REV_GITHUB_TOKEN</code>), public repo imports are constrained by GitHub’s 60 requests/hour IP rate limit.
+    </li>
+    <li style="margin-bottom: 4pt;">
+      <strong>Deep Reasoning Latency:</strong> Synthesizing comprehensive handovers with deep reasoning models (e.g. <code>gemini-3.8-flash-high</code>) takes 45–90 seconds over large symbol trees. The UI provides native progress indicators, but instant evaluation is accessible via the synthetic sample.
+    </li>
+  </ul>
+
+  <h2>6. Binding Commitments for Round 3 (The Finish)</h2>
+  <p>
+    We commit to delivering the following three substantial, technically rigorous improvements for Round 3:
+  </p>
+
+  <div class="grid-3">
+    <div class="card card-highlight">
+      <div class="card-title">
+        <span>Commitment 1: Laya Classifier</span>
+        <span class="pill pill-green">AI Pipeline</span>
+      </div>
+      <p>
+        <strong>Commit & AST Semantic Triage:</strong> Integrate a specialized classifier pipeline to evaluate whether an AST symbol or commit represents an intentional architectural decision versus routine cosmetic churn, pruning noise before LLM synthesis.
+      </p>
+    </div>
+    <div class="card card-highlight">
+      <div class="card-title">
+        <span>Commitment 2: Team Sync</span>
+        <span class="pill pill-green">Multi-Tenant</span>
+      </div>
+      <p>
+        <strong>Frictionless Supabase Team Sync:</strong> Complete the end-to-end authenticated team mode with verified member sessions, private-by-default owned runs, and frictionless one-click lead sharing across the web dashboard and VS Code extension.
+      </p>
+    </div>
+    <div class="card card-highlight">
+      <div class="card-title">
+        <span>Commitment 3: Risk Heatmap</span>
+        <span class="pill pill-green">Risk Engine</span>
+      </div>
+      <p>
+        <strong>Bus-Factor & Churn Heatmap:</strong> Deliver an interactive visual risk heatmap identifying repository modules with critical knowledge concentration (combining Git blame ownership, commit churn, and test coverage gaps via native Rust heuristics).
+      </p>
+    </div>
+  </div>
+
+  <div class="callout" style="margin-top: 10pt;">
+    <strong>Judges Verification Guide:</strong> Open <a href="https://rev.fev06.xyz" target="_blank"><strong>https://rev.fev06.xyz</strong></a> in any modern browser. You can click <em>"Try sample project"</em> to run through the complete 4-stage wizard, inspect AST symbol citations, and run the departure interview with zero setup, or provide any public GitHub repo to experience live model inference.
+  </div>
+
+</body>
+</html>

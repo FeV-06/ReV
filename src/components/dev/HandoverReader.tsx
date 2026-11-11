@@ -31,6 +31,23 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
     }
   }
 
+  async function handleDownload() {
+    try {
+      const resp = await fetch(`/api/runs/${run.id}/export`, { headers: { 'X-Rev-Request': '1' } });
+      if (!resp.ok) throw new Error('Download failed');
+      const text = await resp.text();
+      const blob = new Blob([text], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `handover-${(run.departingPerson || 'project').toLowerCase()}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      window.location.href = `/api/runs/${run.id}/export`;
+    }
+  }
+
   return (
     <div className="m3-reader-container m3-slide-in">
       {/* Top Breadcrumb & Action bar */}
@@ -40,13 +57,13 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
         </button>
         <div className="m3-reader-actions">
           {run.state === 'approved' && (
-            <a
-              href={`/api/runs/${run.id}/export`}
-              download={`handover-${(run.departingPerson || 'project').toLowerCase()}.md`}
+            <button
+              type="button"
+              onClick={handleDownload}
               className="m3-download-button"
             >
               📥 Download Handover (.md)
-            </a>
+            </button>
           )}
         </div>
       </div>

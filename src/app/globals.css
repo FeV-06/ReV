@@ -1877,6 +1877,12 @@ footer span { padding: 0 6px; }
   box-shadow: 0 2px 8px rgba(23, 74, 61, 0.04);
 }
 
+.m3-dev-badge-card div {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
 .m3-dev-avatar {
   font-size: 24px;
 }
