@@ -299,8 +299,8 @@
         <span class="meta-value"><a href="https://rev.fev06.xyz" target="_blank">https://rev.fev06.xyz</a></span>
         <span class="meta-label">Source Code:</span>
         <span class="meta-value"><a href="https://github.com/FeV-06/ReV" target="_blank">github.com/FeV-06/ReV (Public)</a></span>
-        <span class="meta-label">Model Provider:</span>
-        <span class="meta-value">OmniRoute / gemini-3.8-flash-high</span>
+        <span class="meta-label">AI Architecture:</span>
+        <span class="meta-value">Exact Substring Citations &amp; Grounded Reasoning</span>
       </div>
     </div>
   </header>
@@ -361,16 +361,16 @@
   <h2>3. Completed Round 2 Feature Deliverables</h2>
   <div class="grid-2" style="margin-top: 6pt;">
     <div>
-      <div class="feature-item"><strong>Dedicated Dual-Mode Interface:</strong> Zero-friction toggle between <em>⚡ Instant Demo</em> (0s latency, interactive spotlight tour) and <em>🔬 Live Engine</em> (real public GitHub repos, Tree-sitter AST, OmniRoute LLM).</div>
-      <div class="feature-item"><strong>4-Stage Material 3 Creation Wizard:</strong> Sequential screen-advancing studio (Workspace & Contributor ➔ Scope Confirmation ➔ Synthesis & Interview ➔ Export & Sovereignty).</div>
+      <div class="feature-item"><strong>Dedicated Dual-Mode Interface:</strong> Zero-friction toggle between <em>⚡ Instant Demo</em> (0s latency, interactive spotlight tour) and <em>🔬 Live Engine</em> (real public GitHub repos, Tree-sitter AST, live AI reasoning).</div>
+      <div class="feature-item"><strong>4-Stage Material 3 Creation Wizard:</strong> Sequential screen-advancing studio (Workspace &amp; Contributor ➔ Scope Confirmation ➔ Synthesis &amp; Interview ➔ Export &amp; Sovereignty).</div>
       <div class="feature-item"><strong>Tree-Sitter AST Code Symbol Mapping:</strong> Extracts changed functions, classes, and types from diffs, linking AST symbols directly to Git commit authors.</div>
       <div class="feature-item"><strong>Grounded Departure Interview Engine:</strong> Core generates standalone gap questions by cross-referencing commit history with repository documentation.</div>
-      <div class="feature-item"><strong>Interactive Successor Q&A Assistant:</strong> Answers successor questions by citing exact verbatim excerpts from codebase artifacts and interview answers.</div>
+      <div class="feature-item"><strong>Interactive Successor Q&amp;A Assistant:</strong> Answers successor questions by citing exact verbatim excerpts from codebase artifacts and interview answers.</div>
     </div>
     <div>
       <div class="feature-item"><strong>Priority Day-1 Onboarding Checklist:</strong> Successor portal task tracker for verified codebase setup, credentials, and deployment runbooks with local state.</div>
-      <div class="feature-item"><strong>Local Data Sovereignty Controls:</strong> Dynamic toggle allowing teams to keep handovers strictly local in PGlite or sync to remote Supabase.</div>
-      <div class="feature-item"><strong>Multi-Source Scoping & Granular Invalidation:</strong> Real-time selection of commits and Slack messages; scope edits atomically invalidate prior approvals.</div>
+      <div class="feature-item"><strong>Local Data Sovereignty Controls:</strong> Built on local PGlite relational storage by default for absolute data privacy, with staging controls and UI toggles for upcoming Supabase team sync.</div>
+      <div class="feature-item"><strong>Multi-Source Scoping &amp; Granular Invalidation:</strong> Real-time selection of commits and Slack messages; scope edits atomically invalidate prior approvals.</div>
       <div class="feature-item"><strong>One-Click Cited Markdown Export:</strong> Generates publication-ready <code>HANDOVER.md</code> complete with verifiable source citations and next steps.</div>
       <div class="feature-item"><strong>1-Click Benchmark Presets:</strong> Pre-configured evaluation shortcuts for real open-source repositories (<code>KingSahil/Blinky</code>, <code>FeV-06/ReV</code>).</div>
     </div>
@@ -399,14 +399,14 @@
         <td><strong>Decoupled Three-Tier Architecture:</strong> Headless Desktop Daemon (:3078), Next.js M3 Web Studio (:3077), and native VS Code Extension.</td>
       </tr>
       <tr>
-        <td><strong>Database & Sync</strong></td>
+        <td><strong>Database &amp; Sync</strong></td>
         <td>Local-only single-session storage; no sharing between team members.</td>
-        <td><strong>Hybrid PGlite + Supabase Sync:</strong> Local-first PGlite relational storage augmented with Supabase cloud sync and an explicit sovereignty toggle.</td>
+        <td><strong>PGlite Storage + Staged Supabase Sync:</strong> Full local PGlite relational engine active today; multi-tenant Supabase schemas and RLS policies are implemented and verified in isolated test suites, staged for Round 3 rollout.</td>
       </tr>
       <tr>
         <td><strong>Handover Generation</strong></td>
         <td>Static LLM text reconstruction without active questioning or follow-ups.</td>
-        <td><strong>Departure Interviews & Cited Q&A:</strong> Proactive gap generator asking departing engineers tough architectural questions, plus successor assistant.</td>
+        <td><strong>Departure Interviews &amp; Cited Q&amp;A:</strong> Proactive gap generator asking departing engineers tough architectural questions, plus successor assistant.</td>
       </tr>
       <tr>
         <td><strong>User Experience</strong></td>
@@ -428,7 +428,7 @@
 
   <ul style="margin-left: 14pt; margin-bottom: 10pt; font-size: 8.7pt;">
     <li style="margin-bottom: 4pt;">
-      <strong>Multi-Tenant Route Authorization Gating:</strong> While the isolated Supabase RLS and SQL membership suites pass 38 unit tests, legacy bulk sync is permanently disabled (HTTP 403) and team sync network calls fail closed until per-user route authorization is completely wired across every endpoint.
+      <strong>Supabase Team Sync is In-Progress (WIP):</strong> The multi-tenant architecture, PostgreSQL RLS migrations, and idempotent RPCs (<code>rev_create_team</code>, <code>rev_invite_member</code>, <code>rev_publish_document</code>) are implemented and pass 38 isolated security and unit tests. However, live multi-tenant route authorization across all Next.js API endpoints is actively under development. To protect data sovereignty and prevent unauthorized cross-session leakage, live remote network synchronization is deliberately kept fail-closed, and legacy bulk sync is disabled (HTTP 403). Full frictionless team sync is our core Round 3 commitment.
     </li>
     <li style="margin-bottom: 4pt;">
       <strong>Live Slack OAuth Configuration:</strong> Connecting a live Slack workspace requires pre-configured OAuth bot client credentials. For zero-config evaluation, ReV provides full synthetic ZIP archive ingestion.
@@ -437,7 +437,7 @@
       <strong>Unauthenticated GitHub API Bounds:</strong> Without a configured GitHub personal access token (<code>REV_GITHUB_TOKEN</code>), public repo imports are constrained by GitHub’s 60 requests/hour IP rate limit.
     </li>
     <li style="margin-bottom: 4pt;">
-      <strong>Deep Reasoning Latency:</strong> Synthesizing comprehensive handovers with deep reasoning models (e.g. <code>gemini-3.8-flash-high</code>) takes 45–90 seconds over large symbol trees. The UI provides native progress indicators, but instant evaluation is accessible via the synthetic sample.
+      <strong>Deep Reasoning Latency:</strong> Synthesizing comprehensive handovers with deep reasoning models takes 45–90 seconds over large symbol trees. The UI provides live multi-phase progress indicators with a live timer, and instant zero-latency evaluation is accessible via the synthetic showcase demo.
     </li>
   </ul>
 
