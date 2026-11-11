@@ -205,7 +205,7 @@ function EvaluationGateways() {
         <div className="m3-eval-card live-card">
           <div className="m3-eval-card-header">
             <span className="m3-eval-pill live">🔬 LIVE ENGINE</span>
-            <span className="m3-eval-subtag">gemini-3.8-flash-high</span>
+            <span className="m3-eval-subtag">Real-Time Ingestion</span>
           </div>
           <h4>Real GitHub & Native AST Engine</h4>
           <p>
@@ -225,7 +225,7 @@ function EvaluationGateways() {
           <div className="m3-eval-specs">
             <small>● Daemon: Connected</small>
             <small>● AST: Tree-Sitter Core</small>
-            <small>● Model: OmniRoute :20128</small>
+            <small>● AI Engine: Active</small>
           </div>
         </div>
       </div>

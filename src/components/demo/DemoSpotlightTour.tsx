@@ -10,7 +10,7 @@ const TOUR_STEPS = [
     subtitle: 'Strict Identity Attribution',
     description:
       'ReV binds engineering handovers to verified contributor identities without inferring or guessing commit attribution. Context and roles are treated as untrusted data, never prompt instructions.',
-    highlightLabel: 'Contributor & Scope Inputs',
+    instruction: '👉 Click "⚡ Launch Instant Demo Run →" in the main panel to start the automated walkthrough.',
   },
   {
     step: 2,
@@ -18,7 +18,7 @@ const TOUR_STEPS = [
     subtitle: 'Fine-Grained Code & Diff Evidence',
     description:
       'The native Rust core parses commit diffs into exact AST symbols (functions, structs, types). The reviewer chooses exactly which commits and discussions can be shared.',
-    highlightLabel: 'Audited Source Artifacts',
+    instruction: '👉 Check "I confirm recipient may receive all selected material" and click "Generate draft →".',
   },
   {
     step: 3,
@@ -26,15 +26,15 @@ const TOUR_STEPS = [
     subtitle: 'Exact Substrings & Proactive Gaps',
     description:
       'Every synthesized claim strictly cites an exact, non-empty substring from authorized sources. Unresolved architectural or failure recovery decisions are automatically queued into the Departure Interview.',
-    highlightLabel: 'Validated Claims & Interview Questions',
+    instruction: '👉 Review the verified claims and click "Approve current revision" to certify the handover.',
   },
   {
     step: 4,
     title: 'Stage 4: Storage Sovereignty & Successor Handoff',
     subtitle: 'Local PGlite vs. Cloud Supabase',
     description:
-      'Handovers remain local in PGlite by default for complete data sovereignty, with an optional one-click toggle for Supabase cloud sync. Ready for one-click Markdown export and successor checklist tracking.',
-    highlightLabel: 'Storage Target & Markdown Export',
+      'Handovers remain local in PGlite by default for complete data sovereignty, with an optional toggle for cloud sync. Ready for one-click Markdown export and successor checklist tracking.',
+    instruction: '👉 Click "Download Markdown" to receive the publication-ready executive handover report.',
   },
 ];
 
@@ -49,7 +49,7 @@ export default function DemoSpotlightTour() {
 
   function handleNext() {
     if (tourStep < TOUR_STEPS.length) {
-      setTourStep(prev => prev + 1);
+      setTourStep(prev => (prev as number) + 1);
     } else {
       setTourActive(false);
     }
@@ -57,7 +57,7 @@ export default function DemoSpotlightTour() {
 
   function handlePrev() {
     if (tourStep > 1) {
-      setTourStep(prev => prev - 1);
+      setTourStep(prev => (prev as number) - 1);
     }
   }
 
@@ -70,7 +70,7 @@ export default function DemoSpotlightTour() {
       <div className="m3-tour-header">
         <div className="m3-tour-pill">
           <span className="m3-tour-pulse" aria-hidden="true" />
-          <span>⚡ GUIDED DEMO · STEP {current.step} OF {TOUR_STEPS.length}</span>
+          <span>⚡ GUIDED TOUR · STAGE {current.step} OF {TOUR_STEPS.length}</span>
         </div>
         <button
           type="button"
@@ -87,6 +87,9 @@ export default function DemoSpotlightTour() {
         <h4>{current.title}</h4>
         <div className="m3-tour-subtitle">{current.subtitle}</div>
         <p>{current.description}</p>
+        <div className="m3-tour-instruction">
+          {current.instruction}
+        </div>
       </div>
 
       <div className="m3-tour-footer">
@@ -117,7 +120,7 @@ export default function DemoSpotlightTour() {
             className="m3-tour-btn-primary"
             onClick={handleNext}
           >
-            {tourStep === TOUR_STEPS.length ? 'Finish Tour ✓' : 'Next Step →'}
+            {tourStep === TOUR_STEPS.length ? 'Finish Tour ✓' : 'Next Stage →'}
           </button>
         </div>
       </div>

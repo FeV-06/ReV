@@ -362,7 +362,7 @@ async fn generate_with_instructions(
         _ => bail!("Provider must be openai or anthropic"),
     };
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(120))
+        .timeout(Duration::from_secs(300))
         .redirect(reqwest::redirect::Policy::none())
         .build()?;
     let mut request = client.post(url).json(&payload);

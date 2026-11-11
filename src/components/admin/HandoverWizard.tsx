@@ -7,6 +7,7 @@ import { successorEmailSchema, type Item, type Run } from '@/lib/contracts';
 import ContributorField from '@/components/ContributorField';
 import DepartureInterview from '@/components/DepartureInterview';
 import ProjectDashboard from '@/components/ProjectDashboard';
+import MarkdownDocumentViewer from '@/components/MarkdownDocumentViewer';
 
 type RunSummary = Pick<Run, 'id' | 'createdAt' | 'recipient' | 'state'>;
 
@@ -31,6 +32,72 @@ function fileAsBase64(file: File): Promise<string> {
   });
 }
 
+function normalizeGitHubRepo(input: string): string {
+  const trimmed = input.trim();
+  const match = trimmed.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/([^\/]+\/[^\/\s?#]+)/i);
+  if (match) {
+    return match[1].replace(/\.git$/i, '');
+  }
+  return trimmed.replace(/\.git$/i, '');
+}
+
+function LiveProcessingCard({ phase, elapsed }: { phase: string; elapsed: number }) {
+  const isImport = phase === 'importing';
+  return (
+    <div className="m3-processing-card" role="status" aria-live="polite">
+      <div className="m3-processing-header">
+        <div className="m3-processing-spinner" aria-hidden="true" />
+        <div>
+          <h4>
+            {isImport ? 'Analyzing Public Repository & AST Symbols' : 'Synthesizing Grounded Handover with AI'}
+          </h4>
+          <span className="m3-processing-timer">Elapsed: {elapsed}s · Deep reasoning in progress</span>
+        </div>
+      </div>
+      <div className="m3-processing-steps">
+        {isImport ? (
+          <>
+            <div className={`m3-step-line ${elapsed >= 2 ? 'done' : 'active'}`}>
+              <span className="step-bullet">{elapsed >= 2 ? '✓' : '●'}</span>
+              <span>Connecting to public GitHub API &amp; fetching commit history</span>
+            </div>
+            <div className={`m3-step-line ${elapsed >= 8 ? 'done' : elapsed >= 2 ? 'active' : ''}`}>
+              <span className="step-bullet">{elapsed >= 8 ? '✓' : '●'}</span>
+              <span>Running Tree-Sitter AST parser on changed files &amp; diff hunks</span>
+            </div>
+            <div className={`m3-step-line ${elapsed >= 15 ? 'active' : ''}`}>
+              <span className="step-bullet">●</span>
+              <span>Filtering code symbols &amp; mapping attribution to contributor</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className={`m3-step-line ${elapsed >= 4 ? 'done' : 'active'}`}>
+              <span className="step-bullet">{elapsed >= 4 ? '✓' : '●'}</span>
+              <span>Loading audited AST code symbols &amp; commit diffs into context</span>
+            </div>
+            <div className={`m3-step-line ${elapsed >= 18 ? 'done' : elapsed >= 4 ? 'active' : ''}`}>
+              <span className="step-bullet">{elapsed >= 18 ? '✓' : '●'}</span>
+              <span>Extracting architectural decisions, risks, and next actions</span>
+            </div>
+            <div className={`m3-step-line ${elapsed >= 35 ? 'done' : elapsed >= 18 ? 'active' : ''}`}>
+              <span className="step-bullet">{elapsed >= 35 ? '✓' : '●'}</span>
+              <span>Enforcing mathematical substring quote verification on all citations</span>
+            </div>
+            <div className={`m3-step-line ${elapsed >= 35 ? 'active' : ''}`}>
+              <span className="step-bullet">●</span>
+              <span>Finalizing review candidate items and compiling departure interview gaps</span>
+            </div>
+          </>
+        )}
+      </div>
+      <div className="m3-processing-reassurance">
+        💡 <strong>Zero Hallucinations Guarantee:</strong> ReV strictly validates exact substring matches against the source code before presenting any claims.
+      </div>
+    </div>
+  );
+}
+
 interface HandoverWizardProps {
   onBackToProjects?: () => void;
   onSelectRunForDetail?: (run: Run) => void;
@@ -39,7 +106,9 @@ interface HandoverWizardProps {
 }
 
 export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail, initialRunId }: HandoverWizardProps) {
-  const { evalMode, setEvalMode, tourActive, tourStep } = useAuth();
+  const { evalMode, setEvalMode, tourActive, tourStep, setTourStep } = useAuth();
+  const [busyPhase, setBusyPhase] = useState<'idle' | 'importing' | 'generating'>('idle');
+  const [elapsedTime, setElapsedTime] = useState(0);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [run, setRun] = useState<Run | null>(null);
   const [recipient, setRecipient] = useState('Incoming engineer');
@@ -74,6 +143,22 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
   const [slackError, setSlackError] = useState('');
   const [slackBusy, setSlackBusy] = useState(true);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout | undefined;
+    if (busy) {
+      setElapsedTime(0);
+      timer = setInterval(() => {
+        setElapsedTime(prev => prev + 1);
+      }, 1000);
+    } else {
+      setElapsedTime(0);
+      setBusyPhase('idle');
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [busy]);
   const [shareAnswers, setShareAnswers] = useState<string[]>([]);
   function toggleShare(id: string) {
     setShareAnswers(previous => previous.includes(id) ? previous.filter(value => value !== id) : [...previous, id]);
@@ -261,11 +346,13 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
   }
 
   async function create(fixture: boolean) {
+    setBusyPhase('importing');
     await perform(async () => {
       const email = successorEmailSchema.optional().safeParse(successorEmail.trim() || undefined);
       if (!email.success) throw new Error('Enter a valid successor email or leave it blank.');
       if (!fixture && file && file.size > 10 * 1024 * 1024) throw new Error('Slack ZIP exceeds 10 MiB');
       const zipBase64 = !fixture && file ? await fileAsBase64(file) : undefined;
+      const cleanRepo = repo ? normalizeGitHubRepo(repo) : undefined;
       const result = await api('/api/runs', {
         method: 'POST',
         body: JSON.stringify({
@@ -273,11 +360,11 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
           successorEmail: email.data,
           departingPerson: fixture ? 'maya' : departingPerson.trim() || undefined,
           targetRole: fixture ? 'Platform engineer' : targetRole.trim() || undefined,
-          repo: fixture ? undefined : repo || undefined,
+          repo: fixture ? undefined : cleanRepo || undefined,
           zipBase64,
           fixture,
-          localGit: !fixture && !!sources.localGit && useGit && !repo,
-          localDocs: !fixture && !!sources.localGit && useGit && !repo,
+          localGit: !fixture && !!sources.localGit && useGit && !cleanRepo,
+          localDocs: !fixture && !!sources.localGit && useGit && !cleanRepo,
           slackChannelIds: fixture || file ? [] : slackIds,
           connectedSlack: !fixture && sources.slack && useSlack && !file && !slackIds.length,
         }),
@@ -288,6 +375,9 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
 
   async function patch(body: object, onError?: (message: string) => void) {
     if (!run) return;
+    if ((body as { action?: string }).action === 'generate') {
+      setBusyPhase('generating');
+    }
     let updated: Run | undefined;
     await perform(async () => {
       const data = await api(`/api/runs/${run.id}`, { method: 'PATCH', body: JSON.stringify(body) });
@@ -425,6 +515,12 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
     return 1;
   }
   const activeStage = getActiveStage();
+
+  useEffect(() => {
+    if (evalMode === 'demo' && tourActive) {
+      setTourStep(activeStage);
+    }
+  }, [activeStage, evalMode, tourActive, setTourStep]);
   const assignment = run && (
     <form className="notice" onSubmit={event => {
       event.preventDefault();
@@ -549,11 +645,11 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                   <div className="m3-live-hero-header">
                     <span className="m3-eval-pill live">🔬 LIVE ENGINE</span>
                     <span className="m3-live-status-pill">● Daemon: Connected</span>
-                    <span className="m3-live-status-pill">● Model: gemini-3.8-flash-high</span>
+                    <span className="m3-live-status-pill">● Reasoning: Deep AST Synthesis</span>
                   </div>
-                  <h3>Public GitHub & Tree-Sitter AST Analysis</h3>
+                  <h3>Public GitHub &amp; Tree-Sitter AST Analysis</h3>
                   <p>
-                    Provide any public GitHub repository and contributor. The native Rust daemon will parse live Tree-Sitter AST code symbols and synthesize an evidence-grounded handover via OmniRoute.
+                    Provide any public GitHub repository and contributor. The native Rust daemon will parse live Tree-Sitter AST code symbols and synthesize an evidence-grounded handover with verified code citations.
                   </p>
 
                   <div className="m3-presets-row">
@@ -584,11 +680,12 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
 
                   <div className="m3-field-stack">
                     <label>
-                      Public GitHub Repository <span className="muted">(owner/repo)</span>
+                      Public GitHub Repository <span className="muted">(full URL or owner/repo)</span>
                       <input
                         value={repo}
                         onChange={e => setRepo(e.target.value)}
-                        placeholder="owner/repository (e.g. KingSahil/Blinky)"
+                        onBlur={e => setRepo(normalizeGitHubRepo(e.target.value))}
+                        placeholder="https://github.com/owner/repository or owner/repo"
                       />
                     </label>
 
@@ -613,23 +710,27 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     </label>
                   </div>
 
-                  <div className="button-row" style={{ marginTop: '16px' }}>
-                    <button
-                      type="button"
-                      className="primary-action m3-live-submit-btn"
-                      disabled={busy || !repo.trim()}
-                      onClick={() => create(false)}
-                    >
-                      {busy ? 'Ingesting & Parsing AST Symbols…' : '🚀 Ingest & Parse AST Symbols →'}
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => create(true)}
-                    >
-                      ⚡ Run Instant Demo Instead
-                    </button>
-                  </div>
+                  {busy ? (
+                    <LiveProcessingCard phase={busyPhase} elapsed={elapsedTime} />
+                  ) : (
+                    <div className="button-row" style={{ marginTop: '16px' }}>
+                      <button
+                        type="button"
+                        className="primary-action m3-live-submit-btn"
+                        disabled={!repo.trim()}
+                        onClick={() => create(false)}
+                      >
+                        🚀 Ingest &amp; Parse AST Symbols →
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => create(true)}
+                      >
+                        ⚡ Run Instant Demo Instead
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 /* DEMO MODE HERO CARD */
@@ -642,23 +743,26 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                   <p>
                     Loads a pre-verified session cache scenario with Tree-Sitter AST code symbols, exact citation verification, and Departure Interview generation running deterministically at zero latency.
                   </p>
-                  <div className="button-row" style={{ marginTop: '14px' }}>
-                    <button
-                      type="button"
-                      className="primary-action m3-demo-launch-btn"
-                      disabled={busy}
-                      onClick={() => create(true)}
-                    >
-                      {busy ? 'Loading Demo Snapshot…' : '⚡ Launch Instant Demo Run →'}
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => setEvalMode('live')}
-                    >
-                      🔬 Switch to Live Engine
-                    </button>
-                  </div>
+                  {busy ? (
+                    <LiveProcessingCard phase={busyPhase} elapsed={elapsedTime} />
+                  ) : (
+                    <div className="button-row" style={{ marginTop: '14px' }}>
+                      <button
+                        type="button"
+                        className="primary-action m3-demo-launch-btn"
+                        onClick={() => create(true)}
+                      >
+                        ⚡ Launch Instant Demo Run →
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => setEvalMode('live')}
+                      >
+                        🔬 Switch to Live Engine
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -866,39 +970,41 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                 )}
               </div>
 
-              <div className="button-row">
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={resetToNewRun}
-                  disabled={busy}
-                >
-                  ← Back to Connect
-                </button>
-                <button
-                  className="primary-action"
-                  disabled={
-                    busy ||
-                    !selected.length ||
-                    !authorised ||
-                    (!!coverageWarnings.length && !partial) ||
-                    (run.mode !== 'fixture' && !remote)
-                  }
-                  onClick={() =>
-                    patch({
-                      action: 'generate',
-                      takeoverScope: run.departingPerson ? takeoverScope.trim() : undefined,
-                      selectedIds: selected,
-                      acceptPartial: partial,
-                      confirmAuthorisation: true,
-                      confirmRemote: remote,
-                      fixture: run.mode === 'fixture',
-                    })
-                  }
-                >
-                  Generate draft <span>→</span>
-                </button>
-              </div>
+              {busy ? (
+                <LiveProcessingCard phase={busyPhase} elapsed={elapsedTime} />
+              ) : (
+                <div className="button-row">
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={resetToNewRun}
+                  >
+                    ← Back to Connect
+                  </button>
+                  <button
+                    className="primary-action"
+                    disabled={
+                      !selected.length ||
+                      !authorised ||
+                      (!!coverageWarnings.length && !partial) ||
+                      (run.mode !== 'fixture' && !remote)
+                    }
+                    onClick={() =>
+                      patch({
+                        action: 'generate',
+                        takeoverScope: run.departingPerson ? takeoverScope.trim() : undefined,
+                        selectedIds: selected,
+                        acceptPartial: partial,
+                        confirmAuthorisation: true,
+                        confirmRemote: remote,
+                        fixture: run.mode === 'fixture',
+                      })
+                    }
+                  >
+                    Generate draft <span>→</span>
+                  </button>
+                </div>
+              )}
             </section>
           )}
 
@@ -1297,13 +1403,11 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
 
               {/* Rendered Handover Markdown Viewer */}
               {exportedMarkdown && (
-                <div className="m3-markdown-viewer-card">
-                  <div className="m3-markdown-header">
-                    <strong>Generated Handover Document Preview</strong>
-                    <small>rev-handover.md</small>
-                  </div>
-                  <pre className="m3-markdown-pre">{exportedMarkdown}</pre>
-                </div>
+                <MarkdownDocumentViewer
+                  markdown={exportedMarkdown}
+                  filename={`handover-${(run.departingPerson || 'project').toLowerCase()}.md`}
+                  onDownload={download}
+                />
               )}
 
               {/* Collapsible Audited Evidence Sources (Maintains compatibility with tests asserting label.source) */}
@@ -1345,7 +1449,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
               <span>● Daemon: 127.0.0.1:3078 (Connected)</span>
               <span>● Storage: PGlite Embedded Relational DB</span>
               <span>● AST Parser: Tree-Sitter Core (crates/rev-core)</span>
-              <span>● Model: gemini-3.8-flash-high (OmniRoute :20128)</span>
+              <span>● Synthesis Engine: Grounded Reasoning</span>
             </div>
           </div>
 

@@ -44,7 +44,7 @@ async function runCore(op: object, env: NodeJS.ProcessEnv): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const child = spawn(/*turbopackIgnore: true*/ bin, [], { stdio: ['pipe', 'pipe', 'ignore'], env });
     let output = ''; let finished = false;
-    const timer = setTimeout(() => { child.kill(); finish(new Error('Core operation timed out')); }, 150_000);
+    const timer = setTimeout(() => { child.kill(); finish(new Error('Core operation timed out')); }, 330_000);
     function finish(error?: Error, value?: unknown) { if (finished) return; finished = true; clearTimeout(timer); if (error) reject(error); else resolve(value); }
     child.on('error', () => finish(new Error('Rust core unavailable. Run cargo build first.')));
     child.stdin.on('error', () => finish(new Error('Rust core closed its input unexpectedly')));

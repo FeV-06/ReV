@@ -47,16 +47,6 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
 
             <button
               type="button"
-              className={`m3-nav-pill ${activeTab === 'settings' ? 'active' : ''}`}
-              onClick={() => { onTabChange('settings'); setMobileMenuOpen(false); }}
-              aria-selected={activeTab === 'settings'}
-              role="tab"
-            >
-              Settings
-            </button>
-
-            <button
-              type="button"
               className={`m3-nav-pill ${activeTab === 'about' ? 'active' : ''}`}
               onClick={() => { onTabChange('about'); setMobileMenuOpen(false); }}
               aria-selected={activeTab === 'about'}
@@ -79,30 +69,8 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
           </nav>
         )}
 
-        {/* Right Section: Evaluation Switcher & User Session */}
+        {/* Right Section: User Session */}
         <div className="m3-app-bar-right">
-          {/* Mode Switcher */}
-          <div className="m3-mode-selector" role="group" aria-label="Evaluation mode selector">
-            <button
-              type="button"
-              className={`m3-mode-pill ${evalMode === 'demo' ? 'active-demo' : ''}`}
-              onClick={() => setEvalMode('demo')}
-              title="Switch to Instant Guided Demo (Zero-Latency Showcase)"
-            >
-              <span className="m3-mode-pill-ico">⚡</span>
-              <span>Demo</span>
-            </button>
-            <button
-              type="button"
-              className={`m3-mode-pill ${evalMode === 'live' ? 'active-live' : ''}`}
-              onClick={() => setEvalMode('live')}
-              title="Switch to Live Engine (Real Public GitHub & AST Analysis)"
-            >
-              <span className="m3-mode-pill-ico">🔬</span>
-              <span>Live</span>
-            </button>
-          </div>
-
           {user ? (
             <div className="m3-session-cluster">
               <div className="m3-session-user-badge">
@@ -154,13 +122,6 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
                   onClick={() => { onTabChange('projects'); setMobileMenuOpen(false); }}
                 >
                   📁 Projects
-                </button>
-                <button
-                  type="button"
-                  className={`m3-mobile-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
-                  onClick={() => { onTabChange('settings'); setMobileMenuOpen(false); }}
-                >
-                  ⚙️ Settings
                 </button>
                 <button
                   type="button"
