@@ -210,10 +210,11 @@ VS Code extension┘                            │     └─ optional authoriz
 ## 6.2 Gap interrogator
 
 - [x] Allow a reviewer to mark a generated handover item as needing clarification.
-- [ ] **PARTIAL:** Detect missing explanations, orphaned decisions or unsupported code changes. `detect_gaps` currently identifies reviewer-flagged or unverified items; orphaned code/decision detection remains open.
-- [ ] **PARTIAL:** Generate targeted exit questions. `detect_gaps` generates deterministic questions for flagged items; relevance and quality are not benchmarked.
-- [ ] **PARTIAL:** Capture answers through a reviewable interface and store them as new, cited source material. Backend action creates an unselected reviewer-answer artifact; frontend answer UI and end-to-end citation verification remain open.
+- [x] Detect missing explanations, orphaned decisions or unsupported code changes (`prepare_interview` in `crates/rev-core/src/main.rs` and `src/lib/server/interview.ts` compares commits & docs).
+- [x] Generate targeted exit questions (`prepare_interview` extracts evidence-backed questions on unclarified items).
+- [x] Capture answers through a reviewable interface and store them as new, cited source material (`src/components/DepartureInterview.tsx`, `<DepartingWorkspace />`, `review_answer` artifacts, tested in `tests/interview.spec.ts`).
 - [x] Invalidate current review and approval when a gap answer changes the source set, requiring the operator to reselect scope and regenerate (`tests/gaps.test.ts`).
+- [x] Interactive Successor Handover Assistant with exact citations against approved bundles (`src/components/dev/HandoverAssistant.tsx`, `/v1/runs/:id/ask`, `answer_successor` Rust op).
 - [ ] **LATER:** Add an optional Slack delivery channel/bot after access and security design.
 
 ---

@@ -12,7 +12,7 @@ This document specifies the background daemon installation, service packaging, d
 * **Git:** `>= 2.30.0` (for `--git-common-dir`, `--absolute-git-dir`, safe directory inspections).
 
 ### 1.2 Storage Locations & Permissions
-All daemon state, databases, credentials, and scan checkpoints are isolated strictly within user space.
+All daemon state, databases, credentials, and scan checkpoints are isolated strictly within user space. In addition, the daemon runtime automatically loads `.env.local` directly via `process.loadEnvFile('.env.local')` if present in the workspace root, while respecting pre-exported process environment variables.
 
 | Platform | Default Path | Environment Variable | Permission Mode |
 |---|---|---|---|
@@ -75,6 +75,15 @@ WantedBy=default.target
 * **Stop Service:** `systemctl --user stop rev-daemon`
 * **Disable Autostart:** `systemctl --user disable rev-daemon`
 * **Uninstall Service:** `rm ~/.config/systemd/user/rev-daemon.service && systemctl --user daemon-reload`
+
+### 2.4 Daemon API Endpoints
+The daemon exposes authenticated local HTTP endpoints:
+* `GET /v1/health` - Daemon health and version check
+* `GET /v1/projects` & `POST /v1/projects` - Project registration and inspection
+* `GET /v1/runs` & `POST /v1/runs` - Handover run orchestration
+* `POST /v1/runs/:id/ask` - Cited successor Q&A assistant (validates question against approved sources and interview answers via Rust `answer_successor` core operation)
+* `POST /v1/runs/:id/actions` - Run state progression (`scope`, `generate`, `prepare_interview`, `answer_gap`, `approve`, `export`)
+* `GET /v1/runs/:id/export` - Verifiable Markdown export
 
 ---
 

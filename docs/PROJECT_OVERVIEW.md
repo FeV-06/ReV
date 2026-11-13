@@ -20,16 +20,20 @@ The project is built as a hybrid **Next.js + Rust + PGlite** application:
 ```
 ┌────────────────────────────────────────────────────────┐
 │                   Next.js Frontend                     │
-│  (React 19, Tailwind/CSS Custom Properties, Playwright) │
-│  - HandoverWorkspace (single operator flow)            │
-│  - API Routes (/api/runs, /api/slack, /api/graph)      │
+│  (React 19, Tailwind/CSS Tokens, 3 Personas / Workspaces)│
+│  - Admin / Team Lead: Studio Wizard & Approval Hub     │
+│  - Departing Teammate: Departure Interview Q&A Flow    │
+│  - Successor Developer: Reader, Day-1 Tasks & Assistant│
+│  - API Routes (/api/runs, /api/slack, /api/settings)   │
 └──────────────────────────┬─────────────────────────────┘
                            │ IPC / Native Bindings / HTTP
 ┌──────────────────────────▼─────────────────────────────┐
 │                 Node.js / Server Core                  │
 │  - PGlite (Wasm-based local PostgreSQL in .rev-data/)  │
 │  - Local orchestrator & lifecycle manager              │
-│  - Git CLI execution & blame / churn analysis          │
+│  - Local Git & Document Ingestion (commits, docs)      │
+│  - Settings persistence & env bridge to rev-core       │
+│  - Interview orchestration & gap review resolution     │
 └──────────────────────────┬─────────────────────────────┘
                            │
 ┌──────────────────────────▼─────────────────────────────┐
@@ -37,6 +41,7 @@ The project is built as a hybrid **Next.js + Rust + PGlite** application:
 │  - GitHub & Slack data adapters & rate-limit handling  │
 │  - Model provider abstraction (OpenAI / Anthropic)     │
 │  - Exact quotation & citation validation engine        │
+│  - `prepare_interview` & `answer_successor` operations │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -52,15 +57,23 @@ The project is built as a hybrid **Next.js + Rust + PGlite** application:
 
 1. **Source Ingestion**:
    - **Local Git**: Reads up to 100 reachable commits from HEAD.
-   - **GitHub**: Reads commits, pull requests, review comments, and issue comments up to pagination bounds (up to 200 items).
+   - **Local Docs**: Scans workspace markdown/text documentation (`.md`, `.mdx`, `.txt`, `.rst`, architecture specs) via `importLocalDocs()`, tagging them as `git_document` artifacts for comparison against commit histories.
+   - **GitHub**: Reads commits, pull requests, review comments, and issue comments up to pagination bounds (up to 200 items), with contributor-filtered commit fetches.
    - **Slack**: Connects via OAuth PKCE or imported zip files (reads recent messages from up to 5 joined channels).
 2. **Scope Selection & Recipient Guardrails**:
    - Sources are strictly opt-in. Text excluded by the reviewer is **never** sent to LLM providers or included in graph scope.
    - Any server-side scope or source modification immediately marks existing drafts/approvals invalid.
-3. **Generation**:
+3. **Generation & Verification**:
    - Can use offline synthetic fixtures (zero-cost, offline development) or live OpenAI/Anthropic-compatible endpoints.
    - Strictly enforces quote matching: all claims generated must cite direct verbatim substrings from authorized source artifacts.
-4. **Graph & Gap Detection (Experimental / Post-MVP)**:
+4. **Departure Interview Subsystem**:
+   - Lead triggers `prepare_interview` via `rev-core` to synthesize evidence-backed questions on unclarified code or gaps.
+   - Departing teammates access their focused workspace (`<DepartingWorkspace />`) to answer flagged questions.
+   - Submissions are logged as `review_answer` artifacts, presented for review in Step 3, and merged into the approved bundle upon signoff.
+5. **Successor Handover Assistant**:
+   - Onboarding engineers ask natural language queries against approved runs (`/v1/runs/:id/ask` or `/api/runs/[id]`).
+   - Powered by `answer_successor` in `rev-core`, enforcing exact citations from approved sources and auto-logging unanswered questions as open gaps for team review.
+6. **Graph & Gap Detection (Experimental / Post-MVP)**:
    - Stores review events in an append-only `graph_events` table.
    - Proposes contradiction/divergence candidates (requiring 2+ corroborating sources) and identifies unverified gaps to present targeted questions.
 
