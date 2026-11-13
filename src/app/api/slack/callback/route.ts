@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { finishSlackOAuth, slackCookie, slackOrigin } from '@/lib/server/slack';
+import { finishSlackOAuth, resolveSlackOrigin, slackCookie } from '@/lib/server/slack';
 
 export async function GET(request: NextRequest) {
-  if (request.headers.get('host') !== 'localhost:3077') return new Response('Invalid Slack callback host.', { status: 403 });
-  const target = new URL('/', slackOrigin);
+  const origin = resolveSlackOrigin(request);
+  const target = new URL('/', origin);
   try {
     const query = request.nextUrl.searchParams;
-    await finishSlackOAuth(query.get('code') ?? '', query.get('state') ?? '', request.cookies.get(slackCookie)?.value ?? '');
+    await finishSlackOAuth(
+      query.get('code') ?? '',
+      query.get('state') ?? '',
+      request.cookies.get(slackCookie)?.value ?? '',
+      origin
+    );
     target.searchParams.set('slack', 'connected');
   } catch {
     target.searchParams.set('slack', 'error');

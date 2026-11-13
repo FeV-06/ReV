@@ -4,11 +4,34 @@ import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import { readJsonLimited } from './body';
 
-export const slackOrigin = 'http://localhost:3077';
-export const slackCallback = `${slackOrigin}/api/slack/callback`;
+export const defaultSlackOrigin = 'http://localhost:3077';
 export const slackCookie = 'rev_slack_oauth';
 export const slackChannelId = z.string().regex(/^[CG][A-Z0-9]{1,39}$/);
 const scopes = 'channels:read,channels:history,groups:read,groups:history';
+
+export function resolveSlackOrigin(request?: Request): string {
+  const publicHost = process.env.REV_PUBLIC_HOST?.split(',')[0]?.trim();
+  if (publicHost) {
+    return publicHost.startsWith('http://') || publicHost.startsWith('https://')
+      ? publicHost
+      : `https://${publicHost}`;
+  }
+  if (request) {
+    const host = request.headers.get('x-forwarded-host') || request.headers.get('host');
+    const proto = request.headers.get('x-forwarded-proto') || (host?.includes('localhost') || host?.includes('127.0.0.1') ? 'http' : 'https');
+    if (host) return `${proto}://${host}`;
+  }
+  return defaultSlackOrigin;
+}
+
+export function getSlackCallback(origin?: string): string {
+  const base = origin || resolveSlackOrigin();
+  return `${base.replace(/\/+$/, '')}/api/slack/callback`;
+}
+
+// Deprecated static constant kept for backwards compatibility
+export const slackOrigin = defaultSlackOrigin;
+export const slackCallback = `${defaultSlackOrigin}/api/slack/callback`;
 
 const connectionSchema = z.object({
   token: z.string().min(1),
@@ -63,28 +86,33 @@ export async function slackApi(method: string, options: RequestInit) {
   return data;
 }
 
-export function beginSlackOAuth() {
+export function beginSlackOAuth(originOrRequest?: string | Request) {
   const clientId = process.env.REV_SLACK_CLIENT_ID;
   if (!clientId) throw new Error('Add REV_SLACK_CLIENT_ID to .env.local to enable Slack sign-in.');
+  const resolvedOrigin = typeof originOrRequest === 'string'
+    ? originOrRequest
+    : resolveSlackOrigin(originOrRequest);
+  const callback = getSlackCallback(resolvedOrigin);
   const state = randomBytes(32).toString('base64url');
   const verifier = randomBytes(32).toString('base64url');
   const url = new URL('https://slack.com/oauth/v2/authorize');
   url.search = new URLSearchParams({
-    client_id: clientId, scope: '', user_scope: scopes, redirect_uri: slackCallback, state,
+    client_id: clientId, scope: '', user_scope: scopes, redirect_uri: callback, state,
     code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256',
   }).toString();
-  return { url: url.toString(), cookie: `${state}.${verifier}` };
+  return { url: url.toString(), cookie: `${state}.${verifier}`, origin: resolvedOrigin };
 }
 
-export async function finishSlackOAuth(code: string, state: string, cookie: string) {
+export async function finishSlackOAuth(code: string, state: string, cookie: string, originOrRequest?: string | Request) {
   const [expected, verifier] = cookie.split('.');
   const clientId = process.env.REV_SLACK_CLIENT_ID;
   if (!clientId || !code || !state || state !== expected || !verifier) throw new Error('Slack sign-in expired. Try again.');
+  const callback = getSlackCallback(typeof originOrRequest === 'string' ? originOrRequest : resolveSlackOrigin(originOrRequest));
   const result = z.object({
     team: z.object({ id: z.string(), name: z.string() }),
     authed_user: tokenSchema,
   }).parse(await slackApi('oauth.v2.access', { method: 'POST', body: new URLSearchParams({
-    client_id: clientId, code, code_verifier: verifier, redirect_uri: slackCallback,
+    client_id: clientId, code, code_verifier: verifier, redirect_uri: callback,
   }) }));
   await save(withToken({ workspace: result.team.name, workspaceId: result.team.id }, result.authed_user));
 }

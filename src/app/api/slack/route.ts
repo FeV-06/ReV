@@ -18,8 +18,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     assertLocalRequest(request);
-    if (request.headers.get('host') !== 'localhost:3077') throw new Error('Open ReV at http://localhost:3077 to connect Slack.');
-    const { url, cookie } = beginSlackOAuth();
+    const { url, cookie } = beginSlackOAuth(request);
     const response = NextResponse.json({ url });
     response.cookies.set(slackCookie, cookie, { httpOnly: true, sameSite: 'lax', path: '/api/slack/callback', maxAge: 600 });
     return response;
