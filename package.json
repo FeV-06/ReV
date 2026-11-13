@@ -17,6 +17,8 @@
     "daemon:build": "node scripts/build-daemon.mjs",
     "daemon:start": "node dist/daemon/entry.js",
     "daemon:autostart": "node scripts/daemon-autostart.mjs",
+    "mcp:build": "node scripts/build-mcp.mjs",
+    "mcp:start": "node dist/mcp/index.js",
     "vscode:build": "node editors/vscode/esbuild.js",
     "test": "cargo build --workspace && pnpm daemon:build && pnpm vscode:build && vitest run",
     "test:rust": "cargo test --workspace",
@@ -24,6 +26,7 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "0.5.15",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "next": "16.4.5",
     "pg": "8.23.1",
     "react": "19.3.1",
