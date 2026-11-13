@@ -165,7 +165,23 @@ const slackHistory = z.object({
   ok: z.literal(true),
   has_more: z.boolean().optional(),
   response_metadata: z.object({ next_cursor: z.string().optional() }).optional(),
-  messages: z.array(z.object({ ts: z.string().regex(/^\d{1,12}\.\d+$/), text: z.string().optional(), user: z.string().optional() })),
+  messages: z.array(z.object({
+    ts: z.string().regex(/^\d{1,12}\.\d+$/),
+    text: z.string().optional(),
+    user: z.string().optional(),
+    reply_count: z.number().optional(),
+    thread_ts: z.string().optional(),
+  })),
+});
+
+const slackReplies = z.object({
+  ok: z.literal(true),
+  messages: z.array(z.object({
+    ts: z.string().regex(/^\d{1,12}\.\d+$/),
+    text: z.string().optional(),
+    user: z.string().optional(),
+    thread_ts: z.string().optional(),
+  })),
 });
 
 export async function importSlackChannels(selected: string[] = []) {
@@ -196,12 +212,48 @@ export async function importSlackChannels(selected: string[] = []) {
       }
       const history = slackHistory.parse(await readJsonLimited(response, 1_000_000));
       if (history.has_more || history.response_metadata?.next_cursor) warnings.push(`Slack channel ${channel}: only the first page was imported.`);
-      for (const { ts, user, text } of history.messages) {
+      for (const msg of history.messages) {
+        const { ts, user, text, reply_count } = msg;
         const externalId = connection ? `${connection.workspaceId}:${channel}:${ts}` : `${channel}:${ts}`;
-        if (!text?.trim() || seen.has(externalId)) continue;
-        seen.add(externalId);
-        artifacts.push({ id: randomUUID(), kind: 'slack_message', externalId, text,
-          author: user ?? null, timestamp: new Date(Number(ts) * 1000).toISOString(), url: null, sourceRef: `Slack ${channel} at ${ts}` });
+        if (text?.trim() && !seen.has(externalId)) {
+          seen.add(externalId);
+          artifacts.push({ id: randomUUID(), kind: 'slack_message', externalId, text,
+            author: user ?? null, timestamp: new Date(Number(ts) * 1000).toISOString(), url: null, sourceRef: `Slack ${channel} at ${ts}` });
+        }
+
+        // Phase 2: Ingest thread replies if discussion exists
+        if (reply_count && reply_count > 0) {
+          try {
+            const repliesQuery = new URLSearchParams({ channel, ts, limit: '20' });
+            const replyRes = await fetch(`https://slack.com/api/conversations.replies?${repliesQuery}`, {
+              headers: { Authorization: `Bearer ${token}` },
+              cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(5000),
+            });
+            if (replyRes.ok) {
+              const repliesData = slackReplies.parse(await readJsonLimited(replyRes, 1_000_000));
+              for (const reply of repliesData.messages) {
+                // Skip the parent message since it is already added above
+                if (reply.ts === ts) continue;
+                const replyExtId = connection ? `${connection.workspaceId}:${channel}:${reply.ts}` : `${channel}:${reply.ts}`;
+                if (reply.text?.trim() && !seen.has(replyExtId)) {
+                  seen.add(replyExtId);
+                  artifacts.push({
+                    id: randomUUID(),
+                    kind: 'slack_message',
+                    externalId: replyExtId,
+                    text: reply.text,
+                    author: reply.user ?? null,
+                    timestamp: new Date(Number(reply.ts) * 1000).toISOString(),
+                    url: null,
+                    sourceRef: `Slack ${channel} thread ${ts} reply at ${reply.ts}`,
+                  });
+                }
+              }
+            }
+          } catch {
+            warnings.push(`Slack channel ${channel} thread ${ts}: could not fetch replies.`);
+          }
+        }
       }
     } catch {
       warnings.push(`Slack channel ${channel}: could not read history. Check bot access and try again.`);

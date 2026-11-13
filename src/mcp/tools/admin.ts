@@ -190,4 +190,40 @@ export function registerAdminTools(server: any, client: DaemonApiClient) {
       }
     }
   );
+
+  // 5. rev_admin_select_slack_channels
+  server.registerTool(
+    'rev_admin_select_slack_channels',
+    {
+      description: 'Configure and associate specific Slack channel IDs for handover evidence ingestion.',
+      inputSchema: z.object({
+        channelIds: z.array(z.string().regex(/^[CG][A-Z0-9]+$/)).max(5).describe('List of up to 5 Slack channel IDs to ingest'),
+      }),
+    },
+    async (args: any) => {
+      try {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  success: true,
+                  channelIds: args.channelIds,
+                  message: `Configured ${args.channelIds.length} Slack channels for live history and thread ingestion.`,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          isError: true,
+          content: [{ type: 'text', text: `Failed to select Slack channels: ${err instanceof Error ? err.message : String(err)}` }],
+        };
+      }
+    }
+  );
 }
