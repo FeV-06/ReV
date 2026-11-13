@@ -6,6 +6,7 @@ import { dayOneItems, generationFailurePrefix, sourceWarnings, suggestedAreas } 
 import { successorEmailSchema, type Item, type Run } from '@/lib/contracts';
 import ContributorField from '@/components/ContributorField';
 import DepartureInterview from '@/components/DepartureInterview';
+import BusFactorHeatmap from '@/components/admin/BusFactorHeatmap';
 import ProjectDashboard from '@/components/ProjectDashboard';
 import MarkdownDocumentViewer from '@/components/MarkdownDocumentViewer';
 
@@ -1300,6 +1301,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
 
               {assignment}
               <DepartureInterview key={run.id} run={run} busy={busy} patch={patch} shareIds={shareAnswers} toggleShare={toggleShare} />
+              <BusFactorHeatmap runId={run.id} departingName={run.departingPerson || run.githubUsername} />
 
               {pendingShareIds.length > 0 && <button type="button" className="primary-action" disabled={busy}
                 onClick={() => patch({ action: 'approve', confirmAuthorisation: true, interviewAnswerIds: pendingShareIds })}>
