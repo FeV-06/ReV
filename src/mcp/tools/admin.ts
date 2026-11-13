@@ -226,4 +226,39 @@ export function registerAdminTools(server: any, client: DaemonApiClient) {
       }
     }
   );
+
+  // 6. rev_admin_get_bus_factor_risk
+  server.registerTool(
+    'rev_admin_get_bus_factor_risk',
+    {
+      description: 'Run native git blame and 90-day churn analysis to calculate module fragility and bus-factor risk scores for the departing engineer.',
+      inputSchema: z.object({
+        runId: z.string().describe('Handover run ID'),
+        maxFiles: z.number().int().min(1).max(500).optional().describe('Maximum tracked repository files to inspect (default 100)'),
+      }),
+    },
+    async (args: any) => {
+      try {
+        const res = await client.request(`/v1/runs/${args.runId}/risk`, {
+          method: 'POST',
+          body: JSON.stringify({
+            maxFiles: args.maxFiles || 100,
+          }),
+        });
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(res, null, 2),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          isError: true,
+          content: [{ type: 'text', text: `Failed to analyze bus-factor risk: ${err instanceof Error ? err.message : String(err)}` }],
+        };
+      }
+    }
+  );
 }
