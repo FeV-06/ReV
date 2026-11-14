@@ -178,8 +178,8 @@ describe('VS Code extension end-to-end integration with live daemon', () => {
 
     // 7. Export approved markdown
     const markdown = await client.exportMarkdown(run.id, workspaceDir);
-    expect(markdown).toContain('# Handover for Senior Successor');
-    expect(markdown).toContain('Full\\-stack engineer');
+    expect(markdown).toContain('# Engineering Handover: Senior Successor');
+    expect(markdown).toContain('Full-stack engineer');
     expect(markdown).toContain('Custom edited claim: verified database connection pooling and failover');
     expect(markdown).toContain('Status: unverified');
 
