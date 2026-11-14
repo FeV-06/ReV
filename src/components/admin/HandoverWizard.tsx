@@ -1092,9 +1092,9 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
               {items.map((item, index) => (
                 <div className="review-item" key={item.id} data-tour-detail={index === 0 ? "claims" : undefined}>
                   <div className="review-meta">
-                    <strong>{item.category.replaceAll('_', ' ')}</strong>
+                    <strong>{(item.category || 'unknown').replaceAll('_', ' ')}</strong>
                     <span className={`status-pill ${item.verification === 'validated_reference' ? 'valid' : 'uncertain'}`}>
-                      {item.verification.replaceAll('_', ' ')}
+                      {(item.verification || 'unverified').replaceAll('_', ' ')}
                     </span>
                   </div>
                   <label>
@@ -1104,8 +1104,8 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                       onChange={e => updateItem(item.id, { text: e.target.value })}
                     />
                   </label>
-                  {item.citations.map((c, i) => {
-                    const src = run.artifacts.find(s => s.id === c.sourceId);
+                  {(item.citations || []).map((c, i) => {
+                    const src = (run.artifacts || []).find(s => s.id === c.sourceId);
                     return (
                       <div className="citation" key={i}>
                         <small>↳ {src?.sourceRef || 'Missing source'}</small>

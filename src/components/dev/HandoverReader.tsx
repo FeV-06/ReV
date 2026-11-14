@@ -26,13 +26,13 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
   }, [activeEvidence]);
 
   // Extract checklist tasks from items
-  const checklistTasks = run.items
+  const checklistTasks = (run.items || [])
     .filter(i => !i.excluded && (i.category === 'next_action' || i.category === 'risk' || i.category === 'open_work'))
     .slice(0, 5)
     .map(i => ({
       id: i.id,
       text: i.text,
-      category: i.category.replaceAll('_', ' ').toUpperCase(),
+      category: (i.category || 'unknown').replaceAll('_', ' ').toUpperCase(),
     }));
 
   function openEvidenceForSourceId(sourceId: string) {
@@ -161,19 +161,19 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
                   .map(item => (
                     <div key={item.id} className="m3-reader-claim-card">
                       <div className="m3-claim-header">
-                        <span className="m3-claim-category">{item.category.replaceAll('_', ' ')}</span>
+                        <span className="m3-claim-category">{(item.category || 'unknown').replaceAll('_', ' ')}</span>
                         <span className={`status-pill ${item.verification === 'validated_reference' ? 'valid' : 'uncertain'}`}>
-                          {item.verification.replaceAll('_', ' ')}
+                          {(item.verification || 'unverified').replaceAll('_', ' ')}
                         </span>
                       </div>
 
-                      <p className="m3-claim-text">{item.text}</p>
+                      <p className="m3-claim-text">{item.text || 'No description provided'}</p>
 
-                      {item.citations.length > 0 && (
+                      {(item.citations || []).length > 0 && (
                         <div className="m3-claim-citations">
                           <span className="m3-citation-label">Evidence:</span>
-                          {item.citations.map((cite, idx) => {
-                            const src = run.artifacts.find(a => a.id === cite.sourceId);
+                          {(item.citations || []).map((cite, idx) => {
+                            const src = (run.artifacts || []).find(a => a.id === cite.sourceId);
                             return (
                               <button
                                 key={idx}
