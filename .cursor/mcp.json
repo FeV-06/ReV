@@ -4,10 +4,7 @@
       "command": "node",
       "args": [
         "dist/mcp/index.js"
-      ],
-      "env": {
-        "REV_DATA_DIR": "%USERPROFILE%/.rev-data"
-      }
+      ]
     }
   }
 }

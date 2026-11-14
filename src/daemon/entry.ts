@@ -232,11 +232,11 @@ async function route(req:IncomingMessage,res:ServerResponse):Promise<void> {
       return;
       */
     }
-    const match=/^\/v1\/runs\/([0-9a-fA-F-]+)(?:\/(graph|export|refresh|ask|visibility|risk))?$/.exec(url.pathname);
+    const match=/^\/v1\/runs\/([0-9a-fA-F-]+)(?:\/(graph|export|refresh|ask|visibility|risk|actions))?$/.exec(url.pathname);
     if(!match){json(res,404,{error:'Not found'});return;}
     const id=uuid(match[1]);const action=match[2];
     if(!action&&req.method==='GET'){json(res,200,{run:await readRun(id,authority)});return;}
-    if(!action&&req.method==='PATCH'){json(res,200,{run:await updateAction(id,await body(req,15_000_000),authority)});return;}
+    if((!action&&req.method==='PATCH')||(action==='actions'&&(req.method==='POST'||req.method==='PATCH'))){json(res,200,{run:await updateAction(id,await body(req,15_000_000),authority)});return;}
     if(!action&&req.method==='DELETE'){await readRun(id,authority);await deleteRun(id,authority);json(res,200,{ok:true});return;}
     if(action==='ask'&&req.method==='POST'){json(res,200,await askHandover(id,await body(req,8_000),authority));return;}
     if(action==='risk'&&req.method==='POST'){
