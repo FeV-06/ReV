@@ -1,5 +1,6 @@
 'use client';
 
+import { UserRound } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import type { Run } from '@/lib/contracts';
 import { useAuth } from '@/lib/auth-context';
@@ -93,7 +94,7 @@ export default function DevDashboard() {
           </p>
         </div>
         <div className="m3-dev-badge-card">
-          <span className="m3-dev-avatar">👤</span>
+          <span className="m3-dev-avatar"><UserRound size={16} aria-hidden="true" /></span>
           <div>
             <strong>{user?.name}</strong>
             <small>Successor / Onboarding Engineer</small>

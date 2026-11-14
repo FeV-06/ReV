@@ -1,5 +1,6 @@
 'use client';
 
+import { BookOpen, Check, Download, Files, Link, X } from 'lucide-react';
 import React, { useState } from 'react';
 import type { Run, Artifact } from '@/lib/contracts';
 import DayOneChecklist from '@/components/dev/DayOneChecklist';
@@ -64,7 +65,7 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
               onClick={handleDownload}
               className="m3-download-button"
             >
-              📥 Download Handover (.md)
+              <Download size={16} aria-hidden="true" /> Download Handover (.md)
             </button>
           )}
         </div>
@@ -132,7 +133,7 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
                   role="tab"
                   aria-selected={readingMode === 'document'}
                 >
-                  📖 Document Reader
+                  <BookOpen size={16} aria-hidden="true" /> Document Reader
                 </button>
                 <button
                   type="button"
@@ -141,7 +142,7 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
                   role="tab"
                   aria-selected={readingMode === 'cards'}
                 >
-                  📑 Evidence Cards
+                  <Files size={16} aria-hidden="true" /> Evidence Cards
                 </button>
               </div>
             </div>
@@ -182,7 +183,7 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
                                 onClick={() => openEvidenceForSourceId(cite.sourceId)}
                                 title="Click to view verbatim supporting evidence"
                               >
-                                <span className="m3-cite-icon">🔗</span>
+                                <span className="m3-cite-icon"><Link size={16} aria-hidden="true" /></span>
                                 <span className="m3-cite-ref">{src?.sourceRef || 'Source'}</span>
                               </button>
                             );
@@ -234,7 +235,7 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
                 onClick={() => setActiveEvidence(null)}
                 aria-label="Close evidence drawer"
               >
-                ✕
+                <X size={16} aria-hidden="true" />
               </button>
             </div>
 
@@ -283,7 +284,7 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
               </div>
 
               <div className="notice" style={{ marginTop: '16px' }}>
-                ✓ Substring verified against source archive at import time.
+                <Check size={16} aria-hidden="true" /> Substring verified against source archive at import time.
               </div>
             </div>
           </div>

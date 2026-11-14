@@ -163,7 +163,7 @@ export function renderAppHtml(state: WebviewState): string {
         html += '    <div class="item-card">';
         html += '      <div class="item-header">';
         html += `        <span class="item-cat">${escapeHtml(item.category)}</span>`;
-        html += `        <span style="font-size:10px; opacity:0.7;">${item.verified ? '✓ Verified' : '⚠ Edited'}</span>`;
+        html += `        <span style="font-size:10px; opacity:0.7;">${item.verified ? 'Verified' : 'Edited'}</span>`;
         html += '      </div>';
         html += `      <div class="item-body">${escapeHtml(item.text)}</div>`;
         if (item.citations && item.citations.length > 0) {

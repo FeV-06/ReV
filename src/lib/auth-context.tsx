@@ -9,7 +9,6 @@ export interface UserProfile {
   name: string;
   role: UserRole;
   title: string;
-  avatar: string;
   email: string;
 }
 
@@ -18,15 +17,13 @@ const SUPERUSER_PROFILES: Record<UserRole, UserProfile> = {
     name: 'Jordan Rivera',
     role: 'admin',
     title: 'Superuser / Tech Lead',
-    avatar: '👑',
     email: 'jordan.rivera@team.internal',
   },
-  departing: { name: 'Departing teammate', role: 'departing', title: 'Departure interview', avatar: '✎', email: '' },
+  departing: { name: 'Departing teammate', role: 'departing', title: 'Departure interview', email: '' },
   developer: {
     name: 'Alex Vance',
     role: 'developer',
     title: 'Successor / Onboarding Dev',
-    avatar: '👤',
     email: 'alex.vance@team.internal',
   },
 };
@@ -38,8 +35,6 @@ interface AuthContextType {
   setEvalMode: (mode: EvalMode) => void;
   tourActive: boolean;
   setTourActive: (active: boolean) => void;
-  tourStep: number;
-  setTourStep: (step: number | ((prev: number) => number)) => void;
   loginAsSuperuser: (role: UserRole, mode?: EvalMode) => void;
   loginWithCredentials: (name: string, email: string, role: UserRole) => void;
   logout: () => void;
@@ -51,7 +46,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [evalMode, setEvalModeState] = useState<EvalMode>('demo');
   const [tourActive, setTourActive] = useState<boolean>(true);
-  const [tourStep, setTourStep] = useState<number>(1);
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
@@ -105,7 +99,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   function setEvalMode(mode: EvalMode) {
     setEvalModeState(mode);
     setTourActive(mode === 'demo');
-    if (mode === 'demo') setTourStep(1);
     try {
       localStorage.setItem('rev_eval_mode', mode);
     } catch {}
@@ -117,7 +110,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (mode) {
       setEvalModeState(mode);
       setTourActive(mode === 'demo');
-      if (mode === 'demo') setTourStep(1);
       try {
         localStorage.setItem('rev_eval_mode', mode);
       } catch {}
@@ -132,7 +124,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       name: name || (targetRole === 'admin' ? 'Jordan Rivera' : 'Alex Vance'),
       role: targetRole,
       title: targetRole === 'admin' ? 'Tech Lead / Admin' : 'Successor Developer',
-      avatar: targetRole === 'admin' ? '👑' : '👤',
       email,
     };
     setUser(profile);
@@ -162,8 +153,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setEvalMode,
         tourActive,
         setTourActive,
-        tourStep,
-        setTourStep,
         loginAsSuperuser,
         loginWithCredentials,
         logout,

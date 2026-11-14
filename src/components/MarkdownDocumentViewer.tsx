@@ -1,5 +1,6 @@
 'use client';
 
+import { Check, Copy, Download, FileText } from 'lucide-react';
 import React, { useState } from 'react';
 
 interface MarkdownDocumentViewerProps {
@@ -28,7 +29,7 @@ export default function MarkdownDocumentViewer({
       {/* Viewer Header / Toolbar */}
       <div className="m3-doc-viewer-toolbar">
         <div className="m3-doc-viewer-meta">
-          <span className="m3-doc-icon">📄</span>
+          <span className="m3-doc-icon"><FileText size={16} aria-hidden="true" /></span>
           <strong>{filename}</strong>
           <span className="m3-doc-badge">Verified Document</span>
         </div>
@@ -57,7 +58,7 @@ export default function MarkdownDocumentViewer({
             onClick={handleCopy}
             title="Copy entire markdown to clipboard"
           >
-            {copied ? '✓ Copied' : '📋 Copy'}
+            {copied ? <><Check size={16} aria-hidden="true" /> Copied</> : <><Copy size={16} aria-hidden="true" /> Copy</>}
           </button>
 
           {onDownload && (
@@ -67,7 +68,7 @@ export default function MarkdownDocumentViewer({
               onClick={onDownload}
               title="Download markdown file"
             >
-              📥 Download
+              <Download size={16} aria-hidden="true" /> Download
             </button>
           )}
         </div>

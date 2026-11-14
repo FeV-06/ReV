@@ -1,3 +1,5 @@
+import path from 'node:path';
+import type { Run } from '@/lib/contracts';
 import { z } from 'zod';
 import { callCore } from './core';
 
@@ -38,4 +40,44 @@ export async function analyzeRepositoryRisk(options: {
   });
 
   return riskAnalysisSchema.parse(raw);
+}
+
+const riskRequestSchema = z.object({
+  emails: z.array(z.string().email().or(z.string().min(1))).optional(),
+  repoPath: z.string().optional(),
+  maxFiles: z.number().int().min(1).max(500).optional(),
+});
+
+export async function analyzeRunRisk(run: Run, input: unknown) {
+  const parsed = riskRequestSchema.parse(input ?? {});
+  const localCommits = run.artifacts.filter(artifact => artifact.kind === 'git_commit' && artifact.url === null);
+  if (run.mode === 'fixture' || (!run.projectRoot && !parsed.repoPath && !localCommits.length)) {
+    throw new Error('Bus-factor analysis requires a run imported from a local Git checkout. Create a live run using local Git history.');
+  }
+
+  const identities = [run.departingPerson, run.githubUsername].flatMap(value => value ? [value.trim().toLowerCase()] : []);
+  const emails = new Set(parsed.emails?.length ? parsed.emails : identities.filter(value => /^[^\s<>@]+@[^\s<>@]+$/.test(value)));
+  if (!parsed.emails?.length) {
+    for (const artifact of localCommits) {
+      const match = /^(.*?)\s*<([^<>]+)>$/.exec(artifact.author ?? '');
+      if (!match) continue;
+      const [, name, email] = match;
+      if ([name, email, artifact.author, artifact.githubLogin].some(value => value && identities.includes(value.trim().toLowerCase()))) {
+        emails.add(email);
+      }
+    }
+  }
+  if (!emails.size) {
+    throw new Error('No Git author email matched the departing contributor. Set the contributor to their Git author name or email.');
+  }
+
+  const repoPath = parsed.repoPath || run.projectRoot || process.cwd();
+
+  const analysis = await analyzeRepositoryRisk({
+    repoPath: path.resolve(repoPath),
+    emails: [...emails],
+    maxFiles: parsed.maxFiles || 100,
+  });
+
+  return { runId: run.id, analysis };
 }

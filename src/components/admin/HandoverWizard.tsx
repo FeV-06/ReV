@@ -1,5 +1,7 @@
 'use client';
 
+import DemoSpotlightTour, { type DemoTourTarget } from '@/components/demo/DemoSpotlightTour';
+import { Check, Circle, Lightbulb, Microscope, Pin, Rocket, Zap } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { dayOneItems, generationFailurePrefix, sourceWarnings, suggestedAreas } from '@/lib/handover';
@@ -59,11 +61,11 @@ function LiveProcessingCard({ phase, elapsed }: { phase: string; elapsed: number
         {isImport ? (
           <>
             <div className={`m3-step-line ${elapsed >= 2 ? 'done' : 'active'}`}>
-              <span className="step-bullet">{elapsed >= 2 ? '✓' : '●'}</span>
+              <span className="step-bullet">{elapsed >= 2 ? <Check size={14} aria-hidden="true" /> : <Circle size={10} fill="currentColor" aria-hidden="true" />}</span>
               <span>Connecting to public GitHub API &amp; fetching commit history</span>
             </div>
             <div className={`m3-step-line ${elapsed >= 8 ? 'done' : elapsed >= 2 ? 'active' : ''}`}>
-              <span className="step-bullet">{elapsed >= 8 ? '✓' : '●'}</span>
+              <span className="step-bullet">{elapsed >= 8 ? <Check size={14} aria-hidden="true" /> : <Circle size={10} fill="currentColor" aria-hidden="true" />}</span>
               <span>Running Tree-Sitter AST parser on changed files &amp; diff hunks</span>
             </div>
             <div className={`m3-step-line ${elapsed >= 15 ? 'active' : ''}`}>
@@ -74,15 +76,15 @@ function LiveProcessingCard({ phase, elapsed }: { phase: string; elapsed: number
         ) : (
           <>
             <div className={`m3-step-line ${elapsed >= 4 ? 'done' : 'active'}`}>
-              <span className="step-bullet">{elapsed >= 4 ? '✓' : '●'}</span>
+              <span className="step-bullet">{elapsed >= 4 ? <Check size={14} aria-hidden="true" /> : <Circle size={10} fill="currentColor" aria-hidden="true" />}</span>
               <span>Loading audited AST code symbols &amp; commit diffs into context</span>
             </div>
             <div className={`m3-step-line ${elapsed >= 18 ? 'done' : elapsed >= 4 ? 'active' : ''}`}>
-              <span className="step-bullet">{elapsed >= 18 ? '✓' : '●'}</span>
+              <span className="step-bullet">{elapsed >= 18 ? <Check size={14} aria-hidden="true" /> : <Circle size={10} fill="currentColor" aria-hidden="true" />}</span>
               <span>Extracting architectural decisions, risks, and next actions</span>
             </div>
             <div className={`m3-step-line ${elapsed >= 35 ? 'done' : elapsed >= 18 ? 'active' : ''}`}>
-              <span className="step-bullet">{elapsed >= 35 ? '✓' : '●'}</span>
+              <span className="step-bullet">{elapsed >= 35 ? <Check size={14} aria-hidden="true" /> : <Circle size={10} fill="currentColor" aria-hidden="true" />}</span>
               <span>Enforcing mathematical substring quote verification on all citations</span>
             </div>
             <div className={`m3-step-line ${elapsed >= 35 ? 'active' : ''}`}>
@@ -93,7 +95,7 @@ function LiveProcessingCard({ phase, elapsed }: { phase: string; elapsed: number
         )}
       </div>
       <div className="m3-processing-reassurance">
-        💡 <strong>Zero Hallucinations Guarantee:</strong> ReV strictly validates exact substring matches against the source code before presenting any claims.
+        <Lightbulb size={16} aria-hidden="true" /> <strong>Zero Hallucinations Guarantee:</strong> ReV strictly validates exact substring matches against the source code before presenting any claims.
       </div>
     </div>
   );
@@ -107,7 +109,7 @@ interface HandoverWizardProps {
 }
 
 export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail, initialRunId }: HandoverWizardProps) {
-  const { evalMode, setEvalMode, tourActive, tourStep, setTourStep } = useAuth();
+  const { evalMode, setEvalMode, tourActive } = useAuth();
   const [busyPhase, setBusyPhase] = useState<'idle' | 'importing' | 'generating'>('idle');
   const [elapsedTime, setElapsedTime] = useState(0);
   const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -281,8 +283,11 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
   }, []);
 
   async function connectSlack() {
-    if (window.location.hostname !== 'localhost') {
-      window.location.assign('http://localhost:3077/?slack=connect');
+    if (window.location.hostname === '127.0.0.1' && window.location.port === '3077') {
+      const localUrl = new URL(window.location.href);
+      localUrl.hostname = 'localhost';
+      localUrl.searchParams.set('slack', 'connect');
+      window.location.assign(localUrl);
       return;
     }
     setSlackBusy(true);
@@ -517,11 +522,14 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
   }
   const activeStage = getActiveStage();
 
-  useEffect(() => {
-    if (evalMode === 'demo' && tourActive) {
-      setTourStep(activeStage);
-    }
-  }, [activeStage, evalMode, tourActive, setTourStep]);
+  const hasPendingEdits = Boolean(run && JSON.stringify(items) !== JSON.stringify(run.items));
+  let tourTarget: DemoTourTarget | null = null;
+  if (evalMode === 'demo' && tourActive && !busy) {
+    if (activeStage === 1) tourTarget = 'launch';
+    if (activeStage === 2) tourTarget = selected.length === 0 ? 'sources' : authorised ? 'generate' : 'authorise';
+    if (activeStage === 3) tourTarget = hasPendingEdits ? 'save-review' : authorised ? 'approve' : 'review-access';
+    if (activeStage === 4) tourTarget = 'download';
+  }
   const assignment = run && (
     <form className="notice" onSubmit={event => {
       event.preventDefault();
@@ -550,7 +558,9 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
   }
 
   return (
-    <div className="m3-wizard-layout">
+    <div className="m3-guided-workspace">
+      <DemoSpotlightTour target={tourTarget} />
+      <div className="m3-wizard-layout">
       {/* Studio Header & Stepper */}
       <section className="hero">
         <div>
@@ -585,21 +595,21 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
           style={{ cursor: run ? 'pointer' : 'default' }}
           title={run ? 'Click to start a fresh import' : undefined}
         >
-          <span className="stage-step-num">{activeStage > 1 ? '✓' : '1'}</span>
+          <span className="stage-step-num">{activeStage > 1 ? <Check size={14} aria-hidden="true" /> : '1'}</span>
           <span>Import</span>
         </li>
         <li
           className={`stage-step ${activeStage > 2 ? 'completed' : ''}`}
           aria-current={activeStage === 2 ? 'step' : undefined}
         >
-          <span className="stage-step-num">{activeStage > 2 ? '✓' : '2'}</span>
+          <span className="stage-step-num">{activeStage > 2 ? <Check size={14} aria-hidden="true" /> : '2'}</span>
           <span>Select sources</span>
         </li>
         <li
           className={`stage-step ${activeStage > 3 ? 'completed' : ''}`}
           aria-current={activeStage === 3 ? 'step' : undefined}
         >
-          <span className="stage-step-num">{activeStage > 3 ? '✓' : '3'}</span>
+          <span className="stage-step-num">{activeStage > 3 ? <Check size={14} aria-hidden="true" /> : '3'}</span>
           <span>Review</span>
         </li>
         <li
@@ -620,9 +630,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
           {/* SCREEN 1: CONNECT & IMPORT */}
           {activeStage === 1 && (
             <section
-              className={`card entry-panel m3-wizard-screen m3-slide-in ${
-                tourActive && evalMode === 'demo' && tourStep === 1 ? 'm3-tour-spotlight-active' : ''
-              }`}
+              className="card entry-panel m3-wizard-screen m3-slide-in"
               aria-labelledby="screen-1-title"
             >
               <div className="card-head">
@@ -644,7 +652,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                 /* LIVE ENGINE CARD */
                 <div className="m3-live-hero-card">
                   <div className="m3-live-hero-header">
-                    <span className="m3-eval-pill live">🔬 LIVE ENGINE</span>
+                    <span className="m3-eval-pill live"><Microscope size={16} aria-hidden="true" /> LIVE ENGINE</span>
                     <span className="m3-live-status-pill">● Daemon: Connected</span>
                     <span className="m3-live-status-pill">● Reasoning: Deep AST Synthesis</span>
                   </div>
@@ -664,7 +672,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                         setTargetRole('Lead Systems Engineer');
                       }}
                     >
-                      📌 KingSahil/Blinky (@KingSahil)
+                      <Pin size={16} aria-hidden="true" /> KingSahil/Blinky (@KingSahil)
                     </button>
                     <button
                       type="button"
@@ -675,7 +683,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                         setTargetRole('Full-Stack Architect');
                       }}
                     >
-                      📌 FeV-06/ReV (@FeV-06)
+                      <Pin size={16} aria-hidden="true" /> FeV-06/ReV (@FeV-06)
                     </button>
                   </div>
 
@@ -711,33 +719,12 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     </label>
                   </div>
 
-                  {busy ? (
-                    <LiveProcessingCard phase={busyPhase} elapsed={elapsedTime} />
-                  ) : (
-                    <div className="button-row" style={{ marginTop: '16px' }}>
-                      <button
-                        type="button"
-                        className="primary-action m3-live-submit-btn"
-                        disabled={!repo.trim()}
-                        onClick={() => create(false)}
-                      >
-                        🚀 Ingest &amp; Parse AST Symbols →
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => create(true)}
-                      >
-                        ⚡ Run Instant Demo Instead
-                      </button>
-                    </div>
-                  )}
                 </div>
               ) : (
                 /* DEMO MODE HERO CARD */
                 <div className="m3-demo-hero-card">
                   <div className="m3-demo-hero-header">
-                    <span className="m3-eval-pill demo">⚡ INSTANT DEMO</span>
+                    <span className="m3-eval-pill demo"><Zap size={16} aria-hidden="true" /> INSTANT DEMO</span>
                     <span className="m3-eval-subtag">0s Latency · Guided Walkthrough</span>
                   </div>
                   <h3>Pre-Verified Showcase Scenario</h3>
@@ -751,21 +738,52 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                       <button
                         type="button"
                         className="primary-action m3-demo-launch-btn"
+                        data-demo-spotlight={tourTarget === 'launch' ? tourTarget : undefined}
                         onClick={() => create(true)}
                       >
-                        ⚡ Launch Instant Demo Run →
+                        <Zap size={16} aria-hidden="true" /> Launch Instant Demo Run →
                       </button>
                       <button
                         type="button"
                         className="secondary"
                         onClick={() => setEvalMode('live')}
                       >
-                        🔬 Switch to Live Engine
+                        <Microscope size={16} aria-hidden="true" /> Switch to Live Engine
                       </button>
                     </div>
                   )}
                 </div>
               )}
+
+              <div className="auth-guardrails">
+                {slack.workspace && <p>Slack workspace: <strong>{slack.workspace}</strong></p>}
+                <button type="button" className="secondary" disabled={slackBusy || busy} onClick={() => void connectSlack()}>
+                  {slack.workspace ? 'Reconnect Slack' : 'Connect Slack'}
+                </button>
+                {slackError && <p role="status">{slackError}</p>}
+                {slack.workspace && (slack.channels.length ? (
+                  <details open>
+                    <summary>Choose Slack channels ({slackIds.length} selected)</summary>
+                    <p className="footnote">Select up to five project channels. ReV checks recent messages when you import.</p>
+                    {slack.channels.map(channel => (
+                      <label className="check" key={channel.id}>
+                        <input type="checkbox"
+                          disabled={busy || !!file || (slackIds.length >= 5 && !slackIds.includes(channel.id))}
+                          checked={slackIds.includes(channel.id)}
+                          onChange={() => toggleSlackChannel(channel.id)}
+                        /> #{channel.name}
+                      </label>
+                    ))}
+                  </details>
+                ) : <p>No channels found. Join a project channel in Slack and reload ReV.</p>)}
+                {sources.slack && !slack.workspace && (
+                  <label className="check">
+                    <input type="checkbox" checked={useSlack && !file} disabled={!!file || busy}
+                      onChange={event => setUseSlack(event.target.checked)}
+                    /> Import from configured Slack channels
+                  </label>
+                )}
+              </div>
 
               <details style={{ marginTop: '16px' }}>
                 <summary style={{ cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: '#5c6f66' }}>
@@ -821,15 +839,36 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                   </label>
                 </div>
               </details>
+              {evalMode === 'live' && (
+                busy ? (
+                  <LiveProcessingCard phase={busyPhase} elapsed={elapsedTime} />
+                ) : (
+                  <div className="button-row" style={{ marginTop: '16px' }}>
+                    <button
+                      type="button"
+                      className="primary-action m3-live-submit-btn"
+                      disabled={!repo.trim() && !slackIds.length && !useSlack && !file}
+                      onClick={() => create(false)}
+                    >
+                      <Rocket size={16} aria-hidden="true" /> Ingest &amp; Parse AST Symbols →
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => create(true)}
+                    >
+                      <Zap size={16} aria-hidden="true" /> Run Instant Demo Instead
+                    </button>
+                  </div>
+                )
+              )}
             </section>
           )}
 
           {/* SCREEN 2: SELECT SOURCES */}
           {activeStage === 2 && run && (
             <section
-              className={`card m3-wizard-screen m3-slide-in ${
-                tourActive && evalMode === 'demo' && tourStep === 2 ? 'm3-tour-spotlight-active' : ''
-              }`}
+              className="card m3-wizard-screen m3-slide-in"
               aria-labelledby="screen-2-title"
             >
               <div className="card-head">
@@ -924,9 +963,10 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
               )}
 
               <div className="source-list">
-                {run.artifacts.map(a => (
+                {run.artifacts.map((a, index) => (
                   <label
                     className={`source ${selected.includes(a.id) ? 'selected' : ''}`}
+                    data-demo-spotlight={tourTarget === 'sources' && index === 0 ? tourTarget : undefined}
                     key={a.id}
                   >
                     <input
@@ -951,7 +991,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
               </div>
 
               <div className="auth-guardrails">
-                <label className="check">
+                <label className="check" data-demo-spotlight={tourTarget === 'authorise' ? tourTarget : undefined}>
                   <input
                     type="checkbox"
                     checked={authorised}
@@ -984,6 +1024,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                   </button>
                   <button
                     className="primary-action"
+                    data-demo-spotlight={tourTarget === 'generate' ? tourTarget : undefined}
                     disabled={
                       !selected.length ||
                       !authorised ||
@@ -1012,9 +1053,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
           {/* SCREEN 3: REVIEW CLAIMS */}
           {activeStage === 3 && run && ['needs_review', 'approved'].includes(run.state) && (
             <section
-              className={`card m3-wizard-screen m3-slide-in ${
-                tourActive && evalMode === 'demo' && tourStep === 3 ? 'm3-tour-spotlight-active' : ''
-              }`}
+              className="card m3-wizard-screen m3-slide-in"
               aria-labelledby="screen-3-title"
             >
               <div className="card-head">
@@ -1230,7 +1269,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
               </details>
 
               <div className="auth-guardrails">
-                <label className="check">
+                <label className="check" data-demo-spotlight={tourTarget === 'review-access' ? tourTarget : undefined}>
                   <input
                     type="checkbox"
                     checked={authorised}
@@ -1241,7 +1280,6 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
               </div>
 
               {(() => {
-                const hasPendingEdits = JSON.stringify(items) !== JSON.stringify(run.items);
                 const canApprove =
                   !hasPendingEdits &&
                   run.state === 'needs_review' &&
@@ -1261,6 +1299,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     </button>
                     <button
                       className={hasPendingEdits ? 'primary-action' : 'secondary'}
+                      data-demo-spotlight={tourTarget === 'save-review' ? tourTarget : undefined}
                       disabled={busy}
                       onClick={() => patch({ action: 'save', items })}
                     >
@@ -1268,6 +1307,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     </button>
                     <button
                       className={canApprove ? 'primary-action' : 'secondary'}
+                      data-demo-spotlight={tourTarget === 'approve' ? tourTarget : undefined}
                       disabled={busy || !canApprove}
                       onClick={() => patch({ action: 'approve', confirmAuthorisation: true, interviewAnswerIds: pendingShareIds })}
                     >
@@ -1285,9 +1325,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
           {/* SCREEN 4: EXPORT & SUCCESSOR ASSIGNMENT */}
           {activeStage === 4 && run && (
             <section
-              className={`card m3-wizard-screen m3-slide-in ${
-                tourActive && evalMode === 'demo' && tourStep === 4 ? 'm3-tour-spotlight-active' : ''
-              }`}
+              className="card m3-wizard-screen m3-slide-in"
               aria-labelledby="screen-4-title"
             >
               <div className="card-head">
@@ -1374,11 +1412,12 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     onClick={publishToDevPortal}
                     disabled={syncingCloud}
                   >
-                    {syncingCloud ? 'Syncing & Publishing...' : '🚀 Publish to Successor Portal'}
+                    {syncingCloud ? 'Syncing & Publishing...' : 'Publish to Successor Portal'}
                   </button>
                   <button
                     type="button"
                     className="secondary"
+                    data-demo-spotlight={tourTarget === 'download' ? tourTarget : undefined}
                     onClick={download}
                     disabled={busy}
                   >
@@ -1521,6 +1560,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
             </section>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

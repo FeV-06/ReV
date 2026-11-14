@@ -1,5 +1,6 @@
 'use client';
 
+import { Crown, Microscope, Pencil, Rocket, UserRound, Zap } from 'lucide-react';
 import React, { useState } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 
@@ -172,7 +173,7 @@ function EvaluationGateways() {
         {/* Gateway 1: Demo Mode */}
         <div className="m3-eval-card demo-card">
           <div className="m3-eval-card-header">
-            <span className="m3-eval-pill demo">⚡ INSTANT DEMO</span>
+            <span className="m3-eval-pill demo"><Zap size={16} aria-hidden="true" /> INSTANT DEMO</span>
             <span className="m3-eval-subtag">0s Latency · Guided Walkthrough</span>
           </div>
           <h4>Instant Guided Showcase</h4>
@@ -186,7 +187,7 @@ function EvaluationGateways() {
               onClick={() => loginAsSuperuser('admin', 'demo')}
               id="btn-eval-demo-admin"
             >
-              <span>👑 Launch Admin Studio Demo</span>
+              <span><Crown size={16} aria-hidden="true" /> Launch Admin Studio Demo</span>
               <span className="arrow">→</span>
             </button>
             <button
@@ -195,7 +196,7 @@ function EvaluationGateways() {
               onClick={() => loginAsSuperuser('developer', 'demo')}
               id="btn-eval-demo-dev"
             >
-              <span>👤 Launch Successor Reader Demo</span>
+              <span><UserRound size={16} aria-hidden="true" /> Launch Successor Reader Demo</span>
               <span className="arrow">→</span>
             </button>
           </div>
@@ -204,7 +205,7 @@ function EvaluationGateways() {
         {/* Gateway 2: Live Engine */}
         <div className="m3-eval-card live-card">
           <div className="m3-eval-card-header">
-            <span className="m3-eval-pill live">🔬 LIVE ENGINE</span>
+            <span className="m3-eval-pill live"><Microscope size={16} aria-hidden="true" /> LIVE ENGINE</span>
             <span className="m3-eval-subtag">Real-Time Ingestion</span>
           </div>
           <h4>Real GitHub & Native AST Engine</h4>
@@ -218,7 +219,7 @@ function EvaluationGateways() {
               onClick={() => loginAsSuperuser('admin', 'live')}
               id="btn-eval-live-engine"
             >
-              <span>🚀 Launch Live GitHub Studio</span>
+              <span><Rocket size={16} aria-hidden="true" /> Launch Live GitHub Studio</span>
               <span className="arrow">→</span>
             </button>
           </div>
@@ -249,7 +250,7 @@ function EvaluationGateways() {
                 className="m3-fast-access-card dev"
                 onClick={() => loginAsSuperuser('departing', 'demo')}
               >
-                <div className="m3-access-icon" aria-hidden="true">✎</div>
+                <div className="m3-access-icon" aria-hidden="true"><Pencil size={16} aria-hidden="true" /></div>
                 <div className="m3-access-info">
                   <strong>Departing Teammate</strong>
                   <small>Open interview questions and record answers</small>
@@ -327,8 +328,8 @@ function EvaluationGateways() {
                   value={selectedRole}
                   onChange={e => setSelectedRole(e.target.value as UserRole)}
                 >
-                  <option value="admin">👑 Admin / Tech Lead (Creator & Auditor)</option>
-                  <option value="developer">👤 Successor Developer (Onboarder)</option>
+                  <option value="admin">Admin / Tech Lead (Creator & Auditor)</option>
+                  <option value="developer">Successor Developer (Onboarder)</option>
                 </select>
               </div>
 

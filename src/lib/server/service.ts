@@ -92,7 +92,7 @@ export function exportMarkdown(run: Run): string {
     run.takeoverScope ? `| **Takeover scope** | ${safeText(run.takeoverScope)} |` : '',
     `| **Created** | ${safeText(formattedDate)} |`,
     `| **Mode** | ${run.mode === 'fixture' ? 'synthetic fixture (not model inference)' : 'model-generated, human-reviewed'} |`,
-    `| **Verification** | ✅ Human Lead Approved · Validated Reference Evidence |`,
+    `| **Verification** | Human Lead Approved · Validated Reference Evidence |`,
     '',
     '## Coverage and limitations',
     '',

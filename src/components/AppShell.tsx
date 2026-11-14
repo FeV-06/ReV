@@ -1,8 +1,8 @@
 'use client';
 
+import { Crown, Folder, Info, Menu, Pencil, UserRound } from 'lucide-react';
 import React, { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import DemoSpotlightTour from '@/components/demo/DemoSpotlightTour';
 
 export type ActiveTab = 'projects' | 'settings' | 'about';
 
@@ -74,7 +74,7 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
           {user ? (
             <div className="m3-session-cluster">
               <div className="m3-session-user-badge">
-                <span className="m3-session-avatar">{user.avatar}</span>
+                <span className="m3-session-avatar">{user.role === 'admin' ? <Crown size={16} aria-hidden="true" /> : user.role === 'departing' ? <Pencil size={16} aria-hidden="true" /> : <UserRound size={16} aria-hidden="true" />}</span>
                 <span className="m3-session-name">{user.name}</span>
                 <span className="m3-session-role-tag">{user.role === 'admin' ? 'ADMIN' : user.role === 'departing' ? 'DEPARTING' : 'DEV'}</span>
               </div>
@@ -105,7 +105,7 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label="Toggle navigation menu"
           >
-            ☰
+            <Menu size={16} aria-hidden="true" />
           </button>
         </div>
       </header>
@@ -121,14 +121,14 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
                   className={`m3-mobile-nav-item ${activeTab === 'projects' ? 'active' : ''}`}
                   onClick={() => { onTabChange('projects'); setMobileMenuOpen(false); }}
                 >
-                  📁 Projects
+                  <Folder size={16} aria-hidden="true" /> Projects
                 </button>
                 <button
                   type="button"
                   className={`m3-mobile-nav-item ${activeTab === 'about' ? 'active' : ''}`}
                   onClick={() => { onTabChange('about'); setMobileMenuOpen(false); }}
                 >
-                  ℹ️ About
+                  <Info size={16} aria-hidden="true" /> About
                 </button>
               </div>
               <div className="m3-mobile-session-footer">
@@ -150,7 +150,7 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
                 className={`m3-mobile-nav-item ${activeTab === 'about' ? 'active' : ''}`}
                 onClick={() => { onTabChange('about'); setMobileMenuOpen(false); }}
               >
-                ℹ️ About ReV
+                <Info size={16} aria-hidden="true" /> About ReV
               </button>
             </div>
           )}
@@ -161,9 +161,6 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
       <main className="m3-viewport">
         {children}
       </main>
-
-      {/* Floating Demo Spotlight Tour */}
-      <DemoSpotlightTour />
 
       {/* Footer */}
       <footer className="m3-footer">

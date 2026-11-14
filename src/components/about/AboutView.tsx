@@ -1,5 +1,6 @@
 'use client';
 
+import { Check } from 'lucide-react';
 import React from 'react';
 
 export default function AboutView() {
@@ -132,16 +133,16 @@ export default function AboutView() {
               Your source code and internal conversations never leave your control without explicit consent.
             </p>
             <div className="trust-line">
-              <span>✓</span> Zero remote telemetry
+              <span><Check size={16} aria-hidden="true" /></span> Zero remote telemetry
             </div>
             <div className="trust-line">
-              <span>✓</span> Local-first credential storage
+              <span><Check size={16} aria-hidden="true" /></span> Local-first credential storage
             </div>
             <div className="trust-line">
-              <span>✓</span> Offline LLM support via Ollama
+              <span><Check size={16} aria-hidden="true" /></span> Offline LLM support via Ollama
             </div>
             <div className="trust-line">
-              <span>✓</span> Strict Cross-Origin Request blocking
+              <span><Check size={16} aria-hidden="true" /></span> Strict Cross-Origin Request blocking
             </div>
           </section>
 

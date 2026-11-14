@@ -10,6 +10,7 @@ import { askHandover, newRun, updateAction, readRun, readGraph, exportMarkdown, 
 import { closeDatabase, database, listRunsForAuthority, type RunAuthority } from '@/lib/server/store';
 import { getProject, listProjects, registerProject, removeProject, setProjectPaused } from '@/lib/server/projects';
 import { listProjectSnapshots, readLatestSnapshot, scanProject } from '@/lib/server/capture';
+import { analyzeRunRisk } from '@/lib/server/risk';
 import { connectedSources } from '@/lib/server/sources';
 import { teamAction } from '@/lib/server/team-sync';
 import { TeamAuthService } from '@/lib/server/team-auth-service';
@@ -231,13 +232,18 @@ async function route(req:IncomingMessage,res:ServerResponse):Promise<void> {
       return;
       */
     }
-    const match=/^\/v1\/runs\/([0-9a-fA-F-]+)(?:\/(graph|export|refresh|ask|visibility))?$/.exec(url.pathname);
+    const match=/^\/v1\/runs\/([0-9a-fA-F-]+)(?:\/(graph|export|refresh|ask|visibility|risk))?$/.exec(url.pathname);
     if(!match){json(res,404,{error:'Not found'});return;}
     const id=uuid(match[1]);const action=match[2];
     if(!action&&req.method==='GET'){json(res,200,{run:await readRun(id,authority)});return;}
     if(!action&&req.method==='PATCH'){json(res,200,{run:await updateAction(id,await body(req,15_000_000),authority)});return;}
     if(!action&&req.method==='DELETE'){await readRun(id,authority);await deleteRun(id,authority);json(res,200,{ok:true});return;}
     if(action==='ask'&&req.method==='POST'){json(res,200,await askHandover(id,await body(req,8_000),authority));return;}
+    if(action==='risk'&&req.method==='POST'){
+      if(authority){json(res,403,{error:'Repository risk analysis is available in local mode only'});return;}
+      const run=await readRun(id);
+      json(res,200,await analyzeRunRisk(run,await body(req,64_000)));return;
+    }
     if(action==='graph'&&req.method==='GET'){json(res,200,{graph:await readGraph(id,authority)});return;}
     if(action==='refresh'&&req.method==='POST'){
       if(authority){json(res,403,{error:'Team refresh is not available until source access controls are complete'});return;}

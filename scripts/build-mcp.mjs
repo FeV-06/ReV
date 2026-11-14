@@ -9,9 +9,6 @@ async function build() {
     target: 'node22',
     format: 'esm',
     outfile: 'dist/mcp/index.js',
-    banner: {
-      js: '#!/usr/bin/env node\n',
-    },
     packages: 'external',
   });
 

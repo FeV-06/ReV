@@ -1,4 +1,5 @@
 'use client';
+import { Check } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { dayOneItems, generationFailurePrefix, sourceWarnings, suggestedAreas } from '@/lib/handover';
 import type { Item, Run } from '@/lib/contracts';
@@ -133,15 +134,15 @@ export default function HandoverWorkspace() {
 
         <ol className="stage-stepper" aria-label="Handover progress">
           <li className={`stage-step ${activeStage > 1 ? 'completed' : ''}`} aria-current={activeStage === 1 ? 'step' : undefined}>
-            <span className="stage-step-num">{activeStage > 1 ? '✓' : '1'}</span>
+            <span className="stage-step-num">{activeStage > 1 ? <Check size={14} aria-hidden="true" /> : '1'}</span>
             <span>Import</span>
           </li>
           <li className={`stage-step ${activeStage > 2 ? 'completed' : ''}`} aria-current={activeStage === 2 ? 'step' : undefined}>
-            <span className="stage-step-num">{activeStage > 2 ? '✓' : '2'}</span>
+            <span className="stage-step-num">{activeStage > 2 ? <Check size={14} aria-hidden="true" /> : '2'}</span>
             <span>Select sources</span>
           </li>
           <li className={`stage-step ${activeStage > 3 ? 'completed' : ''}`} aria-current={activeStage === 3 ? 'step' : undefined}>
-            <span className="stage-step-num">{activeStage > 3 ? '✓' : '3'}</span>
+            <span className="stage-step-num">{activeStage > 3 ? <Check size={14} aria-hidden="true" /> : '3'}</span>
             <span>Review</span>
           </li>
           <li className={`stage-step ${activeStage === 4 ? 'completed' : ''}`} aria-current={activeStage === 4 ? 'step' : undefined}>

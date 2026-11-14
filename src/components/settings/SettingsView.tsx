@@ -1,5 +1,6 @@
 'use client';
 
+import { Check, Crown, KeyRound, Pencil, Save, Shield, TriangleAlert, UserRound, Zap } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 
@@ -169,7 +170,7 @@ export default function SettingsView() {
       if (data.success) {
         setSyncResult({
           success: true,
-          message: `✓ Successfully synced ${data.syncedRuns ?? 0} runs to remote Supabase instance.`,
+          message: `Successfully synced ${data.syncedRuns ?? 0} runs to remote Supabase instance.`,
         });
       } else {
         setSyncResult({
@@ -208,12 +209,12 @@ export default function SettingsView() {
 
       {savedSuccess && (
         <div role="status" className="notice" style={{ marginBottom: '24px' }}>
-          ✓ Configuration settings saved and synchronized with local backend.
+          <Check size={16} aria-hidden="true" /> Configuration settings saved and synchronized with local backend.
         </div>
       )}
       {saveError && (
         <div role="alert" className="error" style={{ marginBottom: '24px' }}>
-          ⚠️ {saveError}
+          <TriangleAlert size={16} aria-hidden="true" /> {saveError}
         </div>
       )}
 
@@ -229,7 +230,7 @@ export default function SettingsView() {
                     <h2>AI Model Provider</h2>
                     <p>Select which model synthesizes the draft claims from verified evidence.</p>
                   </div>
-                  <span className="step-icon">⚡</span>
+                  <span className="step-icon"><Zap size={16} aria-hidden="true" /></span>
                 </div>
 
                 <div className="m3-provider-options">
@@ -335,7 +336,7 @@ export default function SettingsView() {
                     <h2>Connector Credentials</h2>
                     <p>Authenticate GitHub and Slack for remote evidence collection.</p>
                   </div>
-                  <span className="step-icon">🔑</span>
+                  <span className="step-icon"><KeyRound size={16} aria-hidden="true" /></span>
                 </div>
 
                 <label>
@@ -362,7 +363,7 @@ export default function SettingsView() {
                     <h2>Database Engine</h2>
                     <p>Toggle between lightweight local storage and centralized team PostgreSQL.</p>
                   </div>
-                  <span className="step-icon">💾</span>
+                  <span className="step-icon"><Save size={16} aria-hidden="true" /></span>
                 </div>
 
                 <div className="m3-storage-picker">
@@ -410,7 +411,7 @@ export default function SettingsView() {
                       gap: '10px',
                     }}
                   >
-                    <span style={{ fontSize: '18px' }}>🛡️</span>
+                    <span style={{ fontSize: '18px' }}><Shield size={16} aria-hidden="true" /></span>
                     <div>
                       <strong>Local Sovereignty Active</strong>
                       <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#15803d' }}>
@@ -446,7 +447,7 @@ export default function SettingsView() {
                         disabled={testingConnection || !postgresUri.trim()}
                         style={{ fontSize: '13px', padding: '8px 14px' }}
                       >
-                        {testingConnection ? 'Testing Connection...' : '🔌 Test Connection'}
+                        {testingConnection ? 'Testing Connection...' : 'Test Connection'}
                       </button>
 
                       <button
@@ -456,7 +457,7 @@ export default function SettingsView() {
                         disabled={syncingRuns || !postgresUri.trim()}
                         style={{ fontSize: '13px', padding: '8px 14px' }}
                       >
-                        {syncingRuns ? 'Syncing...' : '☁️ Sync Local Runs to Supabase'}
+                        {syncingRuns ? 'Syncing...' : 'Sync Local Runs to Supabase'}
                       </button>
                     </div>
 
@@ -475,7 +476,7 @@ export default function SettingsView() {
                           gap: '8px',
                         }}
                       >
-                        <span>{testResult.success ? '✓' : '⚠️'}</span>
+                        <span>{testResult.success ? <Check size={16} aria-hidden="true" /> : <TriangleAlert size={16} aria-hidden="true" />}</span>
                         <span>{testResult.message}</span>
                       </div>
                     )}
@@ -495,7 +496,7 @@ export default function SettingsView() {
                           gap: '8px',
                         }}
                       >
-                        <span>{syncResult.success ? '✓' : '⚠️'}</span>
+                        <span>{syncResult.success ? <Check size={16} aria-hidden="true" /> : <TriangleAlert size={16} aria-hidden="true" />}</span>
                         <span>{syncResult.message}</span>
                       </div>
                     )}
@@ -513,7 +514,7 @@ export default function SettingsView() {
                 <h3>Save Configuration</h3>
                 <p>Changes take effect immediately across all handover sessions.</p>
                 <button type="submit" className="primary-action" disabled={savingSettings}>
-                  {savingSettings ? 'Saving to Backend...' : 'Save All Settings'} <span>✓</span>
+                  {savingSettings ? 'Saving to Backend...' : 'Save All Settings'} <span><Check size={16} aria-hidden="true" /></span>
                 </button>
               </section>
             </div>
@@ -530,11 +531,11 @@ export default function SettingsView() {
                   <h2>Onboarding Profile</h2>
                   <p>Customise your developer workspace view and notifications.</p>
                 </div>
-                <span className="step-icon">👤</span>
+                <span className="step-icon"><UserRound size={16} aria-hidden="true" /></span>
               </div>
 
               <div className="m3-profile-preview">
-                <div className="m3-profile-avatar-lg">{user?.avatar || '👤'}</div>
+                <div className="m3-profile-avatar-lg">{user?.role === 'admin' ? <Crown size={24} aria-hidden="true" /> : user?.role === 'departing' ? <Pencil size={24} aria-hidden="true" /> : <UserRound size={24} aria-hidden="true" />}</div>
                 <div>
                   <h3>{user?.name || 'Alex Vance'}</h3>
                   <p>{user?.email || 'alex@team.internal'} · {user?.title || 'Successor Developer'}</p>
