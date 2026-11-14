@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import type { Run, Artifact } from '@/lib/contracts';
 import DayOneChecklist from '@/components/dev/DayOneChecklist';
 import HandoverAssistant from '@/components/dev/HandoverAssistant';
+import MarkdownDocumentViewer from '@/components/MarkdownDocumentViewer';
 
 interface HandoverReaderProps {
   run: Run;
@@ -13,6 +14,7 @@ interface HandoverReaderProps {
 
 export default function HandoverReader({ run, markdownText, onBack }: HandoverReaderProps) {
   const [activeEvidence, setActiveEvidence] = useState<Artifact | null>(null);
+  const [readingMode, setReadingMode] = useState<'document' | 'cards'>('document');
 
   // Extract checklist tasks from items
   const checklistTasks = run.items
@@ -112,62 +114,83 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
         <div className="m3-reader-main">
           {/* Formatted Claims & Sections with Interactive Citation Badges */}
           <section className="card">
-            <div className="card-head">
+            <div className="card-head" style={{ alignItems: 'flex-start' }}>
               <div>
                 <div className="eyebrow">VERIFIED KNOWLEDGE & CLAIMS</div>
                 <h2>Operational Briefing</h2>
                 <p>
-                  Every statement below is linked to verbatim evidence. Click any{' '}
-                  <span className="m3-citation-pill-sample">evidence badge</span> to inspect the original source.
+                  Every statement below is linked to verbatim evidence. Inspect the formatted document or browse individual claims.
                 </p>
+              </div>
+
+              {/* Reading Mode Segmented Control */}
+              <div className="m3-segmented-control-mini" role="tablist" style={{ marginLeft: 'auto' }}>
+                <button
+                  type="button"
+                  className={`m3-mini-tab ${readingMode === 'document' ? 'active' : ''}`}
+                  onClick={() => setReadingMode('document')}
+                  role="tab"
+                  aria-selected={readingMode === 'document'}
+                >
+                  📖 Document Reader
+                </button>
+                <button
+                  type="button"
+                  className={`m3-mini-tab ${readingMode === 'cards' ? 'active' : ''}`}
+                  onClick={() => setReadingMode('cards')}
+                  role="tab"
+                  aria-selected={readingMode === 'cards'}
+                >
+                  📑 Evidence Cards
+                </button>
               </div>
             </div>
 
-            <div className="m3-claims-flow">
-              {run.items
-                .filter(item => !item.excluded)
-                .map(item => (
-                  <div key={item.id} className="m3-reader-claim-card">
-                    <div className="m3-claim-header">
-                      <span className="m3-claim-category">{item.category.replaceAll('_', ' ')}</span>
-                      <span className={`status-pill ${item.verification === 'validated_reference' ? 'valid' : 'uncertain'}`}>
-                        {item.verification.replaceAll('_', ' ')}
-                      </span>
-                    </div>
-
-                    <p className="m3-claim-text">{item.text}</p>
-
-                    {item.citations.length > 0 && (
-                      <div className="m3-claim-citations">
-                        <span className="m3-citation-label">Evidence:</span>
-                        {item.citations.map((cite, idx) => {
-                          const src = run.artifacts.find(a => a.id === cite.sourceId);
-                          return (
-                            <button
-                              key={idx}
-                              type="button"
-                              className="m3-citation-badge-btn"
-                              onClick={() => openEvidenceForSourceId(cite.sourceId)}
-                              title="Click to view verbatim supporting evidence"
-                            >
-                              <span className="m3-cite-icon">🔗</span>
-                              <span className="m3-cite-ref">{src?.sourceRef || 'Source'}</span>
-                            </button>
-                          );
-                        })}
+            {readingMode === 'document' && markdownText ? (
+              <div style={{ marginTop: '16px' }}>
+                <MarkdownDocumentViewer
+                  markdown={markdownText}
+                  filename={`handover-${(run.departingPerson || 'project').toLowerCase()}.md`}
+                  onDownload={handleDownload}
+                />
+              </div>
+            ) : (
+              <div className="m3-claims-flow">
+                {run.items
+                  .filter(item => !item.excluded)
+                  .map(item => (
+                    <div key={item.id} className="m3-reader-claim-card">
+                      <div className="m3-claim-header">
+                        <span className="m3-claim-category">{item.category.replaceAll('_', ' ')}</span>
+                        <span className={`status-pill ${item.verification === 'validated_reference' ? 'valid' : 'uncertain'}`}>
+                          {item.verification.replaceAll('_', ' ')}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                ))}
-            </div>
 
-            {/* Complete Markdown Document Display */}
-            {markdownText && (
-              <div className="m3-raw-markdown-section">
-                <div className="m3-markdown-header">
-                  <strong>Full Handover Document (Markdown)</strong>
-                </div>
-                <pre className="m3-markdown-pre">{markdownText}</pre>
+                      <p className="m3-claim-text">{item.text}</p>
+
+                      {item.citations.length > 0 && (
+                        <div className="m3-claim-citations">
+                          <span className="m3-citation-label">Evidence:</span>
+                          {item.citations.map((cite, idx) => {
+                            const src = run.artifacts.find(a => a.id === cite.sourceId);
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                className="m3-citation-badge-btn"
+                                onClick={() => openEvidenceForSourceId(cite.sourceId)}
+                                title="Click to view verbatim supporting evidence"
+                              >
+                                <span className="m3-cite-icon">🔗</span>
+                                <span className="m3-cite-ref">{src?.sourceRef || 'Source'}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
               </div>
             )}
           </section>
