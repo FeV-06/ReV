@@ -44,28 +44,47 @@ export function resolveDaemonConfig(): DaemonConfig {
 }
 
 export class DaemonApiClient {
-  private config: DaemonConfig;
+  private explicitConfig?: Partial<DaemonConfig>;
 
   constructor(config?: Partial<DaemonConfig>) {
+    this.explicitConfig = config;
+  }
+
+  private getConfig(): DaemonConfig {
     const resolved = resolveDaemonConfig();
-    this.config = {
-      baseUrl: config?.baseUrl || resolved.baseUrl,
-      token: config?.token || resolved.token,
+    return {
+      baseUrl: this.explicitConfig?.baseUrl || resolved.baseUrl,
+      token: this.explicitConfig?.token || resolved.token,
     };
   }
 
   async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const url = `${this.config.baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+    const config = this.getConfig();
+    const url = `${config.baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-Rev-Request': '1',
-      ...(this.config.token ? { Authorization: `Bearer ${this.config.token}` } : {}),
+      ...(config.token ? { Authorization: `Bearer ${config.token}` } : {}),
       ...((options.headers as Record<string, string>) || {}),
     };
 
     const res = await fetch(url, {
       ...options,
       headers,
+    }).catch(async (fetchError) => {
+      // If loopback connection failed, re-resolve config in case daemon restarted on a new port
+      const freshConfig = resolveDaemonConfig();
+      if (freshConfig.baseUrl !== config.baseUrl || freshConfig.token !== config.token) {
+        const retryUrl = `${freshConfig.baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+        const retryHeaders: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'X-Rev-Request': '1',
+          ...(freshConfig.token ? { Authorization: `Bearer ${freshConfig.token}` } : {}),
+          ...((options.headers as Record<string, string>) || {}),
+        };
+        return fetch(retryUrl, { ...options, headers: retryHeaders });
+      }
+      throw fetchError;
     });
 
     const data = await res.json().catch(() => ({}));
