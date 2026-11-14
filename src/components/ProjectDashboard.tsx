@@ -31,7 +31,7 @@ async function api(url: string, options: RequestInit = {}) {
   return data;
 }
 
-export default function ProjectDashboard() {
+export default function ProjectDashboard({ compact = false }: { compact?: boolean }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [status, setStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [root, setRoot] = useState('');
@@ -125,19 +125,14 @@ export default function ProjectDashboard() {
     }
   }
 
-  return (
-    <section className="card compact" aria-labelledby="project-dashboard-title">
-      <div className="eyebrow">DAEMON PROJECTS</div>
-      <h2 id="project-dashboard-title">Local projects</h2>
-      <p role="status">
-        Daemon: <b>{status === 'checking' ? 'Checking' : status === 'online' ? 'Connected' : 'Unavailable'}</b>
-        {status === 'online' ? ' · protocol 1' : ''}
-      </p>
+  const connection = status === 'checking' ? 'Checking connection' : status === 'online' ? 'Connected' : 'Unavailable';
+  const content = (
+    <>
       {status === 'offline' && (
         <div className="warning">
           <strong>Daemon unavailable</strong>
           <p>{connectionError}</p>
-          <button type="button" className="secondary" onClick={() => void refresh()}>
+          <button type="button" className="secondary m3e-button m3e-button--tonal" onClick={() => void refresh()}>
             Retry connection
           </button>
         </div>
@@ -145,7 +140,7 @@ export default function ProjectDashboard() {
       {status !== 'offline' && error && <div role="alert" className="error">{error}</div>}
       {status === 'online' && (
         <>
-          <form onSubmit={register}>
+          <form className="project-registration-form" onSubmit={register}>
             <label>
               Git project root
               <input
@@ -197,7 +192,7 @@ export default function ProjectDashboard() {
                   <div className="button-row">
                     <button
                       type="button"
-                      className="secondary"
+                      className="secondary m3e-button m3e-button--tonal"
                       disabled={busy}
                       onClick={() => void togglePause(project)}
                     >
@@ -205,7 +200,7 @@ export default function ProjectDashboard() {
                     </button>
                     <button
                       type="button"
-                      className="secondary"
+                      className="secondary m3e-button m3e-button--tonal"
                       disabled={busy || project.paused}
                       onClick={() => void scanNow(project)}
                     >
@@ -213,7 +208,7 @@ export default function ProjectDashboard() {
                     </button>
                     <button
                       type="button"
-                      className="danger"
+                      className="danger m3e-button m3e-button--tonal"
                       disabled={busy}
                       onClick={() => void remove(project)}
                     >
@@ -226,6 +221,23 @@ export default function ProjectDashboard() {
           )}
         </>
       )}
+    </>
+  );
+
+  if (compact) {
+    return (
+      <details className="m3-local-projects">
+        <summary>Local projects <span role="status">{connection}</span></summary>
+        <div className="m3-local-projects-content">{content}</div>
+      </details>
+    );
+  }
+
+  return (
+    <section className="card m3e-card m3e-card--outlined compact" aria-labelledby="project-dashboard-title">
+      <h2 id="project-dashboard-title">Local projects</h2>
+      <p role="status">Daemon: <b>{connection}</b>{status === 'online' ? ' · protocol 1' : ''}</p>
+      {content}
     </section>
   );
 }

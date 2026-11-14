@@ -51,14 +51,11 @@ export default function BusFactorHeatmap({ runId, departingName }: BusFactorHeat
   });
 
   return (
-    <section className="card bus-factor-heatmap-card" style={{ marginTop: '20px' }}>
+    <section className="card m3e-card m3e-card--outlined bus-factor-heatmap-card" style={{ marginTop: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
         <div>
-          <div className="eyebrow" style={{ color: '#174a3d', fontWeight: 700, letterSpacing: '0.05em' }}>
-            ROUND 3 KNOWLEDGE RISK &amp; BUS FACTOR
-          </div>
           <h3 style={{ margin: '4px 0', fontSize: '18px', color: '#0f352b' }}>
-            Repository Ownership &amp; Module Fragility Heatmap
+            Ownership and churn
           </h3>
           <p style={{ margin: 0, fontSize: '13px', color: '#5c6f66' }}>
             Combines Git blame ownership with 90-day churn to pinpoint fragile modules concentrated in {departingName ? `"${departingName}"` : 'the departing contributor'}.

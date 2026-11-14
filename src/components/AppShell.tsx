@@ -1,6 +1,6 @@
 'use client';
 
-import { Crown, Folder, Info, Menu, Pencil, UserRound } from 'lucide-react';
+import { Crown, Folder, Info, Menu, Pencil, Settings, UserRound } from 'lucide-react';
 import React, { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 
@@ -19,7 +19,7 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
   return (
     <div className="m3-shell">
       {/* Top Application Bar */}
-      <header className="m3-app-bar" role="banner">
+      <header className="m3-app-bar m3e-top-app-bar" role="banner">
         <div className="m3-app-bar-left">
           <div
             className="m3-brand-link"
@@ -44,6 +44,18 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
             >
               Projects
             </button>
+
+            {user.role !== 'departing' && (
+              <button
+                type="button"
+                className={`m3-nav-pill ${activeTab === 'settings' ? 'active' : ''}`}
+                onClick={() => { onTabChange('settings'); setMobileMenuOpen(false); }}
+                aria-selected={activeTab === 'settings'}
+                role="tab"
+              >
+                Settings
+              </button>
+            )}
 
             <button
               type="button"
@@ -81,7 +93,7 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
 
               <button
                 type="button"
-                className="m3-signout-action"
+                className="m3-signout-action m3e-button m3e-button--text"
                 onClick={logout}
                 title="Sign out of current session"
               >
@@ -123,6 +135,15 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
                 >
                   <Folder size={16} aria-hidden="true" /> Projects
                 </button>
+                {user.role !== 'departing' && (
+                  <button
+                    type="button"
+                    className={`m3-mobile-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
+                    onClick={() => { onTabChange('settings'); setMobileMenuOpen(false); }}
+                  >
+                    <Settings size={16} aria-hidden="true" /> Settings
+                  </button>
+                )}
                 <button
                   type="button"
                   className={`m3-mobile-nav-item ${activeTab === 'about' ? 'active' : ''}`}
@@ -135,7 +156,7 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
                 <span>Signed in as <b>{user.name}</b> ({user.role})</span>
                 <button
                   type="button"
-                  className="m3-signout-action"
+                  className="m3-signout-action m3e-button m3e-button--text"
                   onClick={() => { logout(); setMobileMenuOpen(false); }}
                   style={{ marginTop: '10px' }}
                 >
@@ -166,7 +187,7 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
       <footer className="m3-footer">
         <div className="m3-footer-content">
           <span>ReV <span>·</span> Evidence-First Handover Verification Engine</span>
-          <span className="m3-footer-tag">Material 3 Expressive · Local Engine</span>
+          <span className="m3-footer-tag">Local workspace</span>
         </div>
       </footer>
     </div>

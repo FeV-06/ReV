@@ -5,13 +5,14 @@ interface Props {
   run: Run;
   busy: boolean;
   hasUnsavedEdits?: boolean;
+  savesEditsOnPrepare?: boolean;
   patch: (body: object, onError?: (message: string) => void) => Promise<Run | undefined>;
   role?: 'lead' | 'departing';
   shareIds?: string[];
   toggleShare?: (id: string) => void;
 }
 
-export default function DepartureInterview({ run, busy, hasUnsavedEdits, patch, role = 'lead', shareIds = [], toggleShare }: Props) {
+export default function DepartureInterview({ run, busy, hasUnsavedEdits, savesEditsOnPrepare, patch, role = 'lead', shareIds = [], toggleShare }: Props) {
   const isLead = role === 'lead';
   const [remote, setRemote] = useState(false);
   const [author, setAuthor] = useState(run.departingPerson ?? run.githubUsername ?? '');
@@ -51,9 +52,11 @@ export default function DepartureInterview({ run, busy, hasUnsavedEdits, patch, 
         Allow selected sources and handover context to be sent to the configured AI provider
       </label>}
       {requiresConsent && <p className="footnote">Check the box above to enable question preparation.</p>}
-      {hasUnsavedEdits && <p className="footnote">Save your review edits before preparing or answering questions.</p>}
-      <button type="button" className="secondary" disabled={busy || preparing || hasUnsavedEdits || requiresConsent}
-        onClick={prepare}>
+      {hasUnsavedEdits && <p className="footnote">{savesEditsOnPrepare
+        ? 'Preparing questions also saves your review edits.'
+        : 'Save your review edits before preparing or answering questions.'}</p>}
+      <button type="button" className="secondary m3e-button m3e-button--tonal" disabled={busy || preparing || (hasUnsavedEdits && !savesEditsOnPrepare) || requiresConsent}
+        data-tour-control onClick={prepare}>
         {preparing ? 'Preparing interview questions…' : 'Prepare interview questions'}
       </button>
       <p role="status">{status}</p>
@@ -102,7 +105,7 @@ export default function DepartureInterview({ run, busy, hasUnsavedEdits, patch, 
                   <textarea value={answers[gap.id] ?? ''} maxLength={4000}
                     onChange={event => setAnswers(old => ({ ...old, [gap.id]: event.target.value }))} />
                 </label>
-                <button type="button" className="secondary"
+                <button type="button" className="secondary m3e-button m3e-button--tonal"
                   disabled={busy || hasUnsavedEdits || !author.trim() || !answers[gap.id]?.trim()}
                   onClick={() => {
                     setError('');

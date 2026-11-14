@@ -153,37 +153,23 @@ function EvaluationGateways() {
 
   return (
     <div className="m3-auth-card w-full">
-      {/* Brand Header */}
-      <div className="m3-auth-header">
-        <div className="m3-auth-brand-mark" aria-hidden="true">R</div>
-        <h1 className="m3-auth-title">ReV</h1>
-        <p className="m3-auth-tagline">Evidence-Backed Developer Handover Engine</p>
-      </div>
-
-      <div className="m3-eval-intro">
-        <span className="m3-eval-eyebrow">HACKATHON EVALUATION GATEWAY</span>
-        <h3>Select Evaluation Experience</h3>
-        <p>
-          Switch modes anytime via the persistent header toggle.
-        </p>
-      </div>
+      <h2 className="auth-access-title">Open ReV</h2>
 
       {/* Gateway Cards Grid */}
       <div className="m3-eval-grid">
         {/* Gateway 1: Demo Mode */}
         <div className="m3-eval-card demo-card">
           <div className="m3-eval-card-header">
-            <span className="m3-eval-pill demo"><Zap size={16} aria-hidden="true" /> INSTANT DEMO</span>
-            <span className="m3-eval-subtag">0s Latency · Guided Walkthrough</span>
+            <Zap size={20} aria-hidden="true" />
           </div>
-          <h4>Instant Guided Showcase</h4>
+          <h3>Guided demo</h3>
           <p>
-            Zero-latency walkthrough across all 4 stages. Demonstrates Tree-Sitter AST symbols, exact citation verification, and interactive Departure Interview Q&A with real-time UI spotlights.
+            Walk through evidence selection, citation review, and export with a sample project.
           </p>
           <div className="m3-eval-actions">
             <button
               type="button"
-              className="m3-eval-btn primary"
+              className="m3-eval-btn m3e-button"
               onClick={() => loginAsSuperuser('admin', 'demo')}
               id="btn-eval-demo-admin"
             >
@@ -192,7 +178,7 @@ function EvaluationGateways() {
             </button>
             <button
               type="button"
-              className="m3-eval-btn tonal"
+              className="m3-eval-btn m3e-button m3e-button--tonal"
               onClick={() => loginAsSuperuser('developer', 'demo')}
               id="btn-eval-demo-dev"
             >
@@ -205,28 +191,22 @@ function EvaluationGateways() {
         {/* Gateway 2: Live Engine */}
         <div className="m3-eval-card live-card">
           <div className="m3-eval-card-header">
-            <span className="m3-eval-pill live"><Microscope size={16} aria-hidden="true" /> LIVE ENGINE</span>
-            <span className="m3-eval-subtag">Real-Time Ingestion</span>
+            <Microscope size={20} aria-hidden="true" />
           </div>
-          <h4>Real GitHub & Native AST Engine</h4>
+          <h3>Live studio</h3>
           <p>
-            Connected to the local background daemon (:3078). Ingest any public GitHub repository, parse Tree-Sitter AST symbols in Rust, and synthesize handovers with live reasoning.
+            Import GitHub, local Git, or Slack evidence for a real handover.
           </p>
           <div className="m3-eval-actions">
             <button
               type="button"
-              className="m3-eval-btn live-btn"
+              className="m3-eval-btn m3e-button"
               onClick={() => loginAsSuperuser('admin', 'live')}
               id="btn-eval-live-engine"
             >
               <span><Rocket size={16} aria-hidden="true" /> Launch Live GitHub Studio</span>
               <span className="arrow">→</span>
             </button>
-          </div>
-          <div className="m3-eval-specs">
-            <small>● Daemon: Connected</small>
-            <small>● AST: Tree-Sitter Core</small>
-            <small>● AI Engine: Active</small>
           </div>
         </div>
       </div>
@@ -342,40 +322,30 @@ function EvaluationGateways() {
       </div>
 
       <div className="m3-auth-footer">
-        <span>Local Engine · Zero external telemetry · Material 3 Expressive</span>
+        <span>Runs on your computer</span>
       </div>
     </div>
   );
 }
 
-/**
- * Full-Bleed Split-Screen Authentication Page
- */
 export default function LoginView() {
   return (
-    <div className="h-screen w-screen flex overflow-hidden auth-split-container">
-      {/* Left Pane (45% - The Hero & DAG Background) */}
-      <div className="hidden lg:flex lg:w-[45%] relative flex-col justify-center items-center overflow-hidden bg-[#f3f0e8] auth-split-left">
+    <main className="auth-split-container">
+      <section className="auth-split-left" aria-labelledby="rev-title">
         <DagBackground />
-
         <div className="auth-hero-container">
-          <h1 className="auth-hero-title">
-            Knowledge,
-            <br />
-            <span className="auth-hero-accent">carried forward.</span>
-          </h1>
-          <p style={{ marginTop: '14px', fontSize: '12pt', color: '#3d5248', maxWidth: '380px', lineHeight: 1.5 }}>
-            Turning fragmented codebases and departing engineer context into verifiable, cited handovers.
+          <div className="auth-wordmark">ReV</div>
+          <h1 className="auth-hero-title" id="rev-title">Knowledge carried forward.</h1>
+          <p className="auth-hero-description">
+            Build a handover your successor can verify, with citations back to Git and Slack.
           </p>
         </div>
-      </div>
-
-      {/* Right Pane (55% - The Gateways Slot) */}
-      <div className="w-full lg:w-[55%] h-full bg-white flex flex-col items-center relative z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.03)] overflow-y-auto px-6 py-8 auth-split-right">
-        <div className="w-full max-w-xl auth-form-wrapper">
+      </section>
+      <section className="auth-split-right" aria-label="Workspace access">
+        <div className="auth-form-wrapper">
           <EvaluationGateways />
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

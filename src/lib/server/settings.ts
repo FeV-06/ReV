@@ -2,8 +2,10 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 
+const groqBaseUrl = 'https://api.groq.com/openai/v1';
+
 export const settingsSchema = z.object({
-  provider: z.enum(['openai', 'anthropic', 'ollama']).default('openai'),
+  provider: z.enum(['openai', 'anthropic', 'ollama', 'groq']).default('openai'),
   apiKey: z.string().max(500).default(''),
   modelName: z.string().max(200).default('gpt-4o'),
   baseUrl: z.string().max(500).default('https://api.openai.com/v1'),
@@ -49,10 +51,19 @@ export async function getEffectiveCoreEnv(): Promise<NodeJS.ProcessEnv> {
   const env: NodeJS.ProcessEnv = { ...process.env };
   if (!settings) return env;
 
-  if (settings.provider) env.REV_MODEL_PROVIDER = settings.provider;
-  if (settings.baseUrl.trim()) env.REV_MODEL_BASE_URL = settings.baseUrl.trim();
+  if (settings.provider === 'groq') {
+    env.REV_MODEL_PROVIDER = 'openai';
+    env.REV_MODEL_BASE_URL = groqBaseUrl;
+  } else {
+    env.REV_MODEL_PROVIDER = settings.provider;
+    if (settings.baseUrl.trim()) env.REV_MODEL_BASE_URL = settings.baseUrl.trim();
+  }
   if (settings.modelName.trim()) env.REV_MODEL_NAME = settings.modelName.trim();
   if (settings.apiKey.trim()) env.REV_MODEL_API_KEY = settings.apiKey.trim();
+  else if (settings.provider === 'groq') {
+    env.REV_MODEL_API_KEY = process.env.GROQ_API_KEY?.trim()
+      || (process.env.REV_MODEL_API_KEY?.startsWith('gsk_') ? process.env.REV_MODEL_API_KEY : '');
+  }
   if (settings.githubToken.trim()) env.REV_GITHUB_TOKEN = settings.githubToken.trim();
 
   return env;

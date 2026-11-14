@@ -153,7 +153,7 @@ export default function HandoverWorkspace() {
 
         {error && <div role="alert" className="error">{error}</div>}
         <div className="grid"><div className="column">
-          <section className="card entry-panel"><div className="card-head"><div><div className="eyebrow">01 / CONNECT</div><h2>Start a run</h2><p>Import only material you are authorised to use.</p></div><span className="step-icon">↗</span></div>
+          <section className="card m3e-card m3e-card--outlined entry-panel"><div className="card-head"><div><div className="eyebrow">01 / CONNECT</div><h2>Start a run</h2><p>Import only material you are authorised to use.</p></div><span className="step-icon">↗</span></div>
           <ContributorField value={departingPerson} onChange={setDepartingPerson}
             authors={useGit && !repo ? sources.gitAuthors : []} repository={sources.localGit} />
 
@@ -164,7 +164,7 @@ export default function HandoverWorkspace() {
           {sources.localGit && <label className="check"><input type="checkbox" checked={useGit && !repo} disabled={!!repo || busy} onChange={e=>setUseGit(e.target.checked)}/> Use local Git history from {sources.localGit}</label>}
           <div>
             {slack.workspace && <p>Slack workspace: <strong>{slack.workspace}</strong></p>}
-            <button type="button" className="secondary" disabled={slackBusy || busy} onClick={()=>void connectSlack()}>{slack.workspace ? 'Reconnect Slack' : 'Connect Slack'}</button>
+            <button type="button" className="secondary m3e-button m3e-button--tonal" disabled={slackBusy || busy} onClick={()=>void connectSlack()}>{slack.workspace ? 'Reconnect Slack' : 'Connect Slack'}</button>
             {slackError && <p role="status">{slackError}</p>}
             {slack.workspace && (slack.channels.length ? <details open>
               <summary>Choose Slack channels ({slackIds.length} selected)</summary>
@@ -177,21 +177,21 @@ export default function HandoverWorkspace() {
           <label>GitHub repository <span className="muted">optional</span><input value={repo} onChange={e=>setRepo(e.target.value)} placeholder="owner/repository"/></label>
           <label>Slack export ZIP <span className="muted">optional · max 10 MiB</span><input type="file" accept=".zip,application/zip" onChange={e=>setFile(e.target.files?.[0] || null)}/></label>
           </details>
-          <div className="button-row"><button disabled={busy || !departingPerson.trim()} onClick={()=>create(false)}>Import sources <span>→</span></button><button disabled={busy} className="secondary" onClick={()=>create(true)}>Try synthetic example</button></div>
+          <div className="button-row"><button disabled={busy || !departingPerson.trim()} onClick={()=>create(false)}>Import sources <span>→</span></button><button disabled={busy} className="secondary m3e-button m3e-button--tonal" onClick={()=>create(true)}>Try synthetic example</button></div>
           <p className="footnote">Configure the GitHub token and model provider in the daemon environment. No credentials are stored in a run.</p>
         </section>
-        {run && <section className="card"><div className="card-head"><div><div className="eyebrow">02 / SELECT SOURCES</div><h2>Choose what can be shared</h2><p>Imported sources start unselected. Nothing is sent to a model until you confirm the recipient’s access.</p></div><span className="count">{selected.length}/{run.artifacts.length}</span></div>
+        {run && <section className="card m3e-card m3e-card--outlined"><div className="card-head"><div><div className="eyebrow">02 / SELECT SOURCES</div><h2>Choose what can be shared</h2><p>Imported sources start unselected. Nothing is sent to a model until you confirm the recipient’s access.</p></div><span className="count">{selected.length}/{run.artifacts.length}</span></div>
           {run.mode==='fixture' && <div className="notice">Synthetic fixture · generation uses deterministic example output, not an AI model.</div>}
           {generationFailure && <div className="warning" role="status">{generationFailure}</div>}
           {coverageWarnings.length>0 && <div className="warning"><strong>Incomplete coverage</strong>{coverageWarnings.map((w,i)=><p key={i}>{w}</p>)}<label className="check"><input type="checkbox" checked={partial} onChange={e=>setPartial(e.target.checked)}/> I understand the source coverage is incomplete.</label></div>}
           {(run.departingPerson || run.githubUsername) && <div>
             <label>What are you taking over? <span className="muted">(optional)</span><input value={takeoverScope} onChange={e=>setTakeoverScope(e.target.value)} maxLength={400} placeholder="e.g. Billing retries and alerts"/></label>
             <p>Select the evidence for {run.departingPerson || run.githubUsername}’s handover. Add responsibilities if you want to focus the draft.</p>
-            {areas.length > 0 && <><p>Areas found in their Git activity</p><div className="button-row">{areas.map(area=><button type="button" className="secondary" key={area} onClick={()=>setTakeoverScope(value=>value.includes(area) ? value : [value, area].filter(Boolean).join(', ').slice(0, 400))}>{area}</button>)}</div></>}
+            {areas.length > 0 && <><p>Areas found in their Git activity</p><div className="button-row">{areas.map(area=><button type="button" className="secondary m3e-button m3e-button--tonal" key={area} onClick={()=>setTakeoverScope(value=>value.includes(area) ? value : [value, area].filter(Boolean).join(', ').slice(0, 400))}>{area}</button>)}</div></>}
             {scopeChanged && ['needs_review','approved'].includes(run.state) && <p>Generate a new draft to apply the changed responsibilities.</p>}
           </div>}
           {commitIds.length > 0 && <div className="button-row">
-            <button type="button" className="secondary"
+            <button type="button" className="secondary m3e-button m3e-button--tonal"
               disabled={busy || selectionWithCommits.length === selected.length || selectionWithCommits.length > 500}
               onClick={()=>void updateSelection(selectionWithCommits)}>
               Select all commits
@@ -203,9 +203,9 @@ export default function HandoverWorkspace() {
             <label className="check"><input type="checkbox" checked={authorised} onChange={e=>setAuthorised(e.target.checked)}/> I confirm the recipient may receive all selected material.</label>
             {run.mode!=='fixture' && <label className="check"><input type="checkbox" checked={remote} onChange={e=>setRemote(e.target.checked)}/> I consent to sending selected text{run.departingPerson ? ' and handover details' : ''} to my configured model provider.</label>}
           </div>
-          <button className="primary-action" disabled={busy || !selected.length || !authorised || (!!coverageWarnings.length && !partial) || (run.mode!=='fixture' && !remote)} onClick={()=>patch({action:'generate',takeoverScope:run.departingPerson ? takeoverScope.trim() : undefined,selectedIds:selected,acceptPartial:partial,confirmAuthorisation:true,confirmRemote:remote,fixture:run.mode==='fixture'})}>Generate draft <span>→</span></button>
+          <button className="primary-action m3e-button" disabled={busy || !selected.length || !authorised || (!!coverageWarnings.length && !partial) || (run.mode!=='fixture' && !remote)} onClick={()=>patch({action:'generate',takeoverScope:run.departingPerson ? takeoverScope.trim() : undefined,selectedIds:selected,acceptPartial:partial,confirmAuthorisation:true,confirmRemote:remote,fixture:run.mode==='fixture'})}>Generate draft <span>→</span></button>
         </section>}
-        {run && ['needs_review','approved'].includes(run.state) && <section className="card"><div className="card-head"><div><div className="eyebrow">03 / REVIEW</div><h2>Make it yours</h2><p>Check the meaning, not just the citation. Editing a claim marks it unverified.</p></div><span className="count">{items.length} ITEMS</span></div>
+        {run && ['needs_review','approved'].includes(run.state) && <section className="card m3e-card m3e-card--outlined"><div className="card-head"><div><div className="eyebrow">03 / REVIEW</div><h2>Make it yours</h2><p>Check the meaning, not just the citation. Editing a claim marks it unverified.</p></div><span className="count">{items.length} ITEMS</span></div>
           <DepartureInterview key={run.id} run={run} busy={busy} hasUnsavedEdits={JSON.stringify(items) !== JSON.stringify(run.items)} patch={patch} shareIds={shareAnswers} toggleShare={toggleShare} />
           {run.departingPerson && !scopeChanged && <div className="notice">
             <h3>Start here</h3>
@@ -228,16 +228,16 @@ export default function HandoverWorkspace() {
             const canDownload = !hasPendingEdits && run.state === 'approved' && !scopeChanged && JSON.stringify([...selected].sort()) === JSON.stringify([...run.selectedIds].sort());
 
             return <div className="button-row">
-              <button className={hasPendingEdits ? 'primary-action' : 'secondary'} disabled={busy} onClick={()=>patch({action:'save',items})}>Save review</button>
-              <button className={canApprove ? 'primary-action' : 'secondary'} disabled={busy || !canApprove} onClick={()=>patch({action:'approve',confirmAuthorisation:true,interviewAnswerIds:shareAnswers.filter(id=>run.gaps?.some(gap=>gap.answerSourceId===id))})}>Approve current revision</button>
-              <button className={canDownload ? 'primary-action' : 'secondary'} disabled={busy || !canDownload} onClick={download}>Download Markdown</button>
+              <button className={hasPendingEdits ? 'primary-action m3e-button' : 'secondary m3e-button m3e-button--tonal'} disabled={busy} onClick={()=>patch({action:'save',items})}>Save review</button>
+              <button className={canApprove ? 'primary-action m3e-button' : 'secondary m3e-button m3e-button--tonal'} disabled={busy || !canApprove} onClick={()=>patch({action:'approve',confirmAuthorisation:true,interviewAnswerIds:shareAnswers.filter(id=>run.gaps?.some(gap=>gap.answerSourceId===id))})}>Approve current revision</button>
+              <button className={canDownload ? 'primary-action m3e-button' : 'secondary m3e-button m3e-button--tonal'} disabled={busy || !canDownload} onClick={download}>Download Markdown</button>
             </div>;
           })()}
           <p className="footnote">Save edits before approving. Changing source selection requires generating a new draft.</p>
         </section>}
-      </div><div className="column"><ProjectDashboard/><section className="card compact"><div className="eyebrow">YOUR WORKSPACE</div><h2>Recent runs</h2><p>Each run is a separate snapshot.</p>{runs.length===0?<div className="empty">No handovers yet.<br/><span>Start a run or try the example.</span></div>:<div className="runs">{runs.map(r=><button className="run-row" key={r.id} onClick={()=>perform(async()=>{ const d=await api(`/api/runs/${r.id}`);display(d.run);})}><span><b>{r.recipient}</b><small>{new Date(r.createdAt).toLocaleString()}</small></span><span className="run-state">{r.state.replaceAll('_',' ')}</span></button>)}</div>}</section>
-        <section className="card compact trust"><div className="eyebrow">DESIGNED FOR REVIEW</div><h3>A source, not a guess.</h3><p>Every draft is a starting point. Verify what it says, resolve uncertainty and decide what is safe to share.</p><div className="trust-line"><span>01</span> Select authorised sources</div><div className="trust-line"><span>02</span> Inspect supporting evidence</div><div className="trust-line"><span>03</span> Approve before export</div></section>
-        {run && <section className="card compact"><div className="eyebrow">CURRENT RUN</div><h3>{run.recipient}</h3>{run.githubUsername&&<p>Contributor: @{run.githubUsername}</p>}{run.targetRole&&<p>Target role: {run.targetRole}</p>}<p>Status: <b>{run.state.replaceAll('_',' ')}</b></p><button className="danger" disabled={busy} onClick={()=>perform(async()=>{if(!confirm('Delete this run and its stored snapshots? Downloaded exports cannot be revoked.')) return; await api(`/api/runs/${run.id}`,{method:'DELETE'}); setRun(null);})}>Delete run</button></section>}
+      </div><div className="column"><ProjectDashboard/><section className="card m3e-card m3e-card--outlined compact"><div className="eyebrow">YOUR WORKSPACE</div><h2>Recent runs</h2><p>Each run is a separate snapshot.</p>{runs.length===0?<div className="empty">No handovers yet.<br/><span>Start a run or try the example.</span></div>:<div className="runs">{runs.map(r=><button className="run-row" key={r.id} onClick={()=>perform(async()=>{ const d=await api(`/api/runs/${r.id}`);display(d.run);})}><span><b>{r.recipient}</b><small>{new Date(r.createdAt).toLocaleString()}</small></span><span className="run-state">{r.state.replaceAll('_',' ')}</span></button>)}</div>}</section>
+        <section className="card m3e-card m3e-card--outlined compact trust"><div className="eyebrow">DESIGNED FOR REVIEW</div><h3>A source, not a guess.</h3><p>Every draft is a starting point. Verify what it says, resolve uncertainty and decide what is safe to share.</p><div className="trust-line"><span>01</span> Select authorised sources</div><div className="trust-line"><span>02</span> Inspect supporting evidence</div><div className="trust-line"><span>03</span> Approve before export</div></section>
+        {run && <section className="card m3e-card m3e-card--outlined compact"><div className="eyebrow">CURRENT RUN</div><h3>{run.recipient}</h3>{run.githubUsername&&<p>Contributor: @{run.githubUsername}</p>}{run.targetRole&&<p>Target role: {run.targetRole}</p>}<p>Status: <b>{run.state.replaceAll('_',' ')}</b></p><button className="danger m3e-button m3e-button--tonal" disabled={busy} onClick={()=>perform(async()=>{if(!confirm('Delete this run and its stored snapshots? Downloaded exports cannot be revoked.')) return; await api(`/api/runs/${run.id}`,{method:'DELETE'}); setRun(null);})}>Delete run</button></section>}
       </div></div><footer>ReV <span>·</span> A clearer handover starts with the evidence.</footer></div>
     </main></div>;
 }

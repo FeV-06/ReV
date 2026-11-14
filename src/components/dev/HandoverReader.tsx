@@ -1,7 +1,7 @@
 'use client';
 
-import { BookOpen, Check, Download, Files, Link, X } from 'lucide-react';
-import React, { useState } from 'react';
+import { BookOpen, Download, Files, Link, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { Run, Artifact } from '@/lib/contracts';
 import DayOneChecklist from '@/components/dev/DayOneChecklist';
 import HandoverAssistant from '@/components/dev/HandoverAssistant';
@@ -16,6 +16,14 @@ interface HandoverReaderProps {
 export default function HandoverReader({ run, markdownText, onBack }: HandoverReaderProps) {
   const [activeEvidence, setActiveEvidence] = useState<Artifact | null>(null);
   const [readingMode, setReadingMode] = useState<'document' | 'cards'>('document');
+  const drawer = useRef<HTMLDialogElement>(null);
+  const includedItems = run.items.filter(item => !item.excluded);
+  const showDocument = readingMode === 'document' && Boolean(markdownText);
+
+  useEffect(() => {
+    const dialog = drawer.current;
+    if (activeEvidence && dialog && !dialog.open) dialog.showModal();
+  }, [activeEvidence]);
 
   // Extract checklist tasks from items
   const checklistTasks = run.items
@@ -55,7 +63,7 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
     <div className="m3-reader-container m3-slide-in">
       {/* Top Breadcrumb & Action bar */}
       <div className="m3-reader-nav">
-        <button type="button" className="secondary" onClick={onBack}>
+        <button type="button" className="secondary m3e-button m3e-button--tonal" onClick={onBack}>
           ← Back to My Handovers
         </button>
         <div className="m3-reader-actions">
@@ -72,82 +80,74 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
       </div>
 
       {/* Hero Departure Banner */}
-      <section className="card m3-departure-banner">
+      <section className="card m3e-card m3e-card--outlined m3-departure-banner">
         <div className="card-head">
           <div>
-            <div className="eyebrow">SUCCESSOR ONBOARDING PORTAL</div>
             <h1>{run.recipient}</h1>
             <p>Complete project context, operational knowledge, and verified evidence.</p>
           </div>
-          <span className="status-pill valid">VERIFIED & APPROVED</span>
+          <span className="status-pill valid">{run.state === 'approved' ? 'Approved' : run.state.replaceAll('_', ' ')}</span>
         </div>
 
         <div className="m3-departure-grid">
           <div className="m3-dep-card">
-            <span className="m3-micro-label">HANDED OVER BY</span>
-            <strong>{run.departingPerson || run.githubUsername || 'Maya Patel'}</strong>
+            <span className="m3-micro-label">Handed over by</span>
+            <strong>{run.departingPerson || run.githubUsername || 'Unspecified'}</strong>
             {run.githubUsername && <small>GitHub: @{run.githubUsername}</small>}
           </div>
 
           <div className="m3-dep-card">
-            <span className="m3-micro-label">ASSIGNED TO (SUCCESSOR)</span>
+            <span className="m3-micro-label">Successor</span>
             <strong>{run.successorEmail ?? 'Unassigned'}</strong>
-            <small>Senior Engineer</small>
           </div>
 
           <div className="m3-dep-card">
-            <span className="m3-micro-label">TARGET ROLE</span>
-            <strong>{run.targetRole || 'Platform Engineer'}</strong>
+            <span className="m3-micro-label">Target role</span>
+            <strong>{run.targetRole || 'Unspecified'}</strong>
             <small>{run.takeoverScope ? `Scope: ${run.takeoverScope}` : 'Full scope'}</small>
           </div>
 
           <div className="m3-dep-card">
-            <span className="m3-micro-label">EVIDENCE SOURCES</span>
-            <strong>{run.selectedIds.length} Verified Sources</strong>
-            <small>{run.items.filter(i => !i.excluded).length} Approved Claims</small>
+            <span className="m3-micro-label">Evidence sources</span>
+            <strong>{run.selectedIds.length} selected sources</strong>
+            <small>{run.items.filter(i => !i.excluded).length} included claims</small>
           </div>
         </div>
       </section>
 
-      {run.state === "approved" && <HandoverAssistant key={run.id} run={run} />}
       {/* Two Column Layout: Main Markdown & Claims | Interactive Day-1 Checklist */}
       <div className="m3-reader-layout">
         <div className="m3-reader-main">
           {/* Formatted Claims & Sections with Interactive Citation Badges */}
-          <section className="card">
-            <div className="card-head" style={{ alignItems: 'flex-start' }}>
+          <section className="card m3e-card m3e-card--outlined m3-reader-content">
+            <div className="card-head">
               <div>
-                <div className="eyebrow">VERIFIED KNOWLEDGE & CLAIMS</div>
-                <h2>Operational Briefing</h2>
-                <p>
-                  Every statement below is linked to verbatim evidence. Inspect the formatted document or browse individual claims.
-                </p>
+                <h2>Handover</h2>
+                <p>Read the document or open a source to check a claim.</p>
               </div>
 
               {/* Reading Mode Segmented Control */}
-              <div className="m3-segmented-control-mini" role="tablist" style={{ marginLeft: 'auto' }}>
+              {markdownText && <div className="m3-segmented-control-mini" role="group" aria-label="Handover view">
                 <button
                   type="button"
                   className={`m3-mini-tab ${readingMode === 'document' ? 'active' : ''}`}
                   onClick={() => setReadingMode('document')}
-                  role="tab"
-                  aria-selected={readingMode === 'document'}
+                  aria-pressed={showDocument}
                 >
-                  <BookOpen size={16} aria-hidden="true" /> Document Reader
+                  <BookOpen size={16} aria-hidden="true" /> Document
                 </button>
                 <button
                   type="button"
                   className={`m3-mini-tab ${readingMode === 'cards' ? 'active' : ''}`}
                   onClick={() => setReadingMode('cards')}
-                  role="tab"
-                  aria-selected={readingMode === 'cards'}
+                  aria-pressed={!showDocument}
                 >
-                  <Files size={16} aria-hidden="true" /> Evidence Cards
+                  <Files size={16} aria-hidden="true" /> Evidence
                 </button>
-              </div>
+              </div>}
             </div>
 
-            {readingMode === 'document' && markdownText ? (
+            {showDocument && markdownText ? (
               <div style={{ marginTop: '16px' }}>
                 <MarkdownDocumentViewer
                   markdown={markdownText}
@@ -155,10 +155,9 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
                   onDownload={handleDownload}
                 />
               </div>
-            ) : (
+            ) : includedItems.length ? (
               <div className="m3-claims-flow">
-                {run.items
-                  .filter(item => !item.excluded)
+                {includedItems
                   .map(item => (
                     <div key={item.id} className="m3-reader-claim-card">
                       <div className="m3-claim-header">
@@ -193,46 +192,34 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
                     </div>
                   ))}
               </div>
-            )}
+            ) : <p>No claims are included in this handover.</p>}
           </section>
         </div>
 
         {/* Sidebar: Day-1 Checklist & Quick Guide */}
         <aside className="m3-reader-sidebar">
           <DayOneChecklist projectId={run.id} initialTasks={checklistTasks} />
+          {run.state === 'approved' && <HandoverAssistant key={run.id} run={run} />}
 
-          <div className="card compact trust" style={{ marginTop: '20px' }}>
-            <div className="eyebrow">VERIFICATION PRINCIPLE</div>
-            <h3>A source, not a guess.</h3>
-            <p>
-              This handover was generated using deterministic evidence extraction. Claims are strictly bound to Git commits and recorded team conversations.
-            </p>
-            <div className="trust-line">
-              <span>01</span> Verbatim substring verification
-            </div>
-            <div className="trust-line">
-              <span>02</span> Provenance tracking across all claims
-            </div>
-            <div className="trust-line">
-              <span>03</span> Human lead sign-off
-            </div>
-          </div>
         </aside>
       </div>
 
       {/* SLIDE-OVER EVIDENCE DRAWER */}
       {activeEvidence && (
-        <div className="m3-drawer-backdrop" onClick={() => setActiveEvidence(null)}>
-          <div className="m3-evidence-drawer m3-slide-in-right" onClick={e => e.stopPropagation()}>
+        <dialog ref={drawer} className="m3-evidence-drawer" aria-labelledby="evidence-drawer-title"
+          onClose={() => setActiveEvidence(null)} onClick={event => {
+            if (event.target === event.currentTarget) event.currentTarget.close();
+          }}>
+          <div className="m3-evidence-drawer-content">
             <div className="m3-drawer-header">
               <div>
-                <span className="eyebrow">VERBATIM EVIDENCE PREVIEW</span>
-                <h3>{activeEvidence.kind.replaceAll('_', ' ').toUpperCase()}</h3>
+                <h2 id="evidence-drawer-title">Source excerpt</h2>
+                <span>{activeEvidence.kind.replaceAll('_', ' ')}</span>
               </div>
               <button
                 type="button"
                 className="m3-drawer-close"
-                onClick={() => setActiveEvidence(null)}
+                onClick={() => drawer.current?.close()}
                 aria-label="Close evidence drawer"
               >
                 <X size={16} aria-hidden="true" />
@@ -283,12 +270,9 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
                 </blockquote>
               </div>
 
-              <div className="notice" style={{ marginTop: '16px' }}>
-                <Check size={16} aria-hidden="true" /> Substring verified against source archive at import time.
-              </div>
             </div>
           </div>
-        </div>
+        </dialog>
       )}
     </div>
   );

@@ -53,12 +53,12 @@ export default function DepartingWorkspace() {
     }
   }
 
-  return <section className="card">
+  return <section className="card m3e-card m3e-card--outlined">
     <h1>Your departure interviews</h1>
     <p>Choose a handover to see the questions prepared for the departing teammate.</p>
     {error && <p role="alert">{error}</p>}
     {run ? <>
-      <button type="button" className="secondary" disabled={busy} onClick={() => setRun(undefined)}>Back to interviews</button>
+      <button type="button" className="secondary m3e-button m3e-button--tonal" disabled={busy} onClick={() => setRun(undefined)}>Back to interviews</button>
       <h2>{run.departingPerson ? `${run.departingPerson} → ${run.recipient}` : run.recipient}</h2>
       <DepartureInterview key={run.id} run={run} role="departing" busy={busy} patch={patch} />
     </> : <div className="runs">

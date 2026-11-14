@@ -8,7 +8,7 @@ export default function SettingsView() {
   const { role, user, logout } = useAuth();
 
   // Admin Configuration State
-  const [provider, setProvider] = useState<'openai' | 'anthropic' | 'ollama'>('openai');
+  const [provider, setProvider] = useState<'openai' | 'anthropic' | 'ollama' | 'groq'>('openai');
   const [apiKey, setApiKey] = useState('');
   const [modelName, setModelName] = useState('gpt-4o');
   const [baseUrl, setBaseUrl] = useState('https://api.openai.com/v1');
@@ -45,7 +45,7 @@ export default function SettingsView() {
             if (s.githubToken !== undefined) setGithubToken(s.githubToken);
             if (s.dbMode) setDbMode(s.dbMode);
             if (s.postgresUri !== undefined) setPostgresUri(s.postgresUri);
-            localStorage.setItem('rev_system_settings', JSON.stringify(s));
+            localStorage.setItem('rev_system_settings', JSON.stringify(s.provider === 'groq' ? { ...s, apiKey: '' } : s));
             return;
           }
         }
@@ -88,7 +88,6 @@ export default function SettingsView() {
     };
 
     try {
-      localStorage.setItem('rev_system_settings', JSON.stringify(settings));
       const res = await fetch('/api/settings', {
         method: 'POST',
         headers: {
@@ -101,6 +100,7 @@ export default function SettingsView() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to persist settings to backend');
       }
+      localStorage.setItem('rev_system_settings', JSON.stringify(provider === 'groq' ? { ...settings, apiKey: '' } : settings));
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3500);
     } catch (err) {
@@ -192,10 +192,7 @@ export default function SettingsView() {
     <div className="m3-settings-container m3-slide-in">
       <section className="hero">
         <div>
-          <div className="eyebrow">CONFIGURATION & INTEGRATIONS</div>
-          <h1>
-            Workspace <em>Settings.</em>
-          </h1>
+          <h1>Workspace settings</h1>
           <p>
             {role === 'admin'
               ? 'Configure AI inference providers, connector credentials, and database persistence options.'
@@ -203,7 +200,7 @@ export default function SettingsView() {
           </p>
         </div>
         <div className="m3-role-tag">
-          CURRENT VIEW: <strong>{role === 'admin' ? 'ADMIN / LEAD' : 'DEVELOPER'}</strong>
+          {role === 'admin' ? 'Admin workspace' : 'Successor workspace'}
         </div>
       </section>
 
@@ -223,10 +220,9 @@ export default function SettingsView() {
           <div className="grid">
             <div className="column">
               {/* AI MODEL PROVIDER */}
-              <section className="card">
+              <section className="card m3e-card m3e-card--outlined">
                 <div className="card-head">
                   <div>
-                    <div className="eyebrow">01 / INFERENCE ENGINE</div>
                     <h2>AI Model Provider</h2>
                     <p>Select which model synthesizes the draft claims from verified evidence.</p>
                   </div>
@@ -249,6 +245,25 @@ export default function SettingsView() {
                     <div>
                       <strong>OpenAI</strong>
                       <small>GPT-4o, GPT-4o-mini</small>
+                    </div>
+                  </label>
+
+                  <label className={`m3-provider-card ${provider === 'groq' ? 'selected' : ''}`}>
+                    <input
+                      type="radio"
+                      name="provider"
+                      value="groq"
+                      checked={provider === 'groq'}
+                      onChange={() => {
+                        setProvider('groq');
+                        setApiKey('');
+                        setModelName('openai/gpt-oss-120b');
+                        setBaseUrl('https://api.groq.com/openai/v1');
+                      }}
+                    />
+                    <div>
+                      <strong>Groq</strong>
+                      <small>GPT-OSS 120B</small>
                     </div>
                   </label>
 
@@ -284,7 +299,7 @@ export default function SettingsView() {
                     />
                     <div>
                       <strong>Local (Ollama / vLLM)</strong>
-                      <small>Zero egress / air-gapped</small>
+                      <small>Runs locally</small>
                     </div>
                   </label>
                 </div>
@@ -296,11 +311,11 @@ export default function SettingsView() {
                       type={showKey ? 'text' : 'password'}
                       value={apiKey}
                       onChange={e => setApiKey(e.target.value)}
-                      placeholder={provider === 'ollama' ? 'Optional for local Ollama' : 'sk-...'}
+                      placeholder={provider === 'ollama' ? 'Optional for local Ollama' : provider === 'groq' ? 'gsk_…' : 'sk-…'}
                     />
                     <button
                       type="button"
-                      className="secondary m3-inline-btn"
+                      className="secondary m3-inline-btn m3e-button m3e-button--tonal"
                       onClick={() => setShowKey(!showKey)}
                     >
                       {showKey ? 'Hide' : 'Show'}
@@ -321,6 +336,7 @@ export default function SettingsView() {
                     Base API URL
                     <input
                       value={baseUrl}
+                      readOnly={provider === 'groq'}
                       onChange={e => setBaseUrl(e.target.value)}
                       placeholder="e.g. https://api.openai.com/v1"
                     />
@@ -329,10 +345,9 @@ export default function SettingsView() {
               </section>
 
               {/* REPOSITORY & CONNECTOR CREDENTIALS */}
-              <section className="card">
+              <section className="card m3e-card m3e-card--outlined">
                 <div className="card-head">
                   <div>
-                    <div className="eyebrow">02 / CONNECTORS</div>
                     <h2>Connector Credentials</h2>
                     <p>Authenticate GitHub and Slack for remote evidence collection.</p>
                   </div>
@@ -356,10 +371,9 @@ export default function SettingsView() {
 
             <div className="column">
               {/* DATABASE & STORAGE ENGINE */}
-              <section className="card">
+              <section className="card m3e-card m3e-card--outlined">
                 <div className="card-head">
                   <div>
-                    <div className="eyebrow">03 / STORAGE</div>
                     <h2>Database Engine</h2>
                     <p>Toggle between lightweight local storage and centralized team PostgreSQL.</p>
                   </div>
@@ -413,7 +427,7 @@ export default function SettingsView() {
                   >
                     <span style={{ fontSize: '18px' }}><Shield size={16} aria-hidden="true" /></span>
                     <div>
-                      <strong>Local Sovereignty Active</strong>
+                      <strong>Local storage</strong>
                       <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#15803d' }}>
                         Handovers and graph events are stored locally. A manual cloud sync or configured external model can send data when requested.
                       </p>
@@ -442,7 +456,7 @@ export default function SettingsView() {
                     <div className="button-row" style={{ marginTop: '12px', gap: '8px' }}>
                       <button
                         type="button"
-                        className="secondary"
+                        className="secondary m3e-button m3e-button--tonal"
                         onClick={handleTestConnection}
                         disabled={testingConnection || !postgresUri.trim()}
                         style={{ fontSize: '13px', padding: '8px 14px' }}
@@ -452,7 +466,7 @@ export default function SettingsView() {
 
                       <button
                         type="button"
-                        className="secondary"
+                        className="secondary m3e-button m3e-button--tonal"
                         onClick={handleManualSync}
                         disabled={syncingRuns || !postgresUri.trim()}
                         style={{ fontSize: '13px', padding: '8px 14px' }}
@@ -509,11 +523,10 @@ export default function SettingsView() {
               </section>
 
               {/* SAVE BUTTON CARD */}
-              <section className="card compact">
-                <div className="eyebrow">APPLY CHANGES</div>
+              <section className="card m3e-card m3e-card--outlined compact">
                 <h3>Save Configuration</h3>
                 <p>Changes take effect immediately across all handover sessions.</p>
-                <button type="submit" className="primary-action" disabled={savingSettings}>
+                <button type="submit" className="primary-action m3e-button" disabled={savingSettings}>
                   {savingSettings ? 'Saving to Backend...' : 'Save All Settings'} <span><Check size={16} aria-hidden="true" /></span>
                 </button>
               </section>
@@ -524,10 +537,9 @@ export default function SettingsView() {
         /* DEVELOPER PLACEHOLDER SETTINGS */
         <div className="grid">
           <div className="column">
-            <section className="card">
+            <section className="card m3e-card m3e-card--outlined">
               <div className="card-head">
                 <div>
-                  <div className="eyebrow">SUCCESSOR PREFERENCES</div>
                   <h2>Onboarding Profile</h2>
                   <p>Customise your developer workspace view and notifications.</p>
                 </div>
@@ -568,15 +580,14 @@ export default function SettingsView() {
           </div>
 
           <div className="column">
-            <section className="card compact trust">
-              <div className="eyebrow">ACCESS NOTICE</div>
+            <section className="card m3e-card m3e-card--outlined compact trust">
               <h3>Administrative Controls</h3>
               <p>
                 Inference providers, GitHub tokens, and database connections are managed by your team administrator (Jordan Rivera).
               </p>
               <button
                 type="button"
-                className="secondary"
+                className="secondary m3e-button m3e-button--tonal"
                 onClick={logout}
               >
                 Sign Out & Switch Account

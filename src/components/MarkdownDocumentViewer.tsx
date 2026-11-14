@@ -31,7 +31,6 @@ export default function MarkdownDocumentViewer({
         <div className="m3-doc-viewer-meta">
           <span className="m3-doc-icon"><FileText size={16} aria-hidden="true" /></span>
           <strong>{filename}</strong>
-          <span className="m3-doc-badge">Verified Document</span>
         </div>
 
         <div className="m3-doc-viewer-actions">

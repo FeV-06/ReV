@@ -26,6 +26,8 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "0.5.15",
+    "@kyralabs/m3e-css": "1.8.0",
+    "@kyralabs/m3e-tokens": "1.8.0",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "lucide-react": "^1.72.0",
     "next": "16.4.5",

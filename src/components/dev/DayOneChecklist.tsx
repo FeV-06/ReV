@@ -66,7 +66,6 @@ export default function DayOneChecklist({ projectId, initialTasks }: DayOneCheck
     <div className="m3-checklist-card">
       <div className="m3-checklist-header">
         <div>
-          <div className="eyebrow">DAY 1 ACTION PLAN</div>
           <h3>Priority Onboarding Checklist</h3>
           <p>Key responsibilities and verification tasks carried over from the departing engineer.</p>
         </div>

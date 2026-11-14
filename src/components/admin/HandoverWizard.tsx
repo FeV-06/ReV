@@ -1,7 +1,7 @@
 'use client';
 
 import DemoSpotlightTour, { type DemoTourTarget } from '@/components/demo/DemoSpotlightTour';
-import { Check, Circle, Lightbulb, Microscope, Pin, Rocket, Zap } from 'lucide-react';
+import { Check, Circle, Pin, Rocket, Zap } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { dayOneItems, generationFailurePrefix, sourceWarnings, suggestedAreas } from '@/lib/handover';
@@ -95,7 +95,7 @@ function LiveProcessingCard({ phase, elapsed }: { phase: string; elapsed: number
         )}
       </div>
       <div className="m3-processing-reassurance">
-        <Lightbulb size={16} aria-hidden="true" /> <strong>Zero Hallucinations Guarantee:</strong> ReV strictly validates exact substring matches against the source code before presenting any claims.
+        Check cited excerpts against their sources before approving.
       </div>
     </div>
   );
@@ -109,7 +109,7 @@ interface HandoverWizardProps {
 }
 
 export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail, initialRunId }: HandoverWizardProps) {
-  const { evalMode, setEvalMode, tourActive } = useAuth();
+  const { evalMode, tourActive, setTourActive } = useAuth();
   const [busyPhase, setBusyPhase] = useState<'idle' | 'importing' | 'generating'>('idle');
   const [elapsedTime, setElapsedTime] = useState(0);
   const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -381,12 +381,18 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
 
   async function patch(body: object, onError?: (message: string) => void) {
     if (!run) return;
-    if ((body as { action?: string }).action === 'generate') {
+    const action = (body as { action?: string }).action;
+    if (action === 'generate') {
       setBusyPhase('generating');
     }
     let updated: Run | undefined;
     await perform(async () => {
-      const data = await api(`/api/runs/${run.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      const endpoint = `/api/runs/${run.id}`;
+      if (action === 'prepare_interview' && run.mode === 'fixture' && hasPendingEdits) {
+        const saved = await api(endpoint, { method: 'PATCH', body: JSON.stringify({ action: 'save', items }) });
+        display(saved.run);
+      }
+      const data = await api(endpoint, { method: 'PATCH', body: JSON.stringify(body) });
       updated = data.run;
       display(data.run);
       if (graphEdges !== null) {
@@ -445,6 +451,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
       a.download = `rev-handover-${(run.departingPerson || 'project').toLowerCase()}.md`;
       a.click();
       URL.revokeObjectURL(url);
+      if (evalMode === 'demo') setTourActive(false);
     });
   }
 
@@ -494,7 +501,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
           setSyncingCloud(false);
         }
       } else {
-        setPublishedNotice('Published to Successor Portal (Local Sovereignty preserved in PGlite).');
+        setPublishedNotice('Published to the local Successor Portal.');
       }
 
       setTimeout(() => setPublishedNotice(''), 5000);
@@ -531,15 +538,15 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
     if (activeStage === 4) tourTarget = 'download';
   }
   const assignment = run && (
-    <form className="notice" onSubmit={event => {
+    <form className="notice" data-tour-detail="assignment" onSubmit={event => {
       event.preventDefault();
       void patch({ action: 'assign_successor', email: successorEmail.trim() || null });
     }}>
       <h3>Assign successor</h3>
-      <label>Successor email<input type="email" value={successorEmail} maxLength={254}
+      <label>Successor email<input data-tour-control type="email" value={successorEmail} maxLength={254}
         placeholder="alex.vance@team.internal" onChange={event => setSuccessorEmail(event.target.value)} /></label>
       <p className="footnote">Use the email they sign in with. Leave it blank to clear the assignment.</p>
-      <button type="submit" className="secondary" disabled={busy || JSON.stringify(items) !== JSON.stringify(run.items) || successorEmail.trim().toLowerCase() === (run.successorEmail ?? '')}>
+      <button type="submit" className="secondary m3e-button m3e-button--tonal" disabled={busy || JSON.stringify(items) !== JSON.stringify(run.items) || successorEmail.trim().toLowerCase() === (run.successorEmail ?? '')}>
         Save successor assignment
       </button>
       {run.successorEmail && <p role="status">Assigned to {run.successorEmail}</p>}
@@ -564,25 +571,12 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
       {/* Studio Header & Stepper */}
       <section className="hero">
         <div>
-          <div className="eyebrow">CREATION STUDIO · MATERIAL 3 EXPRESSIVE</div>
           <h1>
-            Knowledge, <em>carried forward.</em>
+            Create a handover
           </h1>
           <p>
             Capture scattered Git commits and Slack discussions, filter authorised evidence, review factual claims, and assign to your onboarding successor.
           </p>
-        </div>
-        <div className="hero-number">
-          0{activeStage} <span>/ 04</span>
-          <small>
-            {activeStage === 1
-              ? 'IMPORT SOURCES'
-              : activeStage === 2
-              ? 'SELECT SOURCES'
-              : activeStage === 3
-              ? 'REVIEW CLAIMS'
-              : 'EXPORT & ASSIGN'}
-          </small>
         </div>
       </section>
 
@@ -630,12 +624,11 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
           {/* SCREEN 1: CONNECT & IMPORT */}
           {activeStage === 1 && (
             <section
-              className="card entry-panel m3-wizard-screen m3-slide-in"
+              className="card m3e-card m3e-card--outlined entry-panel m3-wizard-screen m3-slide-in"
               aria-labelledby="screen-1-title"
             >
               <div className="card-head">
                 <div>
-                  <div className="eyebrow">01 / CONNECT</div>
                   <h2 id="screen-1-title">
                     {evalMode === 'live' ? 'Live GitHub & AST Engine' : 'Start a Handover Run'}
                   </h2>
@@ -651,18 +644,13 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
               {evalMode === 'live' ? (
                 /* LIVE ENGINE CARD */
                 <div className="m3-live-hero-card">
-                  <div className="m3-live-hero-header">
-                    <span className="m3-eval-pill live"><Microscope size={16} aria-hidden="true" /> LIVE ENGINE</span>
-                    <span className="m3-live-status-pill">● Daemon: Connected</span>
-                    <span className="m3-live-status-pill">● Reasoning: Deep AST Synthesis</span>
-                  </div>
-                  <h3>Public GitHub &amp; Tree-Sitter AST Analysis</h3>
+                  <h3>Import from GitHub</h3>
                   <p>
-                    Provide any public GitHub repository and contributor. The native Rust daemon will parse live Tree-Sitter AST code symbols and synthesize an evidence-grounded handover with verified code citations.
+                    Enter a repository and the departing contributor, or choose Slack and local Git sources below.
                   </p>
 
                   <div className="m3-presets-row">
-                    <span className="m3-presets-label">1-Click Benchmark Presets:</span>
+                    <span className="m3-presets-label">Example repositories</span>
                     <button
                       type="button"
                       className="m3-preset-chip"
@@ -723,13 +711,9 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
               ) : (
                 /* DEMO MODE HERO CARD */
                 <div className="m3-demo-hero-card">
-                  <div className="m3-demo-hero-header">
-                    <span className="m3-eval-pill demo"><Zap size={16} aria-hidden="true" /> INSTANT DEMO</span>
-                    <span className="m3-eval-subtag">0s Latency · Guided Walkthrough</span>
-                  </div>
-                  <h3>Pre-Verified Showcase Scenario</h3>
+                  <h3>Try a sample handover</h3>
                   <p>
-                    Loads a pre-verified session cache scenario with Tree-Sitter AST code symbols, exact citation verification, and Departure Interview generation running deterministically at zero latency.
+                    Use a sample project to select sources, review a draft, and prepare a departure interview.
                   </p>
                   {busy ? (
                     <LiveProcessingCard phase={busyPhase} elapsed={elapsedTime} />
@@ -737,43 +721,43 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     <div className="button-row" style={{ marginTop: '14px' }}>
                       <button
                         type="button"
-                        className="primary-action m3-demo-launch-btn"
+                        className="primary-action m3-demo-launch-btn m3e-button"
                         data-demo-spotlight={tourTarget === 'launch' ? tourTarget : undefined}
                         onClick={() => create(true)}
                       >
                         <Zap size={16} aria-hidden="true" /> Launch Instant Demo Run →
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => setEvalMode('live')}
-                      >
-                        <Microscope size={16} aria-hidden="true" /> Switch to Live Engine
                       </button>
                     </div>
                   )}
                 </div>
               )}
 
-              <div className="auth-guardrails">
-                {slack.workspace && <p>Slack workspace: <strong>{slack.workspace}</strong></p>}
-                <button type="button" className="secondary" disabled={slackBusy || busy} onClick={() => void connectSlack()}>
-                  {slack.workspace ? 'Reconnect Slack' : 'Connect Slack'}
-                </button>
+              <section className="slack-source-panel" data-tour-detail="slack" aria-labelledby="slack-source-heading">
+                <div className="slack-source-header">
+                  <div>
+                    <h3 id="slack-source-heading">Slack</h3>
+                    {slack.workspace && <p>Connected to <strong>{slack.workspace}</strong></p>}
+                  </div>
+                  <button type="button" className="secondary m3e-button m3e-button--tonal" disabled={slackBusy || busy} data-tour-control onClick={() => void connectSlack()}>
+                    {slack.workspace ? 'Reconnect Slack' : 'Connect Slack'}
+                  </button>
+                </div>
                 {slackError && <p role="status">{slackError}</p>}
                 {slack.workspace && (slack.channels.length ? (
                   <details open>
-                    <summary>Choose Slack channels ({slackIds.length} selected)</summary>
-                    <p className="footnote">Select up to five project channels. ReV checks recent messages when you import.</p>
+                    <summary>Choose Slack channels <span>{slackIds.length} of 5 selected</span></summary>
+                    <p>Select up to five channels to import recent messages and replies.</p>
+                    <div className="slack-channel-list">
                     {slack.channels.map(channel => (
                       <label className="check" key={channel.id}>
                         <input type="checkbox"
                           disabled={busy || !!file || (slackIds.length >= 5 && !slackIds.includes(channel.id))}
                           checked={slackIds.includes(channel.id)}
                           onChange={() => toggleSlackChannel(channel.id)}
-                        /> #{channel.name}
+                        /> <span>#{channel.name}</span>
                       </label>
                     ))}
+                    </div>
                   </details>
                 ) : <p>No channels found. Join a project channel in Slack and reload ReV.</p>)}
                 {sources.slack && !slack.workspace && (
@@ -783,9 +767,9 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     /> Import from configured Slack channels
                   </label>
                 )}
-              </div>
+              </section>
 
-              <details style={{ marginTop: '16px' }}>
+              <details data-tour-detail="setup" style={{ marginTop: '16px' }}>
                 <summary style={{ cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: '#5c6f66' }}>
                   Advanced source options (Local Git, Slack channels, ZIP archives)
                 </summary>
@@ -794,8 +778,8 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     authors={useGit && !repo ? sources.gitAuthors : []} repository={sources.localGit} />
 
                   <div className="button-row">
-                    <button type="button" className="secondary" aria-expanded={showSuccessor}
-                      aria-controls="initial-successor" onClick={() => setShowSuccessor(open => !open)}>
+                    <button type="button" className="secondary m3e-button m3e-button--tonal" aria-expanded={showSuccessor}
+                      data-tour-control aria-controls="initial-successor" onClick={() => setShowSuccessor(open => !open)}>
                       Assign successor
                     </button>
                   </div>
@@ -846,7 +830,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                   <div className="button-row" style={{ marginTop: '16px' }}>
                     <button
                       type="button"
-                      className="primary-action m3-live-submit-btn"
+                      className="primary-action m3-live-submit-btn m3e-button"
                       disabled={!repo.trim() && !slackIds.length && !useSlack && !file}
                       onClick={() => create(false)}
                     >
@@ -854,7 +838,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     </button>
                     <button
                       type="button"
-                      className="secondary"
+                      className="secondary m3e-button m3e-button--tonal"
                       onClick={() => create(true)}
                     >
                       <Zap size={16} aria-hidden="true" /> Run Instant Demo Instead
@@ -868,12 +852,11 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
           {/* SCREEN 2: SELECT SOURCES */}
           {activeStage === 2 && run && (
             <section
-              className="card m3-wizard-screen m3-slide-in"
+              className="card m3e-card m3e-card--outlined m3-wizard-screen m3-slide-in"
               aria-labelledby="screen-2-title"
             >
               <div className="card-head">
                 <div>
-                  <div className="eyebrow">02 / SELECT SOURCES</div>
                   <h2 id="screen-2-title">Choose what can be shared</h2>
                   <p>
                     Imported sources start unselected. Nothing is sent to a model until you confirm the recipient’s access.
@@ -906,11 +889,11 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
               )}
 
               {(run.departingPerson || run.githubUsername) && (
-                <div>
+                <div data-tour-detail="scope">
                   <label>
                     What are you taking over? <span className="muted">(optional)</span>
                     <input
-                      value={takeoverScope}
+                      data-tour-control value={takeoverScope}
                       onChange={e => setTakeoverScope(e.target.value)}
                       maxLength={400}
                       placeholder="e.g. Billing retries and alerts"
@@ -926,7 +909,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                         {areas.map(area => (
                           <button
                             type="button"
-                            className="secondary"
+                            className="secondary m3e-button m3e-button--tonal"
                             key={area}
                             onClick={() =>
                               setTakeoverScope(value =>
@@ -950,7 +933,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                 <div className="button-row">
                   <button
                     type="button"
-                    className="secondary"
+                    className="secondary m3e-button m3e-button--tonal"
                     disabled={busy || selectionWithCommits.length === selected.length || selectionWithCommits.length > 500}
                     onClick={() => void updateSelection(selectionWithCommits)}
                   >
@@ -1017,13 +1000,13 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                 <div className="button-row">
                   <button
                     type="button"
-                    className="secondary"
+                    className="secondary m3e-button m3e-button--tonal"
                     onClick={resetToNewRun}
                   >
                     ← Back to Connect
                   </button>
                   <button
-                    className="primary-action"
+                    className="primary-action m3e-button"
                     data-demo-spotlight={tourTarget === 'generate' ? tourTarget : undefined}
                     disabled={
                       !selected.length ||
@@ -1053,12 +1036,11 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
           {/* SCREEN 3: REVIEW CLAIMS */}
           {activeStage === 3 && run && ['needs_review', 'approved'].includes(run.state) && (
             <section
-              className="card m3-wizard-screen m3-slide-in"
+              className="card m3e-card m3e-card--outlined m3-wizard-screen m3-slide-in"
               aria-labelledby="screen-3-title"
             >
               <div className="card-head">
                 <div>
-                  <div className="eyebrow">03 / REVIEW</div>
                   <h2 id="screen-3-title">Make it yours</h2>
                   <p>Check the meaning, not just the citation. Editing a claim marks it unverified.</p>
                 </div>
@@ -1104,9 +1086,11 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
               )}
 
               {assignment}
-              <DepartureInterview key={run.id} run={run} busy={busy} hasUnsavedEdits={JSON.stringify(items) !== JSON.stringify(run.items)} patch={patch} shareIds={shareAnswers} toggleShare={toggleShare} />
-              {items.map(item => (
-                <div className="review-item" key={item.id}>
+              <div data-tour-detail="interview">
+                <DepartureInterview key={run.id} run={run} busy={busy} hasUnsavedEdits={hasPendingEdits} savesEditsOnPrepare={run.mode === 'fixture'} patch={patch} shareIds={shareAnswers} toggleShare={toggleShare} />
+              </div>
+              {items.map((item, index) => (
+                <div className="review-item" key={item.id} data-tour-detail={index === 0 ? "claims" : undefined}>
                   <div className="review-meta">
                     <strong>{item.category.replaceAll('_', ' ')}</strong>
                     <span className={`status-pill ${item.verification === 'validated_reference' ? 'valid' : 'uncertain'}`}>
@@ -1116,7 +1100,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                   <label>
                     Handover text
                     <textarea
-                      value={item.text}
+                      data-tour-control value={item.text}
                       onChange={e => updateItem(item.id, { text: e.target.value })}
                     />
                   </label>
@@ -1158,8 +1142,9 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                 <div className="button-row" style={{ marginTop: '12px', gap: '8px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
-                    className="secondary"
+                    className="secondary m3e-button m3e-button--tonal"
                     disabled={busy}
+                    data-tour-detail="gaps"
                     onClick={() => patch({ action: 'detect_gaps' })}
                     style={{ fontSize: '12px', padding: '6px 12px' }}
                   >
@@ -1167,7 +1152,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                   </button>
                   <button
                     type="button"
-                    className="secondary"
+                    className="secondary m3e-button m3e-button--tonal"
                     disabled={busy || run.selectedIds.length < 2 || !remote}
                     title={!remote ? 'Confirm remote model consent in Step 2 to compare divergence' : undefined}
                     onClick={() => patch({ action: 'detect_divergence', selectedIds: run.selectedIds, confirmRemote: true })}
@@ -1177,7 +1162,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                   </button>
                   <button
                     type="button"
-                    className="secondary"
+                    className="secondary m3e-button m3e-button--tonal"
                     disabled={busy}
                     onClick={() => void loadGraph()}
                     style={{ fontSize: '12px', padding: '6px 12px' }}
@@ -1205,7 +1190,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                             />
                             <button
                               type="button"
-                              className="secondary"
+                              className="secondary m3e-button m3e-button--tonal"
                               disabled={busy || !gapAnswers[gap.id]?.trim()}
                               onClick={() =>
                                 patch({
@@ -1243,7 +1228,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                             <div style={{ display: 'flex', gap: '6px' }}>
                               <button
                                 type="button"
-                                className="secondary"
+                                className="secondary m3e-button m3e-button--tonal"
                                 disabled={busy}
                                 onClick={() => patch({ action: 'graph_review', edgeId: edge.id, decision: 'confirmed' })}
                                 style={{ fontSize: '11px', padding: '4px 8px' }}
@@ -1252,7 +1237,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                               </button>
                               <button
                                 type="button"
-                                className="secondary"
+                                className="secondary m3e-button m3e-button--tonal"
                                 disabled={busy}
                                 onClick={() => patch({ action: 'graph_review', edgeId: edge.id, decision: 'rejected' })}
                                 style={{ fontSize: '11px', padding: '4px 8px' }}
@@ -1291,14 +1276,14 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                   <div className="button-row">
                     <button
                       type="button"
-                      className="secondary"
+                      className="secondary m3e-button m3e-button--tonal"
                       onClick={() => patch({ action: 'scope', selectedIds: selected })}
                       disabled={busy}
                     >
                       ← Back to Sources
                     </button>
                     <button
-                      className={hasPendingEdits ? 'primary-action' : 'secondary'}
+                      className={hasPendingEdits ? 'primary-action m3e-button' : 'secondary m3e-button m3e-button--tonal'}
                       data-demo-spotlight={tourTarget === 'save-review' ? tourTarget : undefined}
                       disabled={busy}
                       onClick={() => patch({ action: 'save', items })}
@@ -1306,7 +1291,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                       Save review
                     </button>
                     <button
-                      className={canApprove ? 'primary-action' : 'secondary'}
+                      className={canApprove ? 'primary-action m3e-button' : 'secondary m3e-button m3e-button--tonal'}
                       data-demo-spotlight={tourTarget === 'approve' ? tourTarget : undefined}
                       disabled={busy || !canApprove}
                       onClick={() => patch({ action: 'approve', confirmAuthorisation: true, interviewAnswerIds: pendingShareIds })}
@@ -1325,12 +1310,11 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
           {/* SCREEN 4: EXPORT & SUCCESSOR ASSIGNMENT */}
           {activeStage === 4 && run && (
             <section
-              className="card m3-wizard-screen m3-slide-in"
+              className="card m3e-card m3e-card--outlined m3-wizard-screen m3-slide-in"
               aria-labelledby="screen-4-title"
             >
               <div className="card-head">
                 <div>
-                  <div className="eyebrow">04 / EXPORT & ASSIGN</div>
                   <h2 id="screen-4-title">Handover approved & ready</h2>
                   <p>Knowledge verified against source evidence. Ready to share with the successor developer.</p>
                 </div>
@@ -1339,14 +1323,16 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
 
               {assignment}
               <DepartureInterview key={run.id} run={run} busy={busy} patch={patch} shareIds={shareAnswers} toggleShare={toggleShare} />
-              <BusFactorHeatmap runId={run.id} departingName={run.departingPerson || run.githubUsername} />
+              <div data-tour-detail="risk">
+                <BusFactorHeatmap runId={run.id} departingName={run.departingPerson || run.githubUsername} />
+              </div>
 
-              {pendingShareIds.length > 0 && <button type="button" className="primary-action" disabled={busy}
+              {pendingShareIds.length > 0 && <button type="button" className="primary-action m3e-button" disabled={busy}
                 onClick={() => patch({ action: 'approve', confirmAuthorisation: true, interviewAnswerIds: pendingShareIds })}>
                 Approve and share selected interview answers
               </button>}
 
-              <div className="m3-assignment-card">
+              <div className="m3-assignment-card" data-tour-detail="storage">
                 <div className="m3-assignment-grid">
                   <div>
                     <span className="m3-label-sm">DEPARTING CONTRIBUTOR</span>
@@ -1367,7 +1353,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
 
                 {/* Storage Sovereignty vs Cloud Sync Radio at Final Submission */}
                 <div style={{ marginTop: '18px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
-                  <div className="eyebrow" style={{ marginBottom: '8px' }}>STORAGE & SOVEREIGNTY TARGET</div>
+                  <div className="eyebrow" style={{ marginBottom: '8px' }}>Storage</div>
                   <div className="m3-storage-picker" style={{ gap: '8px' }}>
                     <label className={`m3-storage-option ${syncTarget === 'cloud' ? 'active' : ''}`} style={{ cursor: 'pointer', padding: '12px 14px' }}>
                       <input
@@ -1396,7 +1382,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                         onChange={() => setSyncTarget('local')}
                       />
                       <div>
-                        <strong>Keep Local Only (PGlite Sovereignty) {!hasSupabaseConfigured ? '(Active Mode)' : ' (Default)'}</strong>
+                        <strong>Keep on this computer {!hasSupabaseConfigured ? '(Active Mode)' : ' (Default)'}</strong>
                         <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#475569' }}>
                           Do not upload this handover during publishing. A later manual sync can still send it.
                         </p>
@@ -1408,15 +1394,16 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                 <div className="button-row" style={{ marginTop: '18px' }}>
                   <button
                     type="button"
-                    className="primary-action"
+                    className="primary-action m3e-button"
                     onClick={publishToDevPortal}
+                    data-tour-detail="publish"
                     disabled={syncingCloud}
                   >
                     {syncingCloud ? 'Syncing & Publishing...' : 'Publish to Successor Portal'}
                   </button>
                   <button
                     type="button"
-                    className="secondary"
+                    className="secondary m3e-button m3e-button--tonal"
                     data-demo-spotlight={tourTarget === 'download' ? tourTarget : undefined}
                     onClick={download}
                     disabled={busy}
@@ -1426,7 +1413,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                   {onBackToProjects && (
                     <button
                       type="button"
-                      className="secondary"
+                      className="secondary m3e-button m3e-button--tonal"
                       onClick={onBackToProjects}
                     >
                       ← Return to Projects
@@ -1434,7 +1421,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                   )}
                   <button
                     type="button"
-                    className="secondary"
+                    className="secondary m3e-button m3e-button--tonal"
                     onClick={resetToNewRun}
                   >
                     + New Handover
@@ -1483,28 +1470,10 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
 
         {/* Right Sidebar Column: Daemon & Workspace Runs */}
         <div className="column">
-          <div className="card compact m3-live-status-card" style={{ marginBottom: '16px', background: '#f7faf7', borderLeft: '3px solid #174a3d' }}>
-            <div className="eyebrow">DAEMON & CORE PIPELINE</div>
-            <h3 style={{ fontSize: '13px', color: '#174a3d', marginTop: '2px' }}>System Operational</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11px', color: '#3d5248', marginTop: '6px' }}>
-              <span>● Daemon: 127.0.0.1:3078 (Connected)</span>
-              <span>● Storage: PGlite Embedded Relational DB</span>
-              <span>● AST Parser: Tree-Sitter Core (crates/rev-core)</span>
-              <span>● Synthesis Engine: Grounded Reasoning</span>
-            </div>
-          </div>
+          <ProjectDashboard compact />
 
-          <details style={{ marginBottom: '16px' }}>
-            <summary style={{ fontSize: '12px', fontWeight: 600, color: '#5c6f66', cursor: 'pointer' }}>Local Workspace Project Registration</summary>
-            <div style={{ marginTop: '8px' }}>
-              <ProjectDashboard />
-            </div>
-          </details>
-
-          <section className="card compact">
-            <div className="eyebrow">YOUR WORKSPACE</div>
+          <section className="card m3e-card m3e-card--outlined compact">
             <h2>Recent runs</h2>
-            <p>Each run is a separate snapshot.</p>
             {runs.length === 0 ? (
               <div className="empty">
                 No handovers yet.<br />
@@ -1536,15 +1505,14 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
           </section>
 
           {run && (
-            <section className="card compact">
-              <div className="eyebrow">CURRENT RUN</div>
+            <section className="card m3e-card m3e-card--outlined compact">
               <h3>{run.recipient}</h3>
               {run.githubUsername && <p>Contributor: @{run.githubUsername}</p>}
               {run.targetRole && <p>Target role: {run.targetRole}</p>}
               <p>Status: <b>{run.state.replaceAll('_', ' ')}</b></p>
               <div className="button-row">
                 <button
-                  className="danger"
+                  className="danger m3e-button m3e-button--tonal"
                   disabled={busy}
                   onClick={() =>
                     perform(async () => {

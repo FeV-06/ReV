@@ -85,12 +85,9 @@ export default function DevDashboard() {
       {/* Welcome Hero */}
       <section className="hero">
         <div>
-          <div className="eyebrow">SUCCESSOR PORTAL · DAY 1 ONBOARDING</div>
-          <h1>
-            Welcome, <em>Alex.</em>
-          </h1>
+          <h1>My handovers</h1>
           <p>
-            Here are the verified knowledge packages and handover documents prepared for your transition into your new role.
+            Find your assigned handovers, Day 1 actions, and the evidence behind them.
           </p>
         </div>
         <div className="m3-dev-badge-card">
@@ -105,16 +102,15 @@ export default function DevDashboard() {
       {error && <div role="alert" className="error">{error}</div>}
 
       {/* Assigned Handovers Grid */}
-      <section className="card">
+      <section className="card m3e-card m3e-card--outlined">
         <div className="card-head">
           <div>
-            <div className="eyebrow">ASSIGNED HANDOVERS</div>
-            <h2>Your Onboarding Documentation</h2>
+            <h2>Assigned to you</h2>
             <p>
               Select a project handover to review Day 1 action items, operational architecture, and inspect evidence.
             </p>
           </div>
-          <span className="count">{runs.length} ASSIGNED</span>
+          <span className="count">{runs.length} assigned</span>
         </div>
 
         {loading ? (

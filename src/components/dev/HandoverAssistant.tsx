@@ -38,7 +38,7 @@ export default function HandoverAssistant({ run }: { run: Run }) {
     }
   }
 
-  return <section className="card handover-assistant" aria-labelledby="handover-assistant">
+  return <section className="card m3e-card m3e-card--outlined handover-assistant" aria-labelledby="handover-assistant">
     <h2 id="handover-assistant">Ask your handover assistant</h2>
     <p>Ask about decisions, next steps, or how something works. The assistant uses the approved project snapshot and shared interview answers.</p>
     {run.mode === 'fixture' && <p className="footnote">Synthetic demo. Replies are drawn from fixture records without AI inference.</p>}
@@ -62,7 +62,7 @@ export default function HandoverAssistant({ run }: { run: Run }) {
         <input type="checkbox" checked={remote} onChange={event => setRemote(event.target.checked)} />
         Allow this question and approved sources to be sent to the configured AI provider
       </label>}
-      <button className="primary-action" disabled={busy || !question.trim() || (run.mode !== 'fixture' && !remote)}>
+      <button className="primary-action m3e-button" disabled={busy || !question.trim() || (run.mode !== 'fixture' && !remote)}>
         {busy ? 'Looking for evidence…' : 'Ask assistant'}
       </button>
       {error && <p role="alert">{error}</p>}

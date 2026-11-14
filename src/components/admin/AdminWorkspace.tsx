@@ -76,7 +76,7 @@ export default function AdminWorkspace() {
         {viewMode === 'projects' && (
           <button
             type="button"
-            className="m3-primary-pill-btn"
+            className="m3-primary-pill-btn m3e-button"
             onClick={() => switchMode('wizard')}
           >
             <span>+</span> Start New Handover
@@ -99,7 +99,6 @@ export default function AdminWorkspace() {
         <div className="m3-guided-workspace">
           <DemoSpotlightTour target="studio" />
           <ProjectList
-            onStartNewHandover={() => switchMode('wizard')}
             onOpenRunInWizard={openRunInWizard}
           />
         </div>
