@@ -14,7 +14,8 @@ export default function SettingsView() {
   const [baseUrl, setBaseUrl] = useState('https://api.openai.com/v1');
   const [showKey, setShowKey] = useState(false);
   const [githubToken, setGithubToken] = useState('');
-  const [dbMode, setDbMode] = useState<'pglite' | 'supabase'>('pglite');
+  const [dbMode, setDbMode] = useState<'pglite' | 'supabase'>('supabase');
+  const [teamSyncStatus, setTeamSyncStatus] = useState<{ configured: boolean; url?: string; teamId?: string } | null>(null);
   const [postgresUri, setPostgresUri] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -51,6 +52,25 @@ export default function SettingsView() {
         }
       } catch {
         // Fall back to localStorage below
+      }
+
+      try {
+        const teamRes = await fetch('/api/team-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Rev-Request': '1' },
+          body: JSON.stringify({ action: 'status' }),
+        });
+        if (teamRes.ok) {
+          const teamData = await teamRes.json();
+          if (teamData?.result) {
+            setTeamSyncStatus(teamData.result);
+            if (teamData.result.configured) {
+              setDbMode('supabase');
+            }
+          }
+        }
+      } catch {
+        // Ignore team sync status check errors
       }
 
       try {
@@ -404,8 +424,8 @@ export default function SettingsView() {
                       onChange={() => setDbMode('supabase')}
                     />
                     <div>
-                      <strong>Remote Supabase / PostgreSQL</strong>
-                      <p>Connect to an external PostgreSQL database for persistent enterprise archiving.</p>
+                      <strong>Supabase Multi-Tenant Team Sync</strong>
+                      <p>Row-Level Security (RLS) cloud sync with smart incremental AST caching and permission-aware handovers.</p>
                     </div>
                   </label>
                 </div>
@@ -427,9 +447,9 @@ export default function SettingsView() {
                   >
                     <span style={{ fontSize: '18px' }}><Shield size={16} aria-hidden="true" /></span>
                     <div>
-                      <strong>Local storage</strong>
+                      <strong>Local sovereignty active</strong>
                       <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#15803d' }}>
-                        Handovers and graph events are stored locally. A manual cloud sync or configured external model can send data when requested.
+                        Handovers and graph events are stored strictly in local PGlite. No code, symbols, or handovers leave your machine without explicit action.
                       </p>
                     </div>
                   </div>
@@ -437,87 +457,54 @@ export default function SettingsView() {
 
                 {dbMode === 'supabase' && (
                   <div style={{ marginTop: '16px' }}>
-                    <label>
-                      Supabase / PostgreSQL Connection URI
-                      <input
-                        type="password"
-                        value={postgresUri}
-                        onChange={e => {
-                          setPostgresUri(e.target.value);
-                          setTestResult(null);
-                        }}
-                        placeholder="postgres://postgres.xxx:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres"
-                      />
-                      <span className="footnote">
-                        Connection pooling URI from Supabase Dashboard &gt; Project Settings &gt; Database.
-                      </span>
-                    </label>
+                    <div
+                      style={{
+                        padding: '14px 16px',
+                        borderRadius: '12px',
+                        background: teamSyncStatus?.configured ? '#ecfdf5' : 'var(--md-sys-color-surface-container-high, #f8fafc)',
+                        border: teamSyncStatus?.configured ? '1px solid #a7f3d0' : '1px solid var(--md-sys-color-outline-variant, #cbd5e1)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 600, fontSize: '14px', color: teamSyncStatus?.configured ? '#065f46' : 'inherit' }}>
+                          {teamSyncStatus?.configured ? '✓ Team Backend Connected' : 'Team Backend Not Connected'}
+                        </span>
+                        {teamSyncStatus?.configured && (
+                          <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '999px', background: '#d1fae5', color: '#065f46', fontWeight: 600 }}>
+                            RLS Enforced
+                          </span>
+                        )}
+                      </div>
 
-                    <div className="button-row" style={{ marginTop: '12px', gap: '8px' }}>
-                      <button
-                        type="button"
-                        className="secondary m3e-button m3e-button--tonal"
-                        onClick={handleTestConnection}
-                        disabled={testingConnection || !postgresUri.trim()}
-                        style={{ fontSize: '13px', padding: '8px 14px' }}
-                      >
-                        {testingConnection ? 'Testing Connection...' : 'Test Connection'}
-                      </button>
-
-                      <button
-                        type="button"
-                        className="secondary m3e-button m3e-button--tonal"
-                        onClick={handleManualSync}
-                        disabled={syncingRuns || !postgresUri.trim()}
-                        style={{ fontSize: '13px', padding: '8px 14px' }}
-                      >
-                        {syncingRuns ? 'Syncing...' : 'Sync Local Runs to Supabase'}
-                      </button>
+                      {teamSyncStatus?.configured ? (
+                        <div style={{ fontSize: '13px', color: '#047857' }}>
+                          <p style={{ margin: '2px 0' }}><strong>Project:</strong> {teamSyncStatus.url}</p>
+                          <p style={{ margin: '2px 0' }}><strong>Team ID:</strong> <code>{teamSyncStatus.teamId}</code></p>
+                          <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#065f46' }}>
+                            Your team sync is live with smart incremental AST caching. To preview or sync repositories and handovers, use the <strong>Team Sync</strong> panel at the top of this page.
+                          </p>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '13px', color: 'var(--md-sys-color-on-surface-variant, #64748b)' }}>
+                          <p style={{ margin: '2px 0 8px' }}>
+                            Sign in with your team credentials in the <strong>Team Sync</strong> panel above to automatically discover and connect your team in one click without manual database connection strings.
+                          </p>
+                          <button
+                            type="button"
+                            className="tsp-button tsp-button-primary"
+                            onClick={() => {
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            style={{ fontSize: '12px', padding: '6px 14px' }}
+                          >
+                            Go to Team Sync Setup ↑
+                          </button>
+                        </div>
+                      )}
                     </div>
-
-                    {testResult && (
-                      <div
-                        style={{
-                          marginTop: '12px',
-                          padding: '10px 14px',
-                          borderRadius: '10px',
-                          background: testResult.success ? '#ecfdf5' : '#fef2f2',
-                          color: testResult.success ? '#065f46' : '#991b1b',
-                          fontSize: '13px',
-                          border: testResult.success ? '1px solid #a7f3d0' : '1px solid #fecaca',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                        }}
-                      >
-                        <span>{testResult.success ? <Check size={16} aria-hidden="true" /> : <TriangleAlert size={16} aria-hidden="true" />}</span>
-                        <span>{testResult.message}</span>
-                      </div>
-                    )}
-
-                    {syncResult && (
-                      <div
-                        style={{
-                          marginTop: '10px',
-                          padding: '10px 14px',
-                          borderRadius: '10px',
-                          background: syncResult.success ? '#ecfdf5' : '#fef2f2',
-                          color: syncResult.success ? '#065f46' : '#991b1b',
-                          fontSize: '13px',
-                          border: syncResult.success ? '1px solid #a7f3d0' : '1px solid #fecaca',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                        }}
-                      >
-                        <span>{syncResult.success ? <Check size={16} aria-hidden="true" /> : <TriangleAlert size={16} aria-hidden="true" />}</span>
-                        <span>{syncResult.message}</span>
-                      </div>
-                    )}
-
-                    <p className="footnote" style={{ marginTop: '12px', color: '#6b7280' }}>
-                      <strong>Safe Fallback:</strong> If remote Supabase is unreachable or unconfigured, ReV continues operating seamlessly in local PGlite with zero interruption.
-                    </p>
                   </div>
                 )}
               </section>

@@ -5,7 +5,7 @@ import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { database, getRun } from '@/lib/server/store';
 import { inspectRoot } from '@/lib/server/projects';
-import { analyzeGitSymbols } from '@/lib/server/symbols';
+import { analyzeGitSymbols, analyzeGitRangeSymbols, type CommitSymbolsReport, type DiffSymbolsReport } from '@/lib/server/symbols';
 import { runSchema, type Run } from '@/lib/contracts';
 
 const exec = promisify(execFile);
@@ -15,7 +15,8 @@ export type CachedAnalysis = {
   projectKey: string;
   analyzerVersion: string;
   commit: string;
-  report: Awaited<ReturnType<typeof analyzeGitSymbols>>;
+  baseCommit?: string;
+  report: CommitSymbolsReport;
 };
 export type ShareableRun = { id: string; title: string; state: string; fingerprint: string; payload: Run; localFingerprint: string };
 
@@ -86,8 +87,101 @@ export async function analysisFromCache(projectKey: string, commit: string): Pro
   return result.rows[0]?.payload?.report ?? null;
 }
 
+export async function smartAnalyzeCommit(root: string, commit: string): Promise<CachedAnalysis['report']> {
+  let projectKey: string | null = null;
+  try {
+    const ident = await projectIdentity(root);
+    projectKey = ident.projectKey;
+  } catch {
+    // If no remote origin exists, fall back to direct analysis without caching
+    return analyzeGitSymbols(root, commit);
+  }
+
+  const cached = await analysisFromCache(projectKey, commit);
+  if (cached) return cached;
+
+  const env = {
+    ...process.env,
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null',
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_OPTIONAL_LOCKS: '0',
+  };
+
+  let baseCommit: string | null = null;
+  let baseReport: CommitSymbolsReport | null = null;
+
+  try {
+    const revListOutput = (await exec('git', ['-C', root, 'rev-list', '--topo-order', '-n', '50', `${commit}^`], { env, timeout: 10_000, maxBuffer: 32_768 })).stdout.trim();
+    const ancestors = revListOutput.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    for (const ancestor of ancestors) {
+      const found = await analysisFromCache(projectKey, ancestor);
+      if (found) {
+        baseCommit = ancestor;
+        baseReport = found;
+        break;
+      }
+    }
+  } catch {
+    // Root commit or unresolvable revision
+  }
+
+  let finalReport: CommitSymbolsReport;
+  if (baseCommit && baseReport) {
+    const range = await analyzeGitRangeSymbols(root, baseCommit, commit);
+    const fileMap = new Map<string, DiffSymbolsReport>();
+    for (const file of baseReport.files) {
+      fileMap.set(file.filePath, file);
+    }
+    for (const file of range.files) {
+      fileMap.set(file.filePath, file);
+    }
+    let authorName = 'Unknown';
+    let authorEmail = '';
+    let message = '';
+    try {
+      const metaRaw = (await exec('git', ['-C', root, 'log', '-1', '--format=%H%x1f%an%x1f%ae%x1f%s', commit], { env, timeout: 10_000 })).stdout.trim();
+      const parts = metaRaw.split('\x1f');
+      if (parts.length >= 4) {
+        authorName = parts[1];
+        authorEmail = parts[2];
+        message = parts[3];
+      }
+    } catch {}
+
+    finalReport = {
+      commitSha: commit,
+      authorName,
+      authorEmail,
+      message,
+      files: Array.from(fileMap.values()),
+    };
+  } else {
+    finalReport = await analyzeGitSymbols(root, commit);
+  }
+
+  const payload: CachedAnalysis = {
+    version: 1,
+    projectKey,
+    analyzerVersion: ANALYZER_VERSION,
+    commit,
+    baseCommit: baseCommit ?? undefined,
+    report: finalReport,
+  };
+
+  const db = await database();
+  await db.query(
+    `INSERT INTO team_analysis_cache (project_key, analyzer_version, commit_id, payload)
+     VALUES ($1, $2, $3, $4::jsonb)
+     ON CONFLICT (project_key, analyzer_version, commit_id) DO UPDATE SET payload=EXCLUDED.payload`,
+    [projectKey, ANALYZER_VERSION, commit, JSON.stringify(payload)],
+  );
+
+  return finalReport;
+}
+
 export async function getOrAnalyzeCommit(root: string, commit: string): Promise<CachedAnalysis['report']> {
-  return analyzeGitSymbols(root, commit);
+  return smartAnalyzeCommit(root, commit);
 }
 
 export async function pendingAnalysis(projectKey: string, teamId: string): Promise<CachedAnalysis[]> {

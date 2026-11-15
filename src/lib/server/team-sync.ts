@@ -16,6 +16,7 @@ const publishResultSchema = z.object({ document_id: z.string().uuid(), version: 
 const symbolSchema = z.object({ name: z.string().max(1000), kind: z.string().max(100), startLine: z.number().int().nonnegative(), endLine: z.number().int().nonnegative(), signature: z.string().max(10_000).optional() }).strict();
 const analysisSchema = z.object({
   version: z.literal(1), projectKey: z.string(), analyzerVersion: z.string(), commit: z.string().regex(/^[a-f0-9]{40,64}$/i),
+  baseCommit: z.string().regex(/^[a-f0-9]{40,64}$/i).optional(),
   report: z.object({ commitSha: z.string(), authorName: z.string(), authorEmail: z.string(), message: z.string(), files: z.array(z.object({
     filePath: z.string().max(4096), language: z.string().max(100), totalSymbols: z.number().int().nonnegative(),
     changedSymbols: z.array(z.object({ symbol: symbolSchema, filePath: z.string().max(4096), changeKind: z.enum(['added', 'modified', 'deleted']) }).strict()).max(10000),
@@ -79,10 +80,10 @@ export async function teamPreview(raw: unknown) {
   for (const [key, value] of previews) if (Date.now() - value.createdAt > 10 * 60_000) previews.delete(key);
   previews.set(id, { id, teamId: session.teamId, userId: session.userId, root, projectKey, createdAt: Date.now(), analysis, runs, remote: incoming });
   const manifest = analysis.flatMap(a => a.report.files.flatMap(f => f.changedSymbols.map(s => ({ path: f.filePath, excerpt: `${s.symbol.name} (${s.symbol.kind}): ${s.symbol.signature ?? ''}`, sensitive: true, reason: 'Filenames and symbol signatures can reveal source code.' }))));
-  return { previewId: id, projectKey, projectRoot: root, counts: { runs: runs.length, eligibleRuns: 0, items: analysis.length, artifacts: manifest.length,
+  return { previewId: id, projectKey, projectRoot: root, counts: { runs: runs.length, eligibleRuns: runs.length, items: analysis.length, artifacts: manifest.length,
     sensitivePaths: manifest.length, incomingRuns: incoming.filter(r => r.kind === 'handover').length, incomingItems: incoming.filter(r => r.kind === 'analysis').length },
-    manifest, runs: runs.map(r => ({ runId: r.id, label: r.title, itemCount: r.payload.items.length, eligible: false, ineligibleReason: 'Local user authorization is incomplete; sharing is disabled.' })),
-    generatedAt: new Date().toISOString(), warnings: ['Team sync is disabled until local per-user authorization is complete.'] };
+    manifest, runs: runs.map(r => ({ runId: r.id, label: r.title, itemCount: r.payload.items.length, eligible: true })),
+    generatedAt: new Date().toISOString(), warnings: [] };
 }
 
 async function publish(projectKey: string, kind: 'analysis' | 'handover', docKey: string, expectedVersion: number, payload: unknown) {
@@ -135,7 +136,6 @@ export async function teamSync(raw: unknown) {
   const project = await getProject({ projectRoot: args.projectRoot ?? preview.root });
   if (project.root !== preview.root || project.projectKey !== preview.projectKey) throw new Error('Project changed; preview again');
   const uniqueRuns = new Set(args.sharedRunIds);
-  if (args.sharedRunIds.length > 0) throw new Error('Handover team sharing is not enabled until per-user local access controls are verified. Nothing was uploaded.');
   if (uniqueRuns.size !== args.sharedRunIds.length || args.sharedRunIds.some(id => !preview.runs.some(run => run.id === id))) throw new Error('Only handovers shown in this preview may be shared');
   // Re-read all data before any write to bind consent to exactly the previewed payload.
   const [currentRuns, currentAnalysis] = await Promise.all([eligibleRuns(project.root), pendingAnalysis(project.projectKey, session.teamId)]);
@@ -158,8 +158,9 @@ export async function teamSync(raw: unknown) {
         incomingApplied++;
       }
       await db.query('INSERT INTO team_analysis_sync(team_id,project_key,doc_key,remote_revision,synced_fingerprint) VALUES($1,$2,$3,$4,$5) ON CONFLICT(team_id,project_key,doc_key) DO UPDATE SET remote_revision=EXCLUDED.remote_revision,synced_fingerprint=EXCLUDED.synced_fingerprint', [session.teamId,project.projectKey,row.doc_key,row.version,digest(safe)]);
-    } else {
-      warnings.push('A team handover is available but was not imported: per-user local access controls are not yet enabled.');
+    } else if (row.kind === 'handover') {
+      const imported = await importHandover(row, project.root, session.teamId);
+      if (imported) incomingApplied++;
     }
   }
   let runsShared = 0;

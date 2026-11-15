@@ -116,7 +116,7 @@ it('prepares cited interview questions and rejects unsupported successor answers
   try {
     await withProvider(body => {
       requests.push(body.messages[1].content);
-      const prepare = body.messages[0].content.startsWith('Prepare');
+      const prepare = body.messages[0].content.includes('departure interview question generator');
       return { choices: [{ message: { content: JSON.stringify({ items: prepare ? [
         { text: 'Missing evidence field' },
         { question: 'Fabricated context?', evidence: [{ sourceId, quote: 'Wrong quote' }] },

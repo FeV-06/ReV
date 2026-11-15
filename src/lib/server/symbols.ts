@@ -48,6 +48,13 @@ export interface CommitSymbolsReport {
   files: DiffSymbolsReport[];
 }
 
+export interface RangeSymbolsReport {
+  baseSha: string;
+  targetSha: string;
+  commitCount: number;
+  files: DiffSymbolsReport[];
+}
+
 export async function extractSymbols(source: string, filePath: string): Promise<FileSymbolsReport> {
   return (await callCore({
     op: 'extract_symbols',
@@ -71,4 +78,13 @@ export async function analyzeGitSymbols(repoPath: string, commitSha: string): Pr
     repoPath,
     commitSha,
   })) as CommitSymbolsReport;
+}
+
+export async function analyzeGitRangeSymbols(repoPath: string, baseSha: string, targetSha: string): Promise<RangeSymbolsReport> {
+  return (await callCore({
+    op: 'analyze_git_range_symbols',
+    repoPath,
+    baseSha,
+    targetSha,
+  })) as RangeSymbolsReport;
 }

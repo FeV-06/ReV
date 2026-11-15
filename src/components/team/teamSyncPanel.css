@@ -153,6 +153,8 @@
 
 .tsp-field input[type="text"],
 .tsp-field input[type="password"],
+.tsp-field input[type="email"],
+.tsp-field select,
 .tsp-field input[type="url"] {
   font-family: inherit;
   font-size: 0.875rem;
@@ -162,6 +164,30 @@
   background: var(--md-sys-color-surface);
   color: var(--md-sys-color-on-surface);
   width: min(420px, 100%);
+}
+
+.tsp-button-link {
+  background: transparent;
+  border: none;
+  color: var(--md-sys-color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  padding: 4px 0;
+  margin-top: 8px;
+  display: inline-block;
+}
+
+.tsp-team-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
 }
 
 .tsp-field input[type="checkbox"] {

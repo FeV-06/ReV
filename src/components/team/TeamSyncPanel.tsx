@@ -95,6 +95,9 @@ export interface TeamSyncPanelProps {
 // Component
 // ---------------------------------------------------------------------------
 
+const DEFAULT_SUPABASE_URL = 'https://kalmbkyxjfvatjsrjymh.supabase.co';
+const DEFAULT_SUPABASE_KEY = 'sb_publishable_HxXlx-lh0nfIBOVE62sH_w_nHJz7W-O';
+
 export function TeamSyncPanel(props: TeamSyncPanelProps): React.JSX.Element {
   const {
     transport: transportProp,
@@ -120,11 +123,19 @@ export function TeamSyncPanel(props: TeamSyncPanelProps): React.JSX.Element {
 
   // --- state ---------------------------------------------------------------
   const [form, setForm] = useState({
-    url: initialUrl,
-    publishableKey: '',
+    url: initialUrl || DEFAULT_SUPABASE_URL,
+    publishableKey: DEFAULT_SUPABASE_KEY,
     accessToken: '',
     teamId: initialTeamId,
   });
+  const [authMode, setAuthMode] = useState<'quick' | 'manual'>('quick');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loadingLogin, setLoadingLogin] = useState(false);
+  const [discoveredTeams, setDiscoveredTeams] = useState<Array<{ id: string; name: string; role: string }>>([]);
+  const [selectedDiscoveredTeam, setSelectedDiscoveredTeam] = useState('');
+  const [newTeamName, setNewTeamName] = useState('ReV Core Team');
+  const [showEndpointOptions, setShowEndpointOptions] = useState(false);
   const [preview, setPreview] = useState<TeamSyncPreviewResult | null>(null);
   const [status, setStatus] = useState<TeamSyncStatusResult | null>(null);
   const [runChecks, setRunChecks] = useState<Record<string, boolean>>({});
@@ -234,6 +245,156 @@ export function TeamSyncPanel(props: TeamSyncPanelProps): React.JSX.Element {
   }, [refreshStatus, scopeRoot]);
 
   // --- actions ---------------------------------------------------------------
+  const handleQuickSignIn = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      setLoadingLogin(true);
+      setError(null);
+      setNotice(null);
+
+      const targetUrl = form.url.trim() || DEFAULT_SUPABASE_URL;
+      const targetKey = form.publishableKey.trim() || DEFAULT_SUPABASE_KEY;
+
+      try {
+        const loginRes = await fetch(endpoint || '/api/team-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Rev-Request': '1' },
+          body: JSON.stringify({
+            action: 'login',
+            url: targetUrl,
+            publishableKey: targetKey,
+            email: email.trim(),
+            password,
+          }),
+        });
+        const loginData = await loginRes.json();
+        if (!loginRes.ok || !loginData.ok) {
+          throw new Error(loginData.error || 'Sign in failed');
+        }
+
+        const token = loginData.accessToken;
+        setForm(prev => ({ ...prev, accessToken: token, url: targetUrl, publishableKey: targetKey }));
+
+        // Now discover user's teams in Supabase
+        const teamsRes = await fetch(endpoint || '/api/team-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Rev-Request': '1' },
+          body: JSON.stringify({
+            action: 'list_teams',
+            url: targetUrl,
+            publishableKey: targetKey,
+            accessToken: token,
+          }),
+        });
+        const teamsData = await teamsRes.json();
+        const teams = teamsData.teams || [];
+        setDiscoveredTeams(teams);
+
+        if (teams.length === 1) {
+          // Exactly 1 team: automatic 1-click connect
+          const targetTeam = teams[0];
+          const configureRes = await run('configure', {
+            url: targetUrl,
+            publishableKey: targetKey,
+            accessToken: token,
+            teamId: targetTeam.id,
+          });
+          if (configureRes?.ok) {
+            setNotice(`Connected to ${targetTeam.name} (${targetTeam.role}).`);
+            onConfigure?.({ url: targetUrl, teamId: targetTeam.id });
+            void refreshStatus(scopeRoot);
+          }
+        } else if (teams.length > 1) {
+          setSelectedDiscoveredTeam(teams[0].id);
+          setNotice(`Found ${teams.length} teams. Choose your team below:`);
+        } else {
+          setNotice('Signed in! No existing teams found. Create your team below to finish connecting:');
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Sign in failed');
+      } finally {
+        setLoadingLogin(false);
+      }
+    },
+    [form.url, form.publishableKey, email, password, endpoint, run, onConfigure, refreshStatus, scopeRoot],
+  );
+
+  const handleSelectTeamAndConnect = useCallback(async () => {
+    if (!form.accessToken || !selectedDiscoveredTeam) return;
+    setLoadingLogin(true);
+    setError(null);
+    try {
+      const targetUrl = form.url.trim() || DEFAULT_SUPABASE_URL;
+      const targetKey = form.publishableKey.trim() || DEFAULT_SUPABASE_KEY;
+      const configureRes = await run('configure', {
+        url: targetUrl,
+        publishableKey: targetKey,
+        accessToken: form.accessToken,
+        teamId: selectedDiscoveredTeam,
+      });
+      if (configureRes?.ok) {
+        setNotice('Connected to team!');
+        onConfigure?.({ url: targetUrl, teamId: selectedDiscoveredTeam });
+        void refreshStatus(scopeRoot);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Team connection failed');
+    } finally {
+      setLoadingLogin(false);
+    }
+  }, [form.accessToken, selectedDiscoveredTeam, form.url, form.publishableKey, run, onConfigure, refreshStatus, scopeRoot]);
+
+  const handleCreateTeamAndConnect = useCallback(async () => {
+    if (!form.accessToken) return;
+    setLoadingLogin(true);
+    setError(null);
+    try {
+      const targetUrl = form.url.trim() || DEFAULT_SUPABASE_URL;
+      const targetKey = form.publishableKey.trim() || DEFAULT_SUPABASE_KEY;
+      const res = await fetch(endpoint || '/api/team-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Rev-Request': '1' },
+        body: JSON.stringify({
+          action: 'create_team',
+          url: targetUrl,
+          publishableKey: targetKey,
+          accessToken: form.accessToken,
+          teamName: newTeamName.trim() || 'ReV Core Team',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to create team');
+      const team = data.team;
+      const configureRes = await run('configure', {
+        url: targetUrl,
+        publishableKey: targetKey,
+        accessToken: form.accessToken,
+        teamId: team.id,
+      });
+      if (configureRes?.ok) {
+        setNotice(`Created and connected to ${team.name}!`);
+        onConfigure?.({ url: targetUrl, teamId: team.id });
+        void refreshStatus(scopeRoot);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Create team failed');
+    } finally {
+      setLoadingLogin(false);
+    }
+  }, [form.accessToken, form.url, form.publishableKey, newTeamName, endpoint, run, onConfigure, refreshStatus, scopeRoot]);
+
+  const handleDisconnect = useCallback(async () => {
+    setError(null);
+    setNotice(null);
+    const res = await run('disconnect', {});
+    if (res?.ok) {
+      setNotice('Disconnected from team backend.');
+      setDiscoveredTeams([]);
+      setForm(prev => ({ ...prev, accessToken: '' }));
+      void refreshStatus(scopeRoot);
+    }
+  }, [run, refreshStatus, scopeRoot]);
+
   const handleConfigure = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -435,32 +596,197 @@ export function TeamSyncPanel(props: TeamSyncPanelProps): React.JSX.Element {
 
       {/* --------------------------------------------- configure form ------- */}
       {showConfigureForm && (
-        <form className="tsp-card" onSubmit={event => void handleConfigure(event)} data-testid="tsp-configure">
-          <h3 className="tsp-card-title">Team backend</h3>
-          <p className="tsp-muted">
-            Supabase project URL, publishable (anon) key, and your own session token. The token is kept in memory
-            only — never stored, logged, or sent anywhere except to your configured backend during an action.
-          </p>
-          <div className="tsp-field">
-            <label htmlFor={urlId}>Project URL</label>
-            <input id={urlId} name="url" type="url" autoComplete="off" spellCheck={false} required placeholder="https://your-project.supabase.co" value={form.url} onChange={event => setForm(prev => ({ ...prev, url: event.target.value }))} />
+        <div className="tsp-card" data-testid="tsp-configure">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 className="tsp-card-title">Team backend</h3>
+            {status?.configured && (
+              <button type="button" className="tsp-button" disabled={busy} onClick={() => void handleDisconnect()}>
+                Disconnect
+              </button>
+            )}
           </div>
-          <div className="tsp-field">
-            <label htmlFor={keyId}>Publishable key</label>
-            <input id={keyId} name="publishableKey" type="password" autoComplete="off" spellCheck={false} required value={form.publishableKey} onChange={event => setForm(prev => ({ ...prev, publishableKey: event.target.value }))} />
-          </div>
-          <div className="tsp-field">
-            <label htmlFor={tokenId}>Session access token</label>
-            <input id={tokenId} name="accessToken" type="password" autoComplete="off" spellCheck={false} required value={form.accessToken} onChange={event => setForm(prev => ({ ...prev, accessToken: event.target.value }))} />
-          </div>
-          <div className="tsp-field">
-            <label htmlFor={teamIdId}>Team ID</label>
-            <input id={teamIdId} name="teamId" type="text" autoComplete="off" spellCheck={false} required value={form.teamId} onChange={event => setForm(prev => ({ ...prev, teamId: event.target.value }))} />
-          </div>
-          <button type="submit" className="tsp-button tsp-button-primary" disabled={busy}>
-            Apply configuration
-          </button>
-        </form>
+
+          {status?.configured ? (
+            <div style={{ marginTop: '10px' }}>
+              <div className="tsp-team-badge">
+                <span>✓ Connected to Supabase Team</span>
+                <code>{status.teamId}</code>
+              </div>
+              <p className="tsp-muted" style={{ marginTop: '8px' }}>
+                Your local daemon is authenticated and ready to preview and sync with the team knowledge base.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', gap: '8px', margin: '12px 0 16px' }}>
+                <button
+                  type="button"
+                  className={`tsp-button ${authMode === 'quick' ? 'tsp-button-primary' : ''}`}
+                  onClick={() => setAuthMode('quick')}
+                >
+                  ⚡ 1-Click Sign In
+                </button>
+                <button
+                  type="button"
+                  className={`tsp-button ${authMode === 'manual' ? 'tsp-button-primary' : ''}`}
+                  onClick={() => setAuthMode('manual')}
+                >
+                  ⚙️ Manual Token / SSO
+                </button>
+              </div>
+
+              {authMode === 'quick' ? (
+                <div>
+                  <form onSubmit={event => void handleQuickSignIn(event)}>
+                    <p className="tsp-muted">
+                      Sign in with your team Supabase account. ReV will authenticate your session, discover your team, and connect your daemon in one click.
+                    </p>
+                    <div className="tsp-field">
+                      <label htmlFor={`${idBase}-email`}>Email address</label>
+                      <input
+                        id={`${idBase}-email`}
+                        type="email"
+                        autoComplete="email"
+                        required
+                        placeholder="you@team.com"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                      />
+                    </div>
+                    <div className="tsp-field">
+                      <label htmlFor={`${idBase}-password`}>Password</label>
+                      <input
+                        id={`${idBase}-password`}
+                        type="password"
+                        autoComplete="current-password"
+                        required
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      className="tsp-button-link"
+                      onClick={() => setShowEndpointOptions(!showEndpointOptions)}
+                    >
+                      {showEndpointOptions ? '▴ Hide custom project URL' : '▾ Advanced project endpoint options'}
+                    </button>
+
+                    {showEndpointOptions && (
+                      <div style={{ marginTop: '8px', padding: '10px', background: 'var(--md-sys-color-surface-container)', borderRadius: '8px' }}>
+                        <div className="tsp-field">
+                          <label htmlFor={urlId}>Custom Project URL</label>
+                          <input
+                            id={urlId}
+                            name="url"
+                            type="url"
+                            value={form.url}
+                            onChange={event => setForm(prev => ({ ...prev, url: event.target.value }))}
+                          />
+                        </div>
+                        <div className="tsp-field">
+                          <label htmlFor={keyId}>Publishable Key</label>
+                          <input
+                            id={keyId}
+                            name="publishableKey"
+                            type="password"
+                            value={form.publishableKey}
+                            onChange={event => setForm(prev => ({ ...prev, publishableKey: event.target.value }))}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ marginTop: '14px' }}>
+                      <button
+                        type="submit"
+                        className="tsp-button tsp-button-primary"
+                        disabled={busy || loadingLogin}
+                      >
+                        {loadingLogin ? 'Connecting to Supabase…' : 'Sign in & Auto-Connect'}
+                      </button>
+                    </div>
+                  </form>
+
+                  {discoveredTeams.length > 1 && (
+                    <div style={{ marginTop: '16px', padding: '12px', border: '1px solid var(--md-sys-color-outline)', borderRadius: '8px' }}>
+                      <label style={{ fontWeight: 600, display: 'block', marginBottom: '6px' }}>Select Team</label>
+                      <div className="tsp-field">
+                        <select
+                          value={selectedDiscoveredTeam}
+                          onChange={e => setSelectedDiscoveredTeam(e.target.value)}
+                        >
+                          {discoveredTeams.map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.name} ({t.role}) — {t.id.slice(0, 8)}...
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        className="tsp-button tsp-button-primary"
+                        disabled={busy || loadingLogin}
+                        onClick={() => void handleSelectTeamAndConnect()}
+                      >
+                        Connect Selected Team
+                      </button>
+                    </div>
+                  )}
+
+                  {discoveredTeams.length === 0 && form.accessToken && (
+                    <div style={{ marginTop: '16px', padding: '12px', border: '1px solid var(--md-sys-color-outline)', borderRadius: '8px' }}>
+                      <label style={{ fontWeight: 600, display: 'block', marginBottom: '6px' }}>Create New Team</label>
+                      <div className="tsp-field">
+                        <input
+                          type="text"
+                          value={newTeamName}
+                          onChange={e => setNewTeamName(e.target.value)}
+                          placeholder="e.g. ReV Core Team"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="tsp-button tsp-button-primary"
+                        disabled={busy || loadingLogin}
+                        onClick={() => void handleCreateTeamAndConnect()}
+                      >
+                        Create Team & Connect
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <form onSubmit={event => void handleConfigure(event)}>
+                  <p className="tsp-muted">
+                    Manual token configuration. The access token is stored in memory only during this session.
+                  </p>
+                  <div className="tsp-field">
+                    <label htmlFor={urlId}>Project URL</label>
+                    <input id={urlId} name="url" type="url" autoComplete="off" spellCheck={false} required placeholder="https://your-project.supabase.co" value={form.url} onChange={event => setForm(prev => ({ ...prev, url: event.target.value }))} />
+                  </div>
+                  <div className="tsp-field">
+                    <label htmlFor={keyId}>Publishable key</label>
+                    <input id={keyId} name="publishableKey" type="password" autoComplete="off" spellCheck={false} required value={form.publishableKey} onChange={event => setForm(prev => ({ ...prev, publishableKey: event.target.value }))} />
+                  </div>
+                  <div className="tsp-field">
+                    <label htmlFor={tokenId}>Session access token</label>
+                    <input id={tokenId} name="accessToken" type="password" autoComplete="off" spellCheck={false} required value={form.accessToken} onChange={event => setForm(prev => ({ ...prev, accessToken: event.target.value }))} />
+                  </div>
+                  <div className="tsp-field">
+                    <label htmlFor={teamIdId}>Team ID</label>
+                    <input id={teamIdId} name="teamId" type="text" autoComplete="off" spellCheck={false} required value={form.teamId} onChange={event => setForm(prev => ({ ...prev, teamId: event.target.value }))} />
+                  </div>
+                  <button type="submit" className="tsp-button tsp-button-primary" disabled={busy}>
+                    Apply configuration
+                  </button>
+                </form>
+              )}
+            </>
+          )}
+        </div>
       )}
 
       {/* -------------------------------------------------- preview --------- */}

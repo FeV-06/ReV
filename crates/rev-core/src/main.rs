@@ -351,7 +351,17 @@ pub async fn generate(
     sources: &[Artifact],
     context: Option<&Value>,
 ) -> Result<Vec<Value>> {
-    generate_with_instructions(provider, base_url, model, key, sources, context, HANDOVER_SYNTHESIS_PROMPT, CandidateMode::Standard).await
+    generate_with_instructions(
+        provider,
+        base_url,
+        model,
+        key,
+        sources,
+        context,
+        HANDOVER_SYNTHESIS_PROMPT,
+        CandidateMode::Standard,
+    )
+    .await
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -773,6 +783,25 @@ pub async fn handle(input: Value) -> Result<Value> {
             Ok(serde_json::to_value(symbols::analyze_git_commit_symbols(
                 std::path::Path::new(repo),
                 commit_sha,
+            )?)?)
+        }
+        "analyze_git_range_symbols" => {
+            let repo = input
+                .get("repoPath")
+                .and_then(Value::as_str)
+                .context("Missing repoPath")?;
+            let base_sha = input
+                .get("baseSha")
+                .and_then(Value::as_str)
+                .context("Missing baseSha")?;
+            let target_sha = input
+                .get("targetSha")
+                .and_then(Value::as_str)
+                .context("Missing targetSha")?;
+            Ok(serde_json::to_value(symbols::analyze_git_range_symbols(
+                std::path::Path::new(repo),
+                base_sha,
+                target_sha,
             )?)?)
         }
         _ => bail!("Unknown operation"),

@@ -143,7 +143,7 @@ async function route(req:IncomingMessage,res:ServerResponse):Promise<void> {
     if (teamMode) {
       try { authority=await teamAuth.require(userCredential); }
       catch { json(res,401,{error:'Authentication required or team membership unavailable'});return; }
-      if (url.pathname.startsWith('/v1/projects') || url.pathname==='/v1/team-sync') {
+      if (url.pathname.startsWith('/v1/projects')) {
         json(res,403,{error:'Team project and sync access is not yet available'});return;
       }
     }

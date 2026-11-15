@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { database, createRun, getRun, closeDatabase } from '@/lib/server/store';
 import { ANALYZER_VERSION, digest, ensureTeamTables, projectIdentity, getOrAnalyzeCommit } from '@/lib/server/team-local';
-import { configureTeam, disconnectTeam, validateSupabaseProjectUrl } from '@/lib/server/team-remote';
+import { configureTeam, disconnectTeam, teamSessionStatus, validateSupabaseProjectUrl } from '@/lib/server/team-remote';
 import { teamPreview, teamSync } from '@/lib/server/team-sync';
 import type { Run } from '@/lib/contracts';
 
@@ -40,7 +40,7 @@ async function setupFixture() {
 
 afterAll(async () => { disconnectTeam(); vi.unstubAllGlobals(); await closeDatabase(); await rm(dbDir, { recursive:true, force:true }); });
 
-describe.skip('team sync boundaries — pending authenticated local access control', () => {
+describe('team sync boundaries — pending authenticated local access control', () => {
   beforeEach(setupFixture);
   it('refuses an authenticated user who is not a member of the requested team', async () => {
     const previousFetch = globalThis.fetch;
@@ -106,11 +106,12 @@ describe.skip('team sync boundaries — pending authenticated local access contr
   });
 });
 
-it('fails closed before contacting Supabase while local authorization is incomplete', async () => {
-  const fetchSpy = vi.fn();
+it('fails closed and rejects configuration when Supabase identity verification fails', async () => {
+  disconnectTeam();
+  const fetchSpy = vi.fn().mockResolvedValue(new Response('', { status: 401 }));
   vi.stubGlobal('fetch', fetchSpy);
-  await expect(configureTeam({ url:'https://example.supabase.co', publishableKey:'sb_publishable_test', accessToken:'session-token', teamId:team })).rejects.toThrow('disabled');
-  expect(fetchSpy).not.toHaveBeenCalled();
+  await expect(configureTeam({ url:'https://example.supabase.co', publishableKey:'sb_publishable_test', accessToken:'session-token', teamId:team })).rejects.toThrow();
+  expect(teamSessionStatus().connected).toBe(false);
 });
 
 it('restricts hosted Supabase authentication endpoints to the intended origin', () => {

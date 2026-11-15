@@ -649,6 +649,7 @@ pub fn analyze_git_commit_symbols(repo: &Path, commit_sha: &str) -> Result<Commi
         repo,
         &[
             "diff-tree",
+            "--root",
             "--no-commit-id",
             "--name-only",
             "-r",
@@ -674,7 +675,7 @@ pub fn analyze_git_commit_symbols(repo: &Path, commit_sha: &str) -> Result<Commi
 
         let diff_res = run_git(
             repo,
-            &["show", "--format=", "--patch", sha_clean, "--", file_path],
+            &["show", "--root", "--format=", "--patch", sha_clean, "--", file_path],
             5_000_000,
         );
         let diff = diff_res.unwrap_or_default();
@@ -688,6 +689,98 @@ pub fn analyze_git_commit_symbols(repo: &Path, commit_sha: &str) -> Result<Commi
         author_name,
         author_email,
         message,
+        files: reports,
+    })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RangeSymbolsReport {
+    pub base_sha: String,
+    pub target_sha: String,
+    pub commit_count: usize,
+    pub files: Vec<DiffSymbolsReport>,
+}
+
+pub fn analyze_git_range_symbols(
+    repo: &Path,
+    base_sha: &str,
+    target_sha: &str,
+) -> Result<RangeSymbolsReport> {
+    if !repo.is_dir() {
+        bail!("Invalid repository path");
+    }
+    let base_clean = base_sha.trim();
+    let target_clean = target_sha.trim();
+    if base_clean.len() < 7 || !base_clean.chars().all(|c| c.is_ascii_hexdigit()) {
+        bail!("Invalid base commit SHA");
+    }
+    if target_clean.len() < 7 || !target_clean.chars().all(|c| c.is_ascii_hexdigit()) {
+        bail!("Invalid target commit SHA");
+    }
+
+    let full_base = run_git(repo, &["rev-parse", base_clean], 256)?
+        .trim()
+        .to_string();
+    let full_target = run_git(repo, &["rev-parse", target_clean], 256)?
+        .trim()
+        .to_string();
+
+    let range_spec = format!("{full_base}..{full_target}");
+    let count_raw = run_git(repo, &["rev-list", "--count", &range_spec], 256)?;
+    let commit_count = count_raw.trim().parse::<usize>().unwrap_or(0);
+
+    let files_raw = run_git(
+        repo,
+        &[
+            "diff-tree",
+            "--no-commit-id",
+            "--name-only",
+            "-r",
+            &full_base,
+            &full_target,
+        ],
+        1_000_000,
+    )?;
+    let file_paths: Vec<&str> = files_raw
+        .lines()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let mut reports = Vec::new();
+
+    for file_path in file_paths {
+        let blob_arg = format!("{full_target}:{file_path}");
+        let source_res = run_git(repo, &["show", &blob_arg], 5_000_000);
+        let source = match source_res {
+            Ok(s) => s.into_bytes(),
+            Err(_) => Vec::new(),
+        };
+
+        let diff_res = run_git(
+            repo,
+            &[
+                "diff",
+                "--format=",
+                "--patch",
+                &full_base,
+                &full_target,
+                "--",
+                file_path,
+            ],
+            5_000_000,
+        );
+        let diff = diff_res.unwrap_or_default();
+
+        let report = analyze_file_diff_symbols(&source, &diff, file_path);
+        reports.push(report);
+    }
+
+    Ok(RangeSymbolsReport {
+        base_sha: full_base,
+        target_sha: full_target,
+        commit_count,
         files: reports,
     })
 }
@@ -818,5 +911,85 @@ export function computeProduct(a: number, b: number): number {
         let changed = &report.changed_symbols[0];
         assert_eq!(changed.symbol.name, "computeSum");
         assert_eq!(changed.change_kind, ChangeKind::Modified);
+    }
+
+    #[test]
+    fn test_analyze_git_range_symbols_on_git_repo() {
+        let repo_path =
+            std::env::temp_dir().join(format!("rev-range-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&repo_path).unwrap();
+
+        let run = |args: &[&str]| {
+            let status = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&repo_path)
+                .args(args)
+                .env("GIT_CONFIG_NOSYSTEM", "1")
+                .env(
+                    "GIT_CONFIG_GLOBAL",
+                    if cfg!(windows) { "NUL" } else { "/dev/null" },
+                )
+                .env("GIT_AUTHOR_NAME", "Test")
+                .env("GIT_AUTHOR_EMAIL", "test@example.com")
+                .env("GIT_COMMITTER_NAME", "Test")
+                .env("GIT_COMMITTER_EMAIL", "test@example.com")
+                .status()
+                .unwrap();
+            assert!(status.success());
+        };
+
+        run(&["init", "-q"]);
+        std::fs::write(repo_path.join("file.rs"), "pub fn alpha() -> i32 { 1 }\n").unwrap();
+        run(&["add", "file.rs"]);
+        run(&["commit", "-q", "-m", "commit 1"]);
+
+        let c1_output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&repo_path)
+            .args(&["rev-parse", "HEAD"])
+            .output()
+            .unwrap();
+        let c1 = String::from_utf8(c1_output.stdout)
+            .unwrap()
+            .trim()
+            .to_string();
+
+        std::fs::write(
+            repo_path.join("file.rs"),
+            "pub fn alpha() -> i32 { 2 }\npub fn beta() -> i32 { 3 }\n",
+        )
+        .unwrap();
+        run(&["add", "file.rs"]);
+        run(&["commit", "-q", "-m", "commit 2"]);
+
+        std::fs::write(repo_path.join("file.rs"), "pub fn alpha() -> i32 { 4 }\npub fn beta() -> i32 { 5 }\npub fn gamma() -> i32 { 6 }\n").unwrap();
+        run(&["add", "file.rs"]);
+        run(&["commit", "-q", "-m", "commit 3"]);
+
+        let c3_output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&repo_path)
+            .args(&["rev-parse", "HEAD"])
+            .output()
+            .unwrap();
+        let c3 = String::from_utf8(c3_output.stdout)
+            .unwrap()
+            .trim()
+            .to_string();
+
+        let report = analyze_git_range_symbols(&repo_path, &c1, &c3).unwrap();
+        assert_eq!(report.base_sha, c1);
+        assert_eq!(report.target_sha, c3);
+        assert_eq!(report.commit_count, 2);
+        assert_eq!(report.files.len(), 1);
+        assert_eq!(report.files[0].file_path, "file.rs");
+        let names: Vec<&str> = report.files[0]
+            .changed_symbols
+            .iter()
+            .map(|s| s.symbol.name.as_str())
+            .collect();
+        assert!(names.contains(&"alpha"));
+
+        let _ = std::fs::remove_dir_all(&repo_path);
     }
 }

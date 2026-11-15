@@ -15,7 +15,7 @@ import { z } from 'zod';
 // Actions + payloads (discriminated on `action`)
 // ---------------------------------------------------------------------------
 
-export type TeamSyncAction = 'configure' | 'preview' | 'sync' | 'status' | 'resolve';
+export type TeamSyncAction = 'configure' | 'preview' | 'sync' | 'status' | 'resolve' | 'disconnect';
 
 /** How to reconcile a detected conflict. Backend may not support `resolve`. */
 export type TeamSyncConflictChoice = 'keep_local' | 'use_incoming';
@@ -63,12 +63,17 @@ export interface TeamSyncResolvePayload {
   projectRoot?: string;
 }
 
+export interface TeamSyncDisconnectPayload {
+  action: 'disconnect';
+}
+
 export type TeamSyncRequest =
   | TeamSyncConfigurePayload
   | TeamSyncPreviewPayload
   | TeamSyncSyncPayload
   | TeamSyncStatusPayload
-  | TeamSyncResolvePayload;
+  | TeamSyncResolvePayload
+  | TeamSyncDisconnectPayload;
 
 // ---------------------------------------------------------------------------
 // Results (per action). None of these may carry credentials.
@@ -180,12 +185,17 @@ export interface TeamSyncResolveResult {
   warnings: string[];
 }
 
+export interface TeamSyncDisconnectResult {
+  connected: false;
+}
+
 export interface TeamSyncResultMap {
   configure: TeamSyncConfigureResult;
   preview: TeamSyncPreviewResult;
   sync: TeamSyncSyncResult;
   status: TeamSyncStatusResult;
   resolve: TeamSyncResolveResult;
+  disconnect: TeamSyncDisconnectResult;
 }
 
 export type TeamSyncResult<A extends TeamSyncAction = TeamSyncAction> = TeamSyncResultMap[A];
@@ -259,6 +269,9 @@ export const teamSyncPayloadSchemas = {
     conflictId: nonEmptyString,
     choice: z.enum(['keep_local', 'use_incoming']),
     projectRoot: z.string().min(1).optional(),
+  }),
+  disconnect: z.object({
+    action: z.literal('disconnect'),
   }),
 } as const;
 
@@ -362,6 +375,7 @@ export const teamSyncResultSchemas = {
   sync: syncResultSchema,
   status: statusResultSchema,
   resolve: resolveResultSchema,
+  disconnect: z.object({ connected: z.literal(false) }),
 } as const;
 
 /** Validates an outgoing request against the contract before it leaves the panel. */
