@@ -305,7 +305,17 @@ pub async fn generate(
     } else {
         instructions.to_owned()
     };
-    generate_with_instructions(provider, base_url, model, key, sources, context, &instructions, CandidateMode::Standard).await
+    generate_with_instructions(
+        provider,
+        base_url,
+        model,
+        key,
+        sources,
+        context,
+        &instructions,
+        CandidateMode::Standard,
+    )
+    .await
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -580,7 +590,10 @@ pub async fn handle(input: Value) -> Result<Value> {
             let model = std::env::var("REV_MODEL_NAME").context("Configure REV_MODEL_NAME")?;
             let key = std::env::var("REV_MODEL_API_KEY").ok();
             let context = input.get("context").or_else(|| input.get("handover"));
-            let compact_draft = input.get("compactDraft").and_then(Value::as_bool).unwrap_or(false);
+            let compact_draft = input
+                .get("compactDraft")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             Ok(
                 json!({"items":generate(&provider, &base, &model, key.as_deref(), &sources, context, compact_draft).await?}),
             )
