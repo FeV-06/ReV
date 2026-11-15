@@ -3059,6 +3059,11 @@ footer span { padding: 0 6px; }
 }
 
 .m3-eval-btn { width: 100%; justify-content: space-between; }
+.m3-eval-btn.m3-departing-launch {
+  background-color: #2760a8;
+  color: #fff;
+}
+.m3-eval-btn.m3-departing-launch:hover { background-color: #1f4d89; }
 
 .m3-eval-specs {
   display: flex;

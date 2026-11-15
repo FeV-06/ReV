@@ -216,7 +216,7 @@ export default function LoginView() {
                     </button>
                     <button
                       type="button"
-                      className="m3-eval-btn m3e-button m3e-button--outlined"
+                      className="m3-eval-btn m3e-button m3-departing-launch"
                       onClick={() => loginAsSuperuser('departing', 'demo')}
                       id="btn-eval-demo-departing"
                     >

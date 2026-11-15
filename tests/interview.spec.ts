@@ -45,7 +45,9 @@ test('successor assistant sends missing questions to the departing profile and r
     await expect(page.getByText('Added to the departure interview: ' + question)).toBeVisible();
     await signOut();
 
-    await page.getByRole('button', { name: 'Departing Teammate Profile', exact: true }).click();
+    const departingProfile = page.getByRole('button', { name: 'Departing Teammate Profile', exact: true });
+    await expect(departingProfile).toHaveCSS('background-color', 'rgb(39, 96, 168)');
+    await departingProfile.click();
     await expect(page.getByRole('button', { name: new RegExp(name) })).toHaveCount(0);
     await page.getByLabel('Contributor profile').selectOption('FeV06');
     await page.getByRole('button', { name: new RegExp(name) }).click();
