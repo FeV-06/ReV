@@ -1,9 +1,10 @@
 import type { Item, Run } from './contracts';
 
 export const generationFailurePrefix = 'Generation failed: ';
+export const layaNoticePrefix = 'Laya triage: ';
 
 export function sourceWarnings(warnings: string[]) {
-  return warnings.filter(warning => !warning.startsWith(generationFailurePrefix));
+  return warnings.filter(warning => !warning.startsWith(generationFailurePrefix) && !warning.startsWith(layaNoticePrefix));
 }
 
 export function suggestedAreas(run: Run): string[] {

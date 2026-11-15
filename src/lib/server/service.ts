@@ -11,7 +11,8 @@ import { attachVerifiedCitations } from '@/lib/server/citations';
 import { applyRefresh } from '@/lib/server/refresh';
 import { approveRun, assertRunAuthority, compareAndUpdate, createRefreshedRun, createRun, deleteRun, getRun, getVersionedRun, listRuns, type RunAuthority } from '@/lib/server/store';
 
-import { dayOneItems, generationFailurePrefix, sourceWarnings } from '@/lib/handover';
+import { dayOneItems, generationFailurePrefix, layaNoticePrefix, sourceWarnings } from '@/lib/handover';
+import { triageDraftSources } from '@/lib/server/laya-triage';
 import { slackChannelId } from '@/lib/server/slack';
 import { importLocalDocs, importLocalGit, importSlackChannels } from '@/lib/server/sources';
 
@@ -237,7 +238,9 @@ export async function updateAction(id: string, raw: unknown, authority?: RunAuth
     run.warnings = coverageWarnings;
     run.items = []; run.graphEpoch = randomUUID(); run.approvedRevision = null; run.revision++; run.state = 'reconstructing'; run.acceptedPartial = args.acceptPartial; version = await compareAndUpdate(run, version, authority);
     try {
-      const sources = run.artifacts.filter(a => args.selectedIds.includes(a.id)).map(a => artifactSchema.parse(a));
+      const selected = run.artifacts.filter(a => args.selectedIds.includes(a.id)).map(a => artifactSchema.parse(a));
+      const { sources, notice } = args.fixture ? { sources: selected, notice: undefined } : await triageDraftSources(selected, takeoverScope);
+      if (notice) run.warnings.push(`${layaNoticePrefix}${notice}`);
       const handoverContext = {
         githubUsername: run.githubUsername,
         targetRole: run.targetRole,
@@ -251,7 +254,8 @@ export async function updateAction(id: string, raw: unknown, authority?: RunAuth
         handover: (run.departingPerson || run.githubUsername || takeoverScope) ? handoverContext : undefined,
         context: handoverContext,
       }));
-      run.items = result.items.map(item => ({...item, derivationSourceIds: [...run.selectedIds]})); run.mode = args.fixture ? 'fixture' : 'model'; run.state = 'needs_review';
+      const derivationSourceIds = sources.length === selected.length ? run.selectedIds : sources.map(source => source.id);
+      run.items = result.items.map(item => ({...item, derivationSourceIds: [...derivationSourceIds]})); run.mode = args.fixture ? 'fixture' : 'model'; run.state = 'needs_review';
       run.graphEvents=[...(run.graphEvents||[]),...suggestEvidenceEdges(run)];
     } catch (error) { run.state = 'failed'; run.warnings.push(`${generationFailurePrefix}${error instanceof Error ? error.message : 'Unknown error'}`); await compareAndUpdate(run, version, authority); throw error; }
   } else if (args.action === 'save') {

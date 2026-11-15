@@ -1,12 +1,21 @@
 # ReV
 
-ReV is a local workspace for turning selected GitHub and Slack activity into an evidence-linked project handover. A separate, manually started Node daemon owns the local store and serves the current handover interface. A reviewer selects what a recipient may receive, checks the draft, and approves a Markdown export.
+ReV helps engineers hand a project to the next maintainer. It turns selected local Git, GitHub, and Slack evidence into a draft with quotes the reviewer can check. The reviewer can edit claims, ask the departing engineer for missing context, and approve a Markdown handover.
 
-**Round 2 MVP candidate.** See `VERIFICATION.md` for verified capabilities and remaining limitations. This is not multi-user software and does not automatically verify GitHub/Slack recipient access. The local operator is responsible for authorisation and review. Never expose this server to the internet or use real confidential data without permission.
+## Try the handover
+
+1. Open ReV and choose **Instant Demo** in the handover studio. It uses sample data and works without a model account.
+2. Select a few sources, confirm the recipient can see them, and generate a draft.
+3. Open a quote under a claim to see the evidence. Edit or exclude anything that the successor does not need.
+4. Save the review, approve the current version, and download the Markdown.
+
+For a real draft, switch to **Live Engine**, choose a local checkout or GitHub under **Git source**, and configure a model. Try a small set of sources first so you can compare the claims to the quotes. A `validated_reference` badge means ReV found the quote in the source. The reviewer decides whether it supports the claim.
+
+Read [How ReV works](docs/HOW_REV_WORKS.md) for a diagram and a plain-English explanation of the tools. [Verification notes](VERIFICATION.md) record the earlier Round 2 checkpoint. For Round 3, use the [three original commitments](ROUND2_EXECUTION_PLAN.md#25-the-three-commitments-for-round-3) and verify the current product before using it as submission evidence.
 
 ## Requirements
 
-- Node.js 22 or newer, pnpm 11, Rust and Cargo.
+- Node.js 22 or newer, pnpm (version pinned in `package.json`), Rust and Cargo.
 - Git for local checkout imports. GitHub access for remote repository imports. A read-only `REV_GITHUB_TOKEN` is optional for public repositories and required for private ones.
 - An OpenAI-compatible or Anthropic-compatible model endpoint for real generation. The synthetic example requires no account or model.
 
@@ -25,11 +34,11 @@ Keep the daemon running in that terminal. In another terminal in the same projec
 pnpm dev
 ```
 
-Open **http://127.0.0.1:3077**. Choose **Try synthetic example**, select sources, confirm recipient authorisation, generate the clearly marked fixture draft, review, approve, and download Markdown.
+Open [ReV on localhost](http://127.0.0.1:3077) and follow the walkthrough above.
 
 You can optionally specify the departing contributor's GitHub username (without `@`) and the incoming person's target role. Imported GitHub records with a directly linked matching account are marked in the source list; records with no account association are not guessed. This does not yet collect the contributor's complete history or resolve Git/Slack aliases. A role is context for generation, not an access permission; the operator still chooses and authorizes every source.
 
-For a production-style local build: run `pnpm build && pnpm start` in the second terminal with the daemon already running. Both processes must use the same `REV_DATA_DIR`; by default it is `.rev-data` relative to their working directory. The daemon binds only to `127.0.0.1:3078` and stores its ephemeral local credential in that data directory. Do not expose either process with a tunnel. The daemon does not yet install itself, start automatically, watch directories or support the VS Code extension. If a hard crash leaves a `daemon.lock` directory, startup fails closed: first independently verify no ReV daemon is running and back up the data directory, then inspect the recorded owner before manually removing the stale lock. Automatic crash recovery is not implemented.
+For a production-style local build, run `pnpm build` and then `pnpm start` in the second terminal with the daemon running. Both processes use the same `REV_DATA_DIR`, which defaults to `.rev-data` under the repo. The daemon listens on loopback port `3078`. See [Daemon lifecycle](docs/DAEMON_LIFECYCLE.md) for capture, startup, and lock recovery. Keep the local development instance private and use sample data in public demos.
 
 ## Start a handover from a cloned project
 
@@ -42,7 +51,8 @@ After installing ReV and building its Rust core, run `node /absolute/path/to/ReV
 
 ## Connect project sources
 
-- **Local Git.** ReV detects the checkout in its working directory. To use a different cloned project, set `REV_GIT_DIR` to its absolute path in `.env.local` and restart. Leave **Use local Git history** checked and click **Import sources**. ReV reads up to 100 commits reachable from the checkout's current HEAD, including their messages and author names. Enter a GitHub repository instead if you want the existing GitHub commit and PR import.
+- **Local Git.** Pick a registered checkout under **Git source**, or use the default checkout. Set `REV_GIT_DIR` in `.env.local` to change the default. ReV reads up to 100 commits reachable from the checkout's current HEAD. Use the exact name from the local Git history to filter by contributor.
+- **GitHub.** Choose the GitHub option under **Git source** and enter `owner/repo`, or click an example. GitHub also provides pull requests and comments. If it hits a rate limit, you can start a fresh import from a local clone to read commit history.
 - **Slack.** Open ReV at [localhost:3077](http://localhost:3077), click **Connect Slack**, and authorize read access in Slack. Back in ReV, pick up to five channels you belong to. ReV remembers your selections in the browser and reads up to 15 recent messages per selected channel on each import. Slack ZIP and server-configured bot imports remain available.
 
 To enable Slack sign-in for a local ReV installation, create or configure a Slack app with PKCE enabled. Add `http://localhost:3077/api/slack/callback` as its redirect URL. Add the user scopes `channels:read`, `channels:history`, `groups:read`, and `groups:history`. Set `REV_SLACK_CLIENT_ID` in `.env.local` and restart ReV. The local server stores the authorized connection separately from handover runs in the configured data directory. If your workspace requires app approval, complete that step in Slack.
@@ -61,7 +71,29 @@ Set these variables in `.env.local` in the ReV folder or export them before star
 
 Restart the daemon after changing its environment. The operator must explicitly consent before selected text is sent to the configured provider. Only configure endpoints you trust. The app does not send source data to a model until the recipient scope is selected and confirmed.
 
-GitHub import covers up to 200 recent commits, PRs, review comments and issue comments per category, plus an additional author-filtered commit fetch when a username is supplied; patch fetches are separately capped. Slack accepts standard channel/day JSON exports in a ZIP (10 MiB compressed, 40 MiB declared expanded, 500 messages) as well as authorized live Slack channels (up to 5 channels, 15 messages each). Full source files, full history, full Slack threads, automated ACL mapping and continuous monitoring are not implemented. An experimental per-run evidence graph and gap/divergence actions exist, but are not the full project graph or a validated contradiction detector. Model inputs are limited to 120 KB; select fewer sources if exceeded. A source quote match validates a reference, not the truth of a claim. Human review is required.
+GitHub caps the history and patches it fetches. Slack accepts standard channel/day JSON in a ZIP (up to 10 MiB compressed) and authorized live channels. **Select all** works for runs with up to 500 sources. If the provider returns an incomplete draft, ReV retries with a shorter reply request and may shorten the evidence input. Select fewer sources if the provider still cannot finish. The operator confirms what the recipient can access and reviews the claims before sharing.
+
+## Try Laya commit triage
+
+Laya checks selected local Git and GitHub commits for changes a successor needs to know about. It uses commit messages, changed paths, selected AST or patch evidence, and the takeover scope when available. It can skip routine edits such as formatting and generated-file churn. ReV keeps the original source records available for review.
+
+From the ReV checkout in PowerShell, set up Python 3.11 and download the model using a sample message:
+
+```powershell
+$layaEnv = Join-Path $env:LOCALAPPDATA 'ReV/laya-venv'
+py -3.11 -m venv $layaEnv
+$layaPython = Join-Path $layaEnv 'Scripts/python.exe'
+& $layaPython -m pip install 'laya==0.4.29' --extra-index-url https://download.pytorch.org/whl/cpu
+'["fix typo in docs"]' | & $layaPython scripts/laya-triage.py
+```
+
+Set `REV_LAYA_PYTHON` in ReV's `.env.local` to the absolute path of that `python.exe`, then restart ReV and any running ReV daemon. Draft generation uses the cached checkpoint in offline mode.
+
+1. Use a real local Git checkout with two commits by the same author. In one commit, fix a typo in `README.md` with the subject `fix typo in docs`. In the other, change code or record an important decision.
+2. Import and select both commits, then generate a draft with your configured model. The review screen reports how many commits were skipped and shows up to five of their subjects. Both commits remain in Sources. ReV keeps uncertain and truncated results and protects changes with explicit signals such as permissions, migrations, and open work.
+3. Point `REV_LAYA_PYTHON` at a missing executable and restart. Repeat the draft generation. The review screen should report that classification was unavailable, and generation should proceed with both commits.
+
+Run `pnpm exec vitest run tests/laya-triage.test.ts` to exercise the filtering and fallback with controlled classifier responses. To measure the benefit, label a set of real commits by hand and generate the same handovers with Laya enabled and disabled. Compare important commits missed, input size, and total elapsed time including Laya.
 
 ## Verify
 
@@ -83,6 +115,7 @@ Runs are stored in `.rev-data/` by default; `REV_DATA_DIR` changes the local sto
 - `src/daemon/`: local daemon entrypoint and authenticated API; `src/lib/server/` contains PGLite storage, orchestration and the dashboard's daemon client.
 - `src/lib/contracts.ts`, `contracts/`: shared data shapes.
 - `src/components/`: local review interface.
+- `editors/vscode/` and `src/mcp/`: editor and AI-client entry points for ReV workflows.
 - `fixtures/`: fictional data; fixture generation is not real AI inference.
 - `tests/`: unit and browser checks.
 
