@@ -4,15 +4,14 @@ import DemoSpotlightTour, { type DemoTourTarget } from '@/components/demo/DemoSp
 import { Check, Circle, Pin, Rocket, Zap } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { dayOneItems, generationFailurePrefix, sourceWarnings, suggestedAreas } from '@/lib/handover';
+import { dayOneItems, generationFailurePrefix, layaNoticePrefix, sourceWarnings, suggestedAreas } from '@/lib/handover';
 import { successorEmailSchema, type Item, type Run } from '@/lib/contracts';
 import ContributorField from '@/components/ContributorField';
 import DepartureInterview from '@/components/DepartureInterview';
 import BusFactorHeatmap from '@/components/admin/BusFactorHeatmap';
 import ProjectDashboard from '@/components/ProjectDashboard';
 import MarkdownDocumentViewer from '@/components/MarkdownDocumentViewer';
-
-type RunSummary = Pick<Run, 'id' | 'createdAt' | 'recipient' | 'state'>;
+import RecentRuns, { type RunSummary } from '@/components/RecentRuns';
 
 type RegisteredProject = { id: string; root: string; githubUsername: string };
 
@@ -120,11 +119,9 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
   const [takeoverScope, setTakeoverScope] = useState('');
   const [repo, setRepo] = useState('');
   // Workspace picker: choose a locally registered daemon project as the run's projectRoot.
-  // 'custom' means the raw absolute-path field below holds the value.
   const [projects, setProjects] = useState<RegisteredProject[]>([]);
   const [projectsError, setProjectsError] = useState('');
-  const [projectSelection, setProjectSelection] = useState<string>('');
-  const [customProjectRoot, setCustomProjectRoot] = useState('');
+  const [projectSelection, setProjectSelection] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [items, setItems] = useState<Item[]>([]);
@@ -136,7 +133,9 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
     gitAuthors: [],
     slack: false,
   });
-  const [useGit, setUseGit] = useState(true);
+  const selectedGitSource = projectSelection ?? projects[0]?.id ?? (sources.localGit ? 'local' : 'github');
+  const projectRoot = projects.find(project => project.id === selectedGitSource)?.root;
+  const useLocalGit = selectedGitSource === 'local' ? Boolean(sources.localGit) : Boolean(projectRoot);
   const [useSlack, setUseSlack] = useState(false);
   const [slack, setSlack] = useState<{ workspace: string | null; workspaceId?: string; channels: { id: string; name: string }[] }>({
     workspace: null,
@@ -358,7 +357,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
       if (!email.success) throw new Error('Enter a valid successor email or leave it blank.');
       if (!fixture && file && file.size > 10 * 1024 * 1024) throw new Error('Slack ZIP exceeds 10 MiB');
       const zipBase64 = !fixture && file ? await fileAsBase64(file) : undefined;
-      const cleanRepo = repo ? normalizeGitHubRepo(repo) : undefined;
+      const cleanRepo = selectedGitSource === 'github' && repo ? normalizeGitHubRepo(repo) : undefined;
       const result = await api('/api/runs', {
         method: 'POST',
         body: JSON.stringify({
@@ -369,8 +368,9 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
           repo: fixture ? undefined : cleanRepo || undefined,
           zipBase64,
           fixture,
-          localGit: !fixture && !!sources.localGit && useGit && !cleanRepo,
-          localDocs: !fixture && !!sources.localGit && useGit && !cleanRepo,
+          projectRoot: !fixture && useLocalGit ? projectRoot : undefined,
+          localGit: !fixture && useLocalGit,
+          localDocs: !fixture && useLocalGit,
           slackChannelIds: fixture || file ? [] : slackIds,
           connectedSlack: !fixture && sources.slack && useSlack && !file && !slackIds.length,
         }),
@@ -510,8 +510,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
     }
   }
 
-  const commitIds = run?.artifacts.filter(source => source.kind === 'git_commit' || source.kind === 'git_document' || source.kind === 'github_commit').map(source => source.id) ?? [];
-  const selectionWithCommits = [...new Set([...selected, ...commitIds])];
+  const allSourceIds = run?.artifacts.map(source => source.id) ?? [];
   const coverageWarnings = sourceWarnings(run?.warnings ?? []);
   const generationFailure = run?.warnings.filter(warning => warning.startsWith(generationFailurePrefix)).at(-1);
   const areas = run ? suggestedAreas(run) : [];
@@ -644,10 +643,16 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
               {evalMode === 'live' ? (
                 /* LIVE ENGINE CARD */
                 <div className="m3-live-hero-card">
-                  <h3>Import from GitHub</h3>
-                  <p>
-                    Enter a repository and the departing contributor, or choose Slack and local Git sources below.
-                  </p>
+                  <h3>Choose a Git source</h3>
+                  <label>
+                    Git source
+                    <select className="m3-select" value={selectedGitSource} onChange={event => setProjectSelection(event.target.value)}>
+                      {projects.map(project => <option key={project.id} value={project.id}>Local: {project.root}</option>)}
+                      {sources.localGit && <option value="local">Local: {sources.localGit} (default checkout)</option>}
+                      <option value="github">GitHub repository or Slack only</option>
+                    </select>
+                  </label>
+                  {projectsError && <p role="status">{projectsError}</p>}
 
                   <div className="m3-presets-row">
                     <span className="m3-presets-label">Example repositories</span>
@@ -655,6 +660,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                       type="button"
                       className="m3-preset-chip"
                       onClick={() => {
+                        setProjectSelection('github');
                         setRepo('KingSahil/Blinky');
                         setDepartingPerson('KingSahil');
                         setTargetRole('Lead Systems Engineer');
@@ -666,6 +672,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                       type="button"
                       className="m3-preset-chip"
                       onClick={() => {
+                        setProjectSelection('github');
                         setRepo('FeV-06/ReV');
                         setDepartingPerson('FeV-06');
                         setTargetRole('Full-Stack Architect');
@@ -675,6 +682,14 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     </button>
                   </div>
 
+                  {useLocalGit ? (
+                    <>
+                      <ContributorField value={departingPerson} onChange={setDepartingPerson}
+                        authors={selectedGitSource === 'local' ? sources.gitAuthors : []}
+                        repository={projectRoot ?? sources.localGit} />
+                      <p className="footnote">Enter the name used in local Git commits, or leave it blank to import commits from all authors.</p>
+                    </>
+                  ) : selectedGitSource === 'github' && (
                   <div className="m3-field-stack">
                     <label>
                       Public GitHub Repository <span className="muted">(full URL or owner/repo)</span>
@@ -696,16 +711,14 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                       />
                     </label>
 
-                    <label>
-                      Target Role <span className="muted">optional</span>
-                      <input
-                        value={targetRole}
-                        onChange={e => setTargetRole(e.target.value)}
-                        placeholder="e.g. Lead Systems Engineer"
-                        maxLength={120}
-                      />
-                    </label>
                   </div>
+                  )}
+
+                  <label>
+                    Target role <span className="muted">optional</span>
+                    <input value={targetRole} onChange={e => setTargetRole(e.target.value)}
+                      placeholder="e.g. Lead Systems Engineer" maxLength={120} />
+                  </label>
 
                 </div>
               ) : (
@@ -771,12 +784,9 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
 
               <details data-tour-detail="setup" style={{ marginTop: '16px' }}>
                 <summary style={{ cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: '#5c6f66' }}>
-                  Advanced source options (Local Git, Slack channels, ZIP archives)
+                  Advanced options (successor and Slack ZIP)
                 </summary>
                 <div style={{ paddingTop: '12px' }}>
-                  <ContributorField value={departingPerson} onChange={setDepartingPerson}
-                    authors={useGit && !repo ? sources.gitAuthors : []} repository={sources.localGit} />
-
                   <div className="button-row">
                     <button type="button" className="secondary m3e-button m3e-button--tonal" aria-expanded={showSuccessor}
                       data-tour-control aria-controls="initial-successor" onClick={() => setShowSuccessor(open => !open)}>
@@ -790,28 +800,6 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     </label>
                     <p className="footnote">Use their sign-in email. The assignment is saved when you start the run.</p>
                   </div>
-
-                  <label>
-                    Target role <span className="muted">optional</span>
-                    <input
-                      value={targetRole}
-                      onChange={e => setTargetRole(e.target.value)}
-                      maxLength={120}
-                      placeholder="Senior backend engineer"
-                    />
-                  </label>
-
-                  {sources.localGit && (
-                    <label className="check">
-                      <input
-                        type="checkbox"
-                        checked={useGit && !repo}
-                        disabled={!!repo || busy}
-                        onChange={e => setUseGit(e.target.checked)}
-                      />{' '}
-                      Use matching local Git commits and committed project docs from {sources.localGit}
-                    </label>
-                  )}
 
                   <label>
                     Slack export ZIP <span className="muted">optional · max 10 MiB</span>
@@ -831,7 +819,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     <button
                       type="button"
                       className="primary-action m3-live-submit-btn m3e-button"
-                      disabled={!repo.trim() && !slackIds.length && !useSlack && !file}
+                      disabled={!useLocalGit && !(selectedGitSource === 'github' && repo.trim()) && !slackIds.length && !useSlack && !file}
                       onClick={() => create(false)}
                     >
                       <Rocket size={16} aria-hidden="true" /> Ingest &amp; Parse AST Symbols →
@@ -929,18 +917,18 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                 </div>
               )}
 
-              {commitIds.length > 0 && (
+              {allSourceIds.length > 0 && (
                 <div className="button-row">
                   <button
                     type="button"
                     className="secondary m3e-button m3e-button--tonal"
-                    disabled={busy || selectionWithCommits.length === selected.length || selectionWithCommits.length > 500}
-                    onClick={() => void updateSelection(selectionWithCommits)}
+                    disabled={busy || allSourceIds.length === selected.length || allSourceIds.length > 500}
+                    onClick={() => void updateSelection(allSourceIds)}
                   >
-                    Select commits and repository docs
+                    Select all
                   </button>
-                  {selectionWithCommits.length > 500 && (
-                    <small>Clear other sources to stay within the 500-source limit.</small>
+                  {allSourceIds.length > 500 && (
+                    <small>This run has more than 500 sources. Select up to 500 individually.</small>
                   )}
                 </div>
               )}
@@ -1046,6 +1034,10 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                 </div>
                 <span className="count">{items.length} ITEMS</span>
               </div>
+
+              {run.warnings.filter(warning => warning.startsWith(layaNoticePrefix)).map(warning => (
+                <p key={warning} role="status">{warning}</p>
+              ))}
 
               {run.departingPerson && !scopeChanged && (
                 <div className="notice">
@@ -1474,34 +1466,11 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
 
           <section className="card m3e-card m3e-card--outlined compact">
             <h2>Recent runs</h2>
-            {runs.length === 0 ? (
-              <div className="empty">
-                No handovers yet.<br />
-                <span>Start a run or try the example.</span>
-              </div>
-            ) : (
-              <div className="runs">
-                {runs.map(r => (
-                  <button
-                    className="run-row"
-                    key={r.id}
-                    onClick={() =>
-                      perform(async () => {
-                        const d = await api(`/api/runs/${r.id}`);
-                        display(d.run);
-                        if (onSelectRunForDetail) onSelectRunForDetail(d.run);
-                      })
-                    }
-                  >
-                    <span>
-                      <b>{r.recipient}</b>
-                      <small>{new Date(r.createdAt).toLocaleString()}</small>
-                    </span>
-                    <span className="run-state">{r.state.replaceAll('_', ' ')}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            <RecentRuns runs={runs} onSelect={id => perform(async () => {
+              const d = await api(`/api/runs/${id}`);
+              display(d.run);
+              onSelectRunForDetail?.(d.run);
+            })} />
           </section>
 
           {run && (

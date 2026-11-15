@@ -10,8 +10,16 @@ export const settingsSchema = z.object({
   modelName: z.string().max(200).default('gpt-4o'),
   baseUrl: z.string().max(500).default('https://api.openai.com/v1'),
   githubToken: z.string().max(500).default(''),
+  slackToken: z.string().max(500).default(''),
+  slackChannelId: z.string().max(200).default(''),
   dbMode: z.enum(['pglite', 'supabase']).default('pglite'),
   postgresUri: z.string().max(1000).default(''),
+  editorPreference: z.string().max(100).default('vscode'),
+  localRepoPath: z.string().max(1000).default(''),
+  citationTarget: z.enum(['github', 'local_ide']).default('github'),
+  diffViewMode: z.enum(['split', 'unified']).default('split'),
+  exportFormat: z.enum(['markdown', 'pdf', 'json']).default('markdown'),
+  emailAlerts: z.boolean().default(true),
 });
 
 export type SystemSettings = z.infer<typeof settingsSchema>;
@@ -65,6 +73,7 @@ export async function getEffectiveCoreEnv(): Promise<NodeJS.ProcessEnv> {
       || (process.env.REV_MODEL_API_KEY?.startsWith('gsk_') ? process.env.REV_MODEL_API_KEY : '');
   }
   if (settings.githubToken.trim()) env.REV_GITHUB_TOKEN = settings.githubToken.trim();
+  if (settings.slackToken.trim()) env.SLACK_BOT_TOKEN = settings.slackToken.trim();
 
   return env;
 }

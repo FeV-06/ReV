@@ -11,10 +11,11 @@ async function resolveDaemonState(): Promise<{ port: number; token: string }> {
   const candidateDirs: string[] = [];
   if (process.env.REV_DATA_DIR) {
     candidateDirs.push(path.resolve(process.env.REV_DATA_DIR));
+  } else {
+    candidateDirs.push(path.resolve('.rev-data'));
+    candidateDirs.push(path.resolve('/home/fev/GitRepos/ReV-team-sync/.rev-data'));
+    candidateDirs.push(path.join(homedir(), '.rev-data'));
   }
-  candidateDirs.push(path.resolve('.rev-data'));
-  candidateDirs.push(path.resolve('/home/fev/GitRepos/ReV-team-sync/.rev-data'));
-  candidateDirs.push(path.join(homedir(), '.rev-data'));
 
   for (const dir of candidateDirs) {
     const metaPath = path.join(dir, 'daemon.json');

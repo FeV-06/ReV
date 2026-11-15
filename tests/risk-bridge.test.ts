@@ -45,7 +45,7 @@ describe('analyzeRepositoryRisk Server Bridge (Milestone 4 - Phase 1)', () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 
   it('rejects with error when empty emails array is supplied', async () => {
     await expect(

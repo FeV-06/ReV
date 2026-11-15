@@ -92,7 +92,7 @@ function makeFakeWebview() {
       disposeHandlers.push(cb);
       return { dispose: () => disposeHandlers.splice(disposeHandlers.indexOf(cb), 1) };
     }),
-    asWebviewUri: vi.fn((uri: { fsPath: string }) => `https://webview.internal${uri.fsPath}`),
+    asWebviewUri: vi.fn((uri: { fsPath: string }) => `https://webview.internal${uri.fsPath.replaceAll('\\', '/')}`),
   };
   return {
     webview,

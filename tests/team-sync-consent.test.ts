@@ -1,16 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:net';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 
-// Covers the safe explicit cloud-sync contract end to end:
-//  - no consent (missing confirmSync)  => no upload, 403
-//  - per-operation explicit consent    => sync reaches a controlled local connection failure
-//  - testOnly                          => connection check only, no consent needed
-//  - wizard defaults to local storage; UI never stores a standing sync permission
+// Legacy bulk sync is disabled while authenticated, per-run team sharing is separate.
 const root = process.cwd();
 let dataDir = '';
 let daemon: ChildProcess | undefined;
@@ -58,10 +53,6 @@ async function request(route: string, method = 'GET', body?: object, extra: Reco
 }
 
 /** Fails the connection attempt so sync never reaches a real server. */
-function bogusConnectionString(): string {
-  return `postgresql://127.0.0.1:1/rev_no_such_db_${randomUUID()}`;
-}
-
 beforeAll(async () => {
   dataDir = await mkdtemp(path.join(tmpdir(), 'rev-team-sync-'));
   await start();
@@ -71,48 +62,27 @@ afterAll(async () => {
   if (dataDir) await rm(dataDir, { recursive: true, force: true });
 }, 20_000);
 
-describe('daemon-owned Supabase sync fails closed (Rule 7)', () => {
-  it('permanently disables legacy bulk sync with 403 and never touches the network', async () => {
+describe('disabled legacy Supabase sync', () => {
+  it('refuses legacy requests without contacting the configured database', async () => {
     let connections = 0;
     const server: Server = createServer(socket => { connections++; socket.destroy(); });
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     try {
       const address = server.address();
       if (!address || typeof address === 'string') throw new Error('No local test address');
-      const response = await request('/v1/sync/supabase', 'POST', {
-        connectionString: `postgresql://127.0.0.1:${address.port}/rev_fixture`,
-      });
-      expect(response.status).toBe(403);
-      const data = await response.json() as { success?: boolean; error?: string };
-      expect(data.success).toBe(false);
-      expect(data.error).toContain('Legacy bulk sync is disabled');
+      const connectionString = 'postgresql://127.0.0.1:' + address.port + '/rev_fixture';
+      for (const options of [{}, { confirmSync: false }, { confirmSync: true }, { testOnly: true }]) {
+        const response = await request('/v1/sync/supabase', 'POST', { connectionString, ...options });
+        expect(response.status).toBe(403);
+        expect(await response.json()).toMatchObject({
+          success: false,
+          error: expect.stringContaining('Legacy bulk sync is disabled'),
+        });
+      }
       expect(connections).toBe(0);
     } finally {
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     }
-    // Any consent attempt is equally refused with 403 fail-closed.
-    const res1 = await request('/v1/sync/supabase', 'POST', { connectionString: bogusConnectionString(), confirmSync: false });
-    expect(res1.status).toBe(403);
-    const res2 = await request('/v1/sync/supabase', 'POST', { connectionString: bogusConnectionString(), confirmSync: true });
-    expect(res2.status).toBe(403);
-  });
-
-  it('fails closed even when testOnly or confirmSync is present', async () => {
-    const testOnlyRes = await request('/v1/sync/supabase', 'POST', {
-      testOnly: true,
-      connectionString: bogusConnectionString(),
-    });
-    expect(testOnlyRes.status).toBe(403);
-    const testData = await testOnlyRes.json() as { success: boolean; error?: string };
-    expect(testData.success).toBe(false);
-    expect(testData.error).toContain('Legacy bulk sync is disabled');
-
-    const runSyncRes = await request('/v1/sync/supabase', 'POST', {
-      runId: randomUUID(),
-      connectionString: bogusConnectionString(),
-      confirmSync: true,
-    });
-    expect(runSyncRes.status).toBe(403);
   });
 });
 
@@ -143,16 +113,17 @@ describe('wizard storage default and explicit opt-in UI', () => {
     expect(saved).not.toContain('confirmSync');
   });
 
-  it('keeps the sync route a pure proxy that never opens PGlite in the Next process', async () => {
+  it('refuses legacy sync in Next without opening PGlite or forwarding it', async () => {
     const route = await readFile(path.join(root, 'src/app/api/sync/supabase/route.ts'), 'utf8');
     expect(route).not.toMatch(/syncToSupabase|testPostgresConnection|@\/lib\/server\/store/);
+    expect(route).not.toContain("requestDaemon(");
     expect(route).toContain("Legacy bulk sync is disabled");
     expect(route).toContain('assertLocalRequest(request)');
   });
 
-  it('enforces the fail-closed disabled state inside the daemon endpoint', async () => {
+  it('keeps the legacy daemon endpoint disabled', async () => {
     const entry = await readFile(path.join(root, 'src/daemon/entry.ts'), 'utf8');
     expect(entry).toContain("'/v1/sync/supabase'");
-    expect(entry).toContain("Legacy bulk sync is disabled: it cannot enforce per-user team permissions.");
+    expect(entry).toContain('Legacy bulk sync is disabled');
   });
 });

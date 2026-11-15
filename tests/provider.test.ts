@@ -182,3 +182,33 @@ it('retries an HTTP 413 with smaller source excerpts and preserves citation chec
     vi.unstubAllEnvs();
   }
 });
+
+it.each([
+  { message: { content: 'Here is the draft:' } },
+  { finish_reason: 'length', message: { content: '{"items":[' } },
+])('recovers from an incomplete model draft and validates retry citations', async firstReply => {
+  const sizes: number[] = [];
+  try {
+    await withProvider(body => {
+      sizes.push(Buffer.byteLength(body.messages[1].content));
+      if (sizes.length === 1) return { choices: [firstReply] };
+      expect(body.messages[0].content).toContain('Return at most four items');
+      const result = JSON.stringify({ items: [
+        { category: 'decision', text: 'Redis chosen', evidence: [{ sourceId, quote: 'Decision: Redis' }] },
+      ] });
+      return { choices: [{ message: { content: `<think>Check the evidence.</think>\n\`\`\`json\n${result}\n\`\`\`` } }] };
+    }, async base => {
+      vi.stubEnv('REV_DATA_DIR', path.join(tmpdir(), `rev-model-retry-${process.pid}`));
+      vi.stubEnv('REV_MODEL_PROVIDER', 'openai');
+      vi.stubEnv('REV_MODEL_BASE_URL', base);
+      vi.stubEnv('REV_MODEL_NAME', 'test-model');
+      expect(await callCore({ op: 'generate', sources: [{ ...source, text: source.text.repeat(1000) }] })).toMatchObject({
+        items: [{ verification: 'validated_reference' }],
+      });
+    });
+    expect(sizes).toHaveLength(2);
+    expect(sizes[1]).toBeLessThan(sizes[0]);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

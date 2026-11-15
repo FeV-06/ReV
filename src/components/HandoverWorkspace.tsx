@@ -1,13 +1,13 @@
 'use client';
 import { Check } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { dayOneItems, generationFailurePrefix, sourceWarnings, suggestedAreas } from '@/lib/handover';
+import { dayOneItems, generationFailurePrefix, layaNoticePrefix, sourceWarnings, suggestedAreas } from '@/lib/handover';
 import type { Item, Run } from '@/lib/contracts';
 import ContributorField from '@/components/ContributorField';
 import DepartureInterview from '@/components/DepartureInterview';
 import ProjectDashboard from '@/components/ProjectDashboard';
+import RecentRuns, { type RunSummary } from '@/components/RecentRuns';
 
-type RunSummary = Pick<Run, 'id'|'createdAt'|'recipient'|'state'>;
 async function api(url: string, options: RequestInit = {}) {
   const response = await fetch(url, { ...options, headers: { 'Content-Type':'application/json', 'X-Rev-Request':'1', ...options.headers } });
   const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Request failed'); return data;
@@ -102,8 +102,7 @@ export default function HandoverWorkspace() {
   }
   function updateItem(id:string, changes:Partial<Item>) { setItems(old=>old.map(item=>item.id===id?{...item,...changes}:item)); }
   async function download() { if(!run)return; await perform(async()=> { const resp=await fetch(`/api/runs/${run.id}/export`,{headers:{'X-Rev-Request':'1'}}); if(!resp.ok) { const data=await resp.json(); throw new Error(data.error); } const url=URL.createObjectURL(await resp.blob()); const a=document.createElement('a'); a.href=url; a.download='rev-handover.md'; a.click(); URL.revokeObjectURL(url); }); }
-  const commitIds = run?.artifacts.filter(source => source.kind === 'git_commit' || source.kind === 'github_commit').map(source => source.id) ?? [];
-  const selectionWithCommits = [...new Set([...selected, ...commitIds])];
+  const allSourceIds = run?.artifacts.map(source => source.id) ?? [];
   const coverageWarnings = sourceWarnings(run?.warnings ?? []);
   const generationFailure = run?.warnings.filter(warning => warning.startsWith(generationFailurePrefix)).at(-1);
   const areas = run ? suggestedAreas(run) : [];
@@ -190,13 +189,13 @@ export default function HandoverWorkspace() {
             {areas.length > 0 && <><p>Areas found in their Git activity</p><div className="button-row">{areas.map(area=><button type="button" className="secondary m3e-button m3e-button--tonal" key={area} onClick={()=>setTakeoverScope(value=>value.includes(area) ? value : [value, area].filter(Boolean).join(', ').slice(0, 400))}>{area}</button>)}</div></>}
             {scopeChanged && ['needs_review','approved'].includes(run.state) && <p>Generate a new draft to apply the changed responsibilities.</p>}
           </div>}
-          {commitIds.length > 0 && <div className="button-row">
+          {allSourceIds.length > 0 && <div className="button-row">
             <button type="button" className="secondary m3e-button m3e-button--tonal"
-              disabled={busy || selectionWithCommits.length === selected.length || selectionWithCommits.length > 500}
-              onClick={()=>void updateSelection(selectionWithCommits)}>
-              Select all commits
+              disabled={busy || allSourceIds.length === selected.length || allSourceIds.length > 500}
+              onClick={()=>void updateSelection(allSourceIds)}>
+              Select all
             </button>
-            {selectionWithCommits.length > 500 && <small>Clear other sources to stay within the 500-source limit.</small>}
+            {allSourceIds.length > 500 && <small>This run has more than 500 sources. Select up to 500 individually.</small>}
           </div>}
           <div className="source-list">{run.artifacts.map(a=><label className={`source ${selected.includes(a.id) ? 'selected' : ''}`} key={a.id}><input type="checkbox" disabled={busy} checked={selected.includes(a.id)} onChange={()=>void toggle(a.id)}/><span><b>{a.kind.replaceAll('_',' ')}</b><small>{a.sourceRef}{a.author ? ` · ${a.author}` : ''}</small>{(run.githubUsername || run.departingPerson) && (a.githubLogin?.toLowerCase()===(run.githubUsername || run.departingPerson)?.toLowerCase() || a.author?.toLowerCase()===(run.githubUsername || run.departingPerson)?.toLowerCase()) && <small>GitHub-linked contributor match: @{a.githubLogin || a.author}</small>}{a.paths?.length ? <small>{a.paths.slice(0, 4).join(', ')}</small> : null}<span className="source-text">{a.text}</span></span></label>)}</div>
           <div className="auth-guardrails">
@@ -206,6 +205,7 @@ export default function HandoverWorkspace() {
           <button className="primary-action m3e-button" disabled={busy || !selected.length || !authorised || (!!coverageWarnings.length && !partial) || (run.mode!=='fixture' && !remote)} onClick={()=>patch({action:'generate',takeoverScope:run.departingPerson ? takeoverScope.trim() : undefined,selectedIds:selected,acceptPartial:partial,confirmAuthorisation:true,confirmRemote:remote,fixture:run.mode==='fixture'})}>Generate draft <span>→</span></button>
         </section>}
         {run && ['needs_review','approved'].includes(run.state) && <section className="card m3e-card m3e-card--outlined"><div className="card-head"><div><div className="eyebrow">03 / REVIEW</div><h2>Make it yours</h2><p>Check the meaning, not just the citation. Editing a claim marks it unverified.</p></div><span className="count">{items.length} ITEMS</span></div>
+          {run.warnings.filter(warning => warning.startsWith(layaNoticePrefix)).map(warning => <p key={warning} role="status">{warning}</p>)}
           <DepartureInterview key={run.id} run={run} busy={busy} hasUnsavedEdits={JSON.stringify(items) !== JSON.stringify(run.items)} patch={patch} shareIds={shareAnswers} toggleShare={toggleShare} />
           {run.departingPerson && !scopeChanged && <div className="notice">
             <h3>Start here</h3>
@@ -235,7 +235,12 @@ export default function HandoverWorkspace() {
           })()}
           <p className="footnote">Save edits before approving. Changing source selection requires generating a new draft.</p>
         </section>}
-      </div><div className="column"><ProjectDashboard/><section className="card m3e-card m3e-card--outlined compact"><div className="eyebrow">YOUR WORKSPACE</div><h2>Recent runs</h2><p>Each run is a separate snapshot.</p>{runs.length===0?<div className="empty">No handovers yet.<br/><span>Start a run or try the example.</span></div>:<div className="runs">{runs.map(r=><button className="run-row" key={r.id} onClick={()=>perform(async()=>{ const d=await api(`/api/runs/${r.id}`);display(d.run);})}><span><b>{r.recipient}</b><small>{new Date(r.createdAt).toLocaleString()}</small></span><span className="run-state">{r.state.replaceAll('_',' ')}</span></button>)}</div>}</section>
+      </div><div className="column"><ProjectDashboard/><section className="card m3e-card m3e-card--outlined compact"><div className="eyebrow">YOUR WORKSPACE</div><h2>Recent runs</h2><p>Each run is a separate snapshot.</p>
+        <RecentRuns runs={runs} onSelect={id => perform(async () => {
+          const d = await api(`/api/runs/${id}`);
+          display(d.run);
+        })} />
+      </section>
         <section className="card m3e-card m3e-card--outlined compact trust"><div className="eyebrow">DESIGNED FOR REVIEW</div><h3>A source, not a guess.</h3><p>Every draft is a starting point. Verify what it says, resolve uncertainty and decide what is safe to share.</p><div className="trust-line"><span>01</span> Select authorised sources</div><div className="trust-line"><span>02</span> Inspect supporting evidence</div><div className="trust-line"><span>03</span> Approve before export</div></section>
         {run && <section className="card m3e-card m3e-card--outlined compact"><div className="eyebrow">CURRENT RUN</div><h3>{run.recipient}</h3>{run.githubUsername&&<p>Contributor: @{run.githubUsername}</p>}{run.targetRole&&<p>Target role: {run.targetRole}</p>}<p>Status: <b>{run.state.replaceAll('_',' ')}</b></p><button className="danger m3e-button m3e-button--tonal" disabled={busy} onClick={()=>perform(async()=>{if(!confirm('Delete this run and its stored snapshots? Downloaded exports cannot be revoked.')) return; await api(`/api/runs/${run.id}`,{method:'DELETE'}); setRun(null);})}>Delete run</button></section>}
       </div></div><footer>ReV <span>·</span> A clearer handover starts with the evidence.</footer></div>

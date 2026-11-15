@@ -350,7 +350,13 @@ pub async fn generate(
     key: Option<&str>,
     sources: &[Artifact],
     context: Option<&Value>,
+    compact_draft: bool,
 ) -> Result<Vec<Value>> {
+    let instructions = if compact_draft {
+        format!("{HANDOVER_SYNTHESIS_PROMPT}\nReturn at most four items. Use one short sentence and at most one short exact quote per item. Start with the opening JSON brace and finish the object. Skip any preamble or explanation.")
+    } else {
+        HANDOVER_SYNTHESIS_PROMPT.to_owned()
+    };
     generate_with_instructions(
         provider,
         base_url,
@@ -358,7 +364,7 @@ pub async fn generate(
         key,
         sources,
         context,
-        HANDOVER_SYNTHESIS_PROMPT,
+        &instructions,
         CandidateMode::Standard,
     )
     .await
@@ -468,6 +474,11 @@ async fn generate_with_instructions(
     }
     let body: Value = serde_json::from_slice(&body_bytes)
         .map_err(|_| anyhow::anyhow!("Model provider returned invalid JSON"))?;
+    if field(&body, "/choices/0/finish_reason") == Some("length")
+        || field(&body, "/stop_reason") == Some("max_tokens")
+    {
+        bail!("Model reply was cut off before it finished");
+    }
     let content = if provider == "anthropic" {
         field(&body, "/content/0/text")
     } else {
@@ -625,8 +636,12 @@ pub async fn handle(input: Value) -> Result<Value> {
             let model = std::env::var("REV_MODEL_NAME").context("Configure REV_MODEL_NAME")?;
             let key = std::env::var("REV_MODEL_API_KEY").ok();
             let context = input.get("context").or_else(|| input.get("handover"));
+            let compact_draft = input
+                .get("compactDraft")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             Ok(
-                json!({"items":generate(&provider, &base, &model, key.as_deref(), &sources, context).await?}),
+                json!({"items":generate(&provider, &base, &model, key.as_deref(), &sources, context, compact_draft).await?}),
             )
         }
         "answer_successor" | "prepare_interview" => {
