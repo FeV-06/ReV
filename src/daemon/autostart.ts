@@ -42,12 +42,12 @@ export interface AutostartStatus {
 
 export function getLinuxServicePath(customHome?: string): string {
   const home = customHome || homedir();
-  return path.join(home, '.config', 'systemd', 'user', 'rev-daemon.service');
+  return path.posix.join(home, '.config', 'systemd', 'user', 'rev-daemon.service');
 }
 
 export function getWindowsStartupPath(customAppData?: string): string {
   const appData = customAppData || process.env.APPDATA || path.join(homedir(), 'AppData', 'Roaming');
-  return path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'rev-daemon.vbs');
+  return path.win32.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'rev-daemon.vbs');
 }
 
 export function resolveServiceConfig(custom?: Partial<ServiceConfig>): ServiceConfig {

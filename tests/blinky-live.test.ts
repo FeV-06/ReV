@@ -164,7 +164,7 @@ describe('High-quality verification against KingSahil/Blinky and FeV-06', () => 
     }
   });
 
-  it('verifies live remote GitHub ingestion and contributor attribution for KingSahil/Blinky + FeV-06', async () => {
+  it.runIf(process.env.REV_TEST_LIVE_GITHUB === '1')('verifies live remote GitHub ingestion and contributor attribution for KingSahil/Blinky + FeV-06', async () => {
     const rawResult = await callCore({
       op: 'github',
       repo: BLINKY_REPO,

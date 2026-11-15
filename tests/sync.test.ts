@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { validatePostgresUrl, testPostgresConnection, syncToSupabase } from '@/lib/server/sync-supabase';
-import { createRun } from '@/lib/server/store';
+import { closeDatabase, createRun } from '@/lib/server/store';
 import type { Run } from '@/lib/contracts';
 
 describe('Supabase & PostgreSQL sync engine', () => {
@@ -31,10 +34,10 @@ describe('Supabase & PostgreSQL sync engine', () => {
   });
 
   it('returns safe fallback when syncToSupabase has no connection configured', async () => {
-    const origSupabase = process.env.SUPABASE_POSTGRES_URL;
+    const origSupabase = process.env.SUPABASE_DB_URL;
     const origDb = process.env.DATABASE_URL;
     try {
-      delete process.env.SUPABASE_POSTGRES_URL;
+      delete process.env.SUPABASE_DB_URL;
       delete process.env.DATABASE_URL;
 
       const result = await syncToSupabase('');
@@ -42,7 +45,7 @@ describe('Supabase & PostgreSQL sync engine', () => {
       expect(result.error).toContain('not configured');
       expect(result.syncedRuns).toBe(0);
     } finally {
-      if (origSupabase) process.env.SUPABASE_POSTGRES_URL = origSupabase;
+      if (origSupabase !== undefined) process.env.SUPABASE_DB_URL = origSupabase;
       if (origDb) process.env.DATABASE_URL = origDb;
     }
   });
@@ -62,11 +65,20 @@ describe('Supabase & PostgreSQL sync engine', () => {
       approvedRevision: null,
       acceptedPartial: false,
     };
-    await createRun(run);
-
-    const result = await syncToSupabase('postgresql://127.0.0.1:54328/rev_test_offline');
-    expect(result.success).toBe(false);
-    expect(result.error).toBeDefined();
-    expect(result.syncedRuns).toBe(0);
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'rev-sync-test-'));
+    const previousDataDir = process.env.REV_DATA_DIR;
+    process.env.REV_DATA_DIR = dataDir;
+    try {
+      await createRun(run);
+      const result = await syncToSupabase('postgresql://127.0.0.1:1/rev_test_offline', run.id);
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+      expect(result.syncedRuns).toBe(0);
+    } finally {
+      await closeDatabase();
+      if (previousDataDir === undefined) delete process.env.REV_DATA_DIR;
+      else process.env.REV_DATA_DIR = previousDataDir;
+      await rm(dataDir, { recursive: true, force: true });
+    }
   });
 });

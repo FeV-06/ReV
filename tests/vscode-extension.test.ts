@@ -227,8 +227,8 @@ describe('extension daemon client integration against live daemon', () => {
 
     // 8. Export markdown handover
     const markdown = await client.exportMarkdown(run.id);
-    expect(markdown).toContain('# Handover for Incoming Engineer');
-    expect(markdown).toContain('Target role: Backend engineer');
-    expect(markdown).toContain('Contributor: FeV');
+    expect(markdown).toContain('# Engineering Handover: Incoming Engineer');
+    expect(markdown).toContain('| **Target role** | Backend engineer |');
+    expect(markdown).toContain('| **Contributor** | FeV-06 |');
   });
 });

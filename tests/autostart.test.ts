@@ -68,7 +68,7 @@ describe('daemon autostart configuration and generation', () => {
 
     const winPath = getWindowsStartupPath('C:\\Users\\Test\\AppData\\Roaming');
     expect(winPath).toBe(
-      path.join('C:\\Users\\Test\\AppData\\Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'rev-daemon.vbs')
+      path.win32.join('C:\\Users\\Test\\AppData\\Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'rev-daemon.vbs')
     );
   });
 });

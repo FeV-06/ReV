@@ -105,6 +105,8 @@ pnpm verify
 
 Browser test (requires Chromium and a running ReV server): `pnpm exec playwright install chromium` followed by `pnpm exec playwright test`. To use an existing Chromium executable instead, set `REV_CHROMIUM_PATH` to its path. With an explicitly configured provider, opt into the live inference smoke test with `REV_TEST_LIVE=1 pnpm exec playwright test tests/live-provider.spec.ts`; it sends only the synthetic fixture to that provider.
 
+Set `REV_TEST_LIVE_GITHUB=1` to include the live Blinky import in `pnpm exec vitest run tests/blinky-live.test.ts`. The live check needs GitHub API access and may hit its rate limit. The default run still checks local Git ingestion and capture.
+
 ## Data and privacy
 
 Runs are stored in `.rev-data/` by default; `REV_DATA_DIR` changes the local storage path. The Delete run button removes its stored record. It cannot recall a Markdown file already downloaded. Back up or protect the local data directory using operating-system controls. Tokens and model prompts are not deliberately logged or stored in run records; source snapshots and generated handovers are stored locally.
