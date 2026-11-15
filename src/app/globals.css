@@ -399,6 +399,8 @@ button.danger:not(.m3e-button):hover:not(:disabled) {
 }
 
 .runs { display: flex; flex-direction: column; }
+.recent-runs-list { max-height: min(20rem, 48vh); overflow-y: auto; }
+.recent-runs-list .run-row { flex-shrink: 0; }
 .run-row {
   background: none;
   border: 0;

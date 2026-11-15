@@ -10,10 +10,19 @@ export async function callCore(op: { op: string; sources?: { text: string }[]; [
   const env = await getEffectiveCoreEnv();
   const isOversize = (error: unknown) =>
     error instanceof Error && error.message === 'Model provider returned HTTP 413';
+  const isDraftFormatError = (error: unknown) => op.op === 'generate' && error instanceof Error && [
+    'Model did not return the requested JSON object',
+    'Model response has no items array',
+    'Model response contained no text',
+    'Model reply was cut off before it finished',
+  ].includes(error.message);
+  const formatError = 'The model could not produce a complete handover draft after retrying. Try selecting fewer sources or choosing a different model.';
+  let retryingFormatError = false;
   try {
     return await runCore(op, env);
   } catch (error) {
-    if (!isOversize(error) || !providerOperations.has(op.op) || !op.sources?.length) throw error;
+    if ((!isOversize(error) && !isDraftFormatError(error)) || !providerOperations.has(op.op) || !op.sources?.length) throw error;
+    retryingFormatError = isDraftFormatError(error);
   }
 
   const minimumSources = op.op === 'detect_divergence' ? 2 : 1;
@@ -31,9 +40,21 @@ export async function callCore(op: { op: string; sources?: { text: string }[]; [
     if (sources.length < minimumSources || bytes >= previousSize) continue;
     previousSize = bytes;
     try {
-      return await runCore({ ...op, sources }, env);
+      return await runCore({ ...op, sources, ...(retryingFormatError ? { compactDraft: true } : {}) }, env);
     } catch (error) {
-      if (!isOversize(error)) throw error;
+      if (isDraftFormatError(error)) {
+        if (retryingFormatError) throw new Error(formatError);
+        retryingFormatError = true;
+      } else if (!isOversize(error)) throw error;
+    }
+  }
+  if (retryingFormatError) {
+    if (previousSize < Buffer.byteLength(JSON.stringify(op.sources))) throw new Error(formatError);
+    try {
+      return await runCore({ ...op, compactDraft: true }, env);
+    } catch (error) {
+      if (!isDraftFormatError(error) && !isOversize(error)) throw error;
+      throw new Error(formatError);
     }
   }
   throw new Error('The model provider rejected the request size even with fewer sources. Select fewer sources or use a model endpoint that accepts larger requests.');

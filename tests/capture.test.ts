@@ -29,19 +29,21 @@ describe('incremental Git metadata capture',()=>{
   }finally{if(id)await removeProject(id);await rm(root,{recursive:true,force:true});}
  });
  it('rejects symlink substitution and missing project roots',async()=>{
-  const root=await setup();let id='';try {const p=await registerProject({root,githubUsername:'FeV-06',confirmWatch:true});id=p.id;
-   const moved=root+'-moved';await import('node:fs/promises').then(fs=>fs.rename(root,moved));await symlink(moved,root,'dir');
-   await expect(scanProject(id)).rejects.toThrow();await rm(root,{force:true});await rm(moved,{recursive:true,force:true});
-  }finally{if(id)await removeProject(id);await rm(root,{recursive:true,force:true});}
+  const root=await setup();const moved=root+'-moved';let id='';try {const p=await registerProject({root,githubUsername:'FeV-06',confirmWatch:true});id=p.id;
+   await import('node:fs/promises').then(fs=>fs.rename(root,moved));
+   await expect(scanProject(id)).rejects.toThrow();
+   await symlink(moved,root,process.platform==='win32'?'junction':'dir');
+   await expect(scanProject(id)).rejects.toThrow();
+  }finally{if(id)await removeProject(id);await rm(root,{recursive:true,force:true});await rm(moved,{recursive:true,force:true});}
  });
  it('never runs repository-configured clean filters while scanning',async()=>{
   const root=await setup();let id='';try{
    await writeFile(path.join(root,'.gitattributes'),'app.txt filter=rev-test\n');git(root,'add','.gitattributes');git(root,'commit','-qm','attributes');
-   const before=await stat(path.join(root,'app.txt'));await writeFile(path.join(root,'app.txt'),'modified\n');await utimes(path.join(root,'app.txt'),before.atime,before.mtime);
-   const marker=path.join(root,'filter-executed');git(root,'config','filter.rev-test.clean',`touch ${marker}; cat`);
+   const before=await stat(path.join(root,'app.txt'));await writeFile(path.join(root,'app.txt'),'modified contents\n');await utimes(path.join(root,'app.txt'),before.atime,before.mtime);
+   const marker=path.join(root,'filter-executed');git(root,'config','filter.rev-test.clean','touch filter-executed; cat');
    const p=await registerProject({root,githubUsername:'FeV-06',confirmWatch:true});id=p.id;await scanProject(id);
    await expect(stat(marker)).rejects.toMatchObject({code:'ENOENT'});
-   git(root,'status','--porcelain');expect((await stat(marker)).isFile()).toBe(true);
+   git(root,'hash-object','--path=app.txt','app.txt');expect((await stat(marker)).isFile()).toBe(true);
   }finally{if(id)await removeProject(id);await rm(root,{recursive:true,force:true});}
  });
 });
