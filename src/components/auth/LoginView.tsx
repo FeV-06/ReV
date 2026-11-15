@@ -9,8 +9,9 @@ import { useAuth, UserRole } from '@/lib/auth-context';
  * Directed Acyclic Graph composed of crisp vector edges with arrowheads
  * clustered in the upper-right and lower-left quadrants so the central
  * typography remains pristine and legible.
+ * Memoized to guarantee the canvas remains completely static and untouched across form re-renders.
  */
-function DagBackground() {
+const DagBackground = React.memo(function DagBackground() {
   return (
     <div className="auth-dag-canvas">
       <svg
@@ -119,19 +120,17 @@ function DagBackground() {
       </svg>
     </div>
   );
-}
+});
 
-function EvaluationGateways() {
-  const { loginAsSuperuser } = useAuth();
-  const [showAltAuth, setShowAltAuth] = useState(false);
+export default function LoginView() {
+  const { loginAsSuperuser, loginWithCredentials } = useAuth();
+  const [authMode, setAuthMode] = useState<'gateways' | 'credentials'>('gateways');
   const [tab, setTab] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [selectedRole, setSelectedRole] = useState<UserRole>('admin');
   const [error, setError] = useState('');
-
-  const { loginWithCredentials } = useAuth();
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -152,198 +151,212 @@ function EvaluationGateways() {
   }
 
   return (
-    <div className="m3-auth-card w-full">
-      <h2 className="auth-access-title">Open ReV</h2>
-
-      {/* Gateway Cards Grid */}
-      <div className="m3-eval-grid">
-        {/* Gateway 1: Demo Mode */}
-        <div className="m3-eval-card demo-card">
-          <div className="m3-eval-card-header">
-            <Zap size={20} aria-hidden="true" />
-          </div>
-          <h3>Guided demo</h3>
-          <p>
-            Walk through evidence selection, citation review, and export with a sample project.
-          </p>
-          <div className="m3-eval-actions">
-            <button
-              type="button"
-              className="m3-eval-btn m3e-button"
-              onClick={() => loginAsSuperuser('admin', 'demo')}
-              id="btn-eval-demo-admin"
-            >
-              <span><Crown size={16} aria-hidden="true" /> Launch Admin Studio Demo</span>
-              <span className="arrow">→</span>
-            </button>
-            <button
-              type="button"
-              className="m3-eval-btn m3e-button m3e-button--tonal"
-              onClick={() => loginAsSuperuser('developer', 'demo')}
-              id="btn-eval-demo-dev"
-            >
-              <span><UserRound size={16} aria-hidden="true" /> Launch Successor Reader Demo</span>
-              <span className="arrow">→</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Gateway 2: Live Engine */}
-        <div className="m3-eval-card live-card">
-          <div className="m3-eval-card-header">
-            <Microscope size={20} aria-hidden="true" />
-          </div>
-          <h3>Live studio</h3>
-          <p>
-            Import GitHub, local Git, or Slack evidence for a real handover.
-          </p>
-          <div className="m3-eval-actions">
-            <button
-              type="button"
-              className="m3-eval-btn m3e-button"
-              onClick={() => loginAsSuperuser('admin', 'live')}
-              id="btn-eval-live-engine"
-            >
-              <span><Rocket size={16} aria-hidden="true" /> Launch Live GitHub Studio</span>
-              <span className="arrow">→</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Alternative Access Toggle */}
-      <div className="m3-alt-auth-section">
-        <button
-          type="button"
-          className="m3-alt-toggle-btn"
-          onClick={() => setShowAltAuth(prev => !prev)}
-          aria-expanded={showAltAuth}
-        >
-          <span>{showAltAuth ? '▾ Hide standard login & interview options' : '▸ Alternative: Departing Teammate Interview or Custom Login'}</span>
-        </button>
-
-        {showAltAuth && (
-          <div className="m3-alt-auth-content m3-slide-in">
-            <div className="m3-fast-dev-grid" style={{ marginBottom: '16px' }}>
-              <button
-                type="button"
-                className="m3-fast-access-card dev"
-                onClick={() => loginAsSuperuser('departing', 'demo')}
-              >
-                <div className="m3-access-icon" aria-hidden="true"><Pencil size={16} aria-hidden="true" /></div>
-                <div className="m3-access-info">
-                  <strong>Departing Teammate</strong>
-                  <small>Open interview questions and record answers</small>
-                </div>
-                <div className="m3-access-arrow" aria-hidden="true">→</div>
-              </button>
-            </div>
-
-            <div className="m3-segmented-control" role="tablist">
-              <button
-                type="button"
-                className={`m3-segment-btn ${tab === 'signin' ? 'active' : ''}`}
-                onClick={() => { setTab('signin'); setError(''); }}
-                role="tab"
-                aria-selected={tab === 'signin'}
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                className={`m3-segment-btn ${tab === 'signup' ? 'active' : ''}`}
-                onClick={() => { setTab('signup'); setError(''); }}
-                role="tab"
-                aria-selected={tab === 'signup'}
-              >
-                Create Account
-              </button>
-            </div>
-
-            {error && <div role="alert" className="m3-auth-error">{error}</div>}
-
-            <form onSubmit={handleSubmit} className="m3-form-stack">
-              {tab === 'signup' && (
-                <div className="m3-field">
-                  <label htmlFor="auth-name">Full Name</label>
-                  <input
-                    id="auth-name"
-                    type="text"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    placeholder="Jordan Rivera"
-                    required
-                  />
-                </div>
-              )}
-
-              <div className="m3-field">
-                <label htmlFor="auth-email">Work Email</label>
-                <input
-                  id="auth-email"
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="name@team.internal"
-                  required
-                />
-              </div>
-
-              <div className="m3-field">
-                <label htmlFor="auth-password">Password</label>
-                <input
-                  id="auth-password"
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                />
-              </div>
-
-              <div className="m3-field">
-                <label htmlFor="auth-role">Role</label>
-                <select
-                  id="auth-role"
-                  value={selectedRole}
-                  onChange={e => setSelectedRole(e.target.value as UserRole)}
-                >
-                  <option value="admin">Admin / Tech Lead (Creator & Auditor)</option>
-                  <option value="developer">Successor Developer (Onboarder)</option>
-                </select>
-              </div>
-
-              <button type="submit" className="m3-auth-submit-btn">
-                {tab === 'signin' ? 'Sign In to Workspace →' : 'Create Account & Enter →'}
-              </button>
-            </form>
-          </div>
-        )}
-      </div>
-
-      <div className="m3-auth-footer">
-        <span>Runs on your computer</span>
-      </div>
-    </div>
-  );
-}
-
-export default function LoginView() {
-  return (
     <main className="auth-split-container">
       <section className="auth-split-left" aria-labelledby="rev-title">
         <DagBackground />
         <div className="auth-hero-container">
-          <div className="auth-wordmark">ReV</div>
-          <h1 className="auth-hero-title" id="rev-title">Knowledge carried forward.</h1>
-          <p className="auth-hero-description">
-            Build a handover your successor can verify, with citations back to Git and Slack.
-          </p>
+          <h1 className="auth-hero-title" id="rev-title">
+            <span
+              key={`hero-line1-${authMode === 'credentials' && tab === 'signup' ? 'signup' : 'default'}`}
+              className="auth-hero-line auth-hero-line-1"
+            >
+              {authMode === 'credentials' && tab === 'signup'
+                ? 'Preserve context,'
+                : 'Knowledge,'}
+            </span>
+            <span
+              key={`hero-line2-${authMode === 'credentials' && tab === 'signup' ? 'signup' : 'default'}`}
+              className="auth-hero-line auth-hero-line-2 auth-hero-accent"
+            >
+              {authMode === 'credentials' && tab === 'signup'
+                ? 'step right in.'
+                : 'carried forward.'}
+            </span>
+          </h1>
         </div>
       </section>
       <section className="auth-split-right" aria-label="Workspace access">
         <div className="auth-form-wrapper">
-          <EvaluationGateways />
+          {authMode === 'gateways' ? (
+            <div className="m3-auth-card w-full">
+              <div className="m3-auth-brand-badge">
+                <div className="m3-brand-icon" aria-hidden="true">R</div>
+                <span className="m3-brand-title">ReV</span>
+              </div>
+
+              {/* Gateway Cards Grid */}
+              <div className="m3-eval-grid">
+                {/* Gateway 1: Demo Mode */}
+                <div className="m3-eval-card demo-card">
+                  <div className="m3-eval-card-header">
+                    <Zap size={20} aria-hidden="true" />
+                  </div>
+                  <h3>Guided demo</h3>
+                  <p>
+                    Walk through evidence selection, citation review, and export with a sample project.
+                  </p>
+                  <div className="m3-eval-actions">
+                    <button
+                      type="button"
+                      className="m3-eval-btn m3e-button"
+                      onClick={() => loginAsSuperuser('admin', 'demo')}
+                      id="btn-eval-demo-admin"
+                    >
+                      <span><Crown size={16} aria-hidden="true" /> Launch Admin Studio Demo</span>
+                      <span className="arrow">→</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="m3-eval-btn m3e-button m3e-button--tonal"
+                      onClick={() => loginAsSuperuser('developer', 'demo')}
+                      id="btn-eval-demo-dev"
+                    >
+                      <span><UserRound size={16} aria-hidden="true" /> Launch Successor Reader Demo</span>
+                      <span className="arrow">→</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="m3-eval-btn m3e-button m3e-button--tonal"
+                      onClick={() => loginAsSuperuser('departing', 'demo')}
+                      id="btn-eval-demo-departing"
+                    >
+                      <span><Pencil size={16} aria-hidden="true" /> Launch Departing Teammate Demo</span>
+                      <span className="arrow">→</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Gateway 2: Live Engine */}
+                <div className="m3-eval-card live-card">
+                  <div className="m3-eval-card-header">
+                    <Microscope size={20} aria-hidden="true" />
+                  </div>
+                  <h3>Live studio</h3>
+                  <p>
+                    Import GitHub, local Git, or Slack evidence for a real handover.
+                  </p>
+                  <div className="m3-eval-actions">
+                    <button
+                      type="button"
+                      className="m3-eval-btn m3e-button"
+                      onClick={() => loginAsSuperuser('admin', 'live')}
+                      id="btn-eval-live-engine"
+                    >
+                      <span><Rocket size={16} aria-hidden="true" /> Launch Live GitHub Studio</span>
+                      <span className="arrow">→</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Switch to Team Credentials Form */}
+              <div className="m3-credentials-switch-wrap">
+                <button
+                  type="button"
+                  className="m3-credentials-switch-btn m3e-button m3e-button--outlined"
+                  onClick={() => setAuthMode('credentials')}
+                >
+                  Enter with team credentials →
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="m3-auth-card w-full m3-credentials-card">
+              <div className="m3-credentials-nav">
+                <button
+                  type="button"
+                  className="m3-subtle-btn m3-auth-back-btn"
+                  onClick={() => { setAuthMode('gateways'); setError(''); }}
+                >
+                  ← Back to Quickstart Demos
+                </button>
+              </div>
+
+              <div className="m3-auth-brand-badge">
+                <div className="m3-brand-icon" aria-hidden="true">R</div>
+                <span className="m3-brand-title">ReV</span>
+              </div>
+
+              <div className="m3-segmented-control" role="tablist">
+                <button
+                  type="button"
+                  className={`m3-segment-btn ${tab === 'signin' ? 'active' : ''}`}
+                  onClick={() => { setTab('signin'); setError(''); }}
+                  role="tab"
+                  aria-selected={tab === 'signin'}
+                >
+                  Sign In
+                </button>
+                <button
+                  type="button"
+                  className={`m3-segment-btn ${tab === 'signup' ? 'active' : ''}`}
+                  onClick={() => { setTab('signup'); setError(''); }}
+                  role="tab"
+                  aria-selected={tab === 'signup'}
+                >
+                  Create Account
+                </button>
+              </div>
+
+              {error && <div role="alert" className="m3-auth-error">{error}</div>}
+
+              <form onSubmit={handleSubmit} className="m3-form-stack">
+                {tab === 'signup' && (
+                  <div className="m3-field">
+                    <label htmlFor="auth-name">Full Name</label>
+                    <input
+                      id="auth-name"
+                      type="text"
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                      placeholder="Jordan Rivera"
+                      required
+                    />
+                  </div>
+                )}
+
+                <div className="m3-field">
+                  <label htmlFor="auth-email">Work Email</label>
+                  <input
+                    id="auth-email"
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="name@team.internal"
+                    required
+                  />
+                </div>
+
+                <div className="m3-field">
+                  <label htmlFor="auth-password">Password</label>
+                  <input
+                    id="auth-password"
+                    type="password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                  />
+                </div>
+
+                <div className="m3-field">
+                  <label htmlFor="auth-role">Role</label>
+                  <select
+                    id="auth-role"
+                    value={selectedRole}
+                    onChange={e => setSelectedRole(e.target.value as UserRole)}
+                  >
+                    <option value="admin">Admin / Tech Lead (Creator & Auditor)</option>
+                    <option value="developer">Successor Developer (Onboarder)</option>
+                  </select>
+                </div>
+
+                <button type="submit" className="m3-auth-submit-btn">
+                  {tab === 'signin' ? 'Sign In to Workspace →' : 'Create Account & Enter →'}
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       </section>
     </main>

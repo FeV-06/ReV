@@ -1,6 +1,6 @@
 'use client';
 
-import { PanelRightOpen, X, Zap } from 'lucide-react';
+import { Check, PanelRightOpen, X, Zap } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 
@@ -160,13 +160,26 @@ export default function DemoSpotlightTour({ target }: { target: DemoTourTarget |
           </>
         ) : <p>The guide will resume when the next action is ready.</p>}
       </div>
-      {lessons && (
+      {lessons ? (
         <nav className="m3-tour-controls" aria-label="Guide steps">
           <span>{index + 1} of {lessons.length + 1}</span>
           <button type="button" className="secondary m3e-button m3e-button--tonal" disabled={index === 0} onClick={() => goTo(index - 1)}>Back</button>
-          <button type="button" className="secondary m3e-button m3e-button--tonal m3-tour-next" disabled={!topic} onClick={() => goTo(index + 1)}>Next step</button>
+          {index >= lessons.length ? (
+            <button type="button" className="primary-action m3e-button m3-tour-done" onClick={() => setTourActive(false)}>
+              <Check size={15} aria-hidden="true" /> Done
+            </button>
+          ) : (
+            <button type="button" className="secondary m3e-button m3e-button--tonal m3-tour-next" onClick={() => goTo(index + 1)}>Next step</button>
+          )}
         </nav>
-      )}
+      ) : step ? (
+        <nav className="m3-tour-controls" aria-label="Guide steps">
+          <span />
+          <button type="button" className="primary-action m3e-button m3-tour-done" onClick={() => setTourActive(false)}>
+            <Check size={15} aria-hidden="true" /> Done
+          </button>
+        </nav>
+      ) : null}
     </aside>
   );
 }
