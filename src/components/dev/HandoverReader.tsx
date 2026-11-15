@@ -16,6 +16,7 @@ interface HandoverReaderProps {
 export default function HandoverReader({ run, markdownText, onBack }: HandoverReaderProps) {
   const [activeEvidence, setActiveEvidence] = useState<Artifact | null>(null);
   const [readingMode, setReadingMode] = useState<'document' | 'cards'>('document');
+  const [showAssistant, setShowAssistant] = useState(false);
   const drawer = useRef<HTMLDialogElement>(null);
   const includedItems = run.items.filter(item => !item.excluded);
   const showDocument = readingMode === 'document' && Boolean(markdownText);
@@ -63,9 +64,13 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
     <div className="m3-reader-container m3-slide-in">
       {/* Top Breadcrumb & Action bar */}
       <div className="m3-reader-nav">
+        <nav className="button-row m3-reader-views" aria-label="Handover views">
         <button type="button" className="secondary m3e-button m3e-button--tonal" onClick={onBack}>
           ← Back to My Handovers
         </button>
+          <button type="button" className="m3e-button m3e-button--tonal" aria-pressed={!showAssistant} onClick={() => setShowAssistant(false)}>Handover</button>
+          <button type="button" className="m3e-button m3e-button--tonal" aria-pressed={showAssistant} onClick={() => setShowAssistant(true)}>AI Assistant</button>
+        </nav>
         <div className="m3-reader-actions">
           {run.state === 'approved' && (
             <button
@@ -79,6 +84,10 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
         </div>
       </div>
 
+      <div hidden={!showAssistant}>
+        <HandoverAssistant key={run.id} run={run} active={showAssistant} />
+      </div>
+      <div hidden={showAssistant}>
       {/* Hero Departure Banner */}
       <section className="card m3e-card m3e-card--outlined m3-departure-banner">
         <div className="card-head">
@@ -199,7 +208,6 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
         {/* Sidebar: Day-1 Checklist & Quick Guide */}
         <aside className="m3-reader-sidebar">
           <DayOneChecklist projectId={run.id} initialTasks={checklistTasks} />
-          {run.state === 'approved' && <HandoverAssistant key={run.id} run={run} />}
 
         </aside>
       </div>
@@ -274,6 +282,7 @@ export default function HandoverReader({ run, markdownText, onBack }: HandoverRe
           </div>
         </dialog>
       )}
+      </div>
     </div>
   );
 }

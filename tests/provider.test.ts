@@ -154,15 +154,15 @@ it('prepares cited interview questions and rejects unsupported successor answers
   }
 });
 
-it('retries an HTTP 413 with smaller source excerpts and preserves citation checks', async () => {
+it.each([413, 400])('retries an HTTP %i input limit with smaller source excerpts and preserves citation checks', async status => {
   const sizes: number[] = [];
   try {
     await withProvider((body, response) => {
       const size = Buffer.byteLength(body.messages[1].content);
       sizes.push(size);
       if (size > 3500) {
-        response.statusCode = 413;
-        return {};
+        response.statusCode = status;
+        return status === 400 ? { error: { code: 'context_length_exceeded' } } : {};
       }
       return { choices: [{ message: { content: JSON.stringify({ items: [
         { category: 'decision', text: 'Redis chosen', evidence: [{ sourceId, quote: 'Decision: Redis' }] },
@@ -178,6 +178,27 @@ it('retries an HTTP 413 with smaller source excerpts and preserves citation chec
     });
     expect(sizes).toHaveLength(2);
     expect(sizes[1]).toBeLessThan(sizes[0]);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+it('does not retry an unrelated HTTP 400 or expose the provider error text', async () => {
+  let attempts = 0;
+  try {
+    await withProvider((_body, response) => {
+      attempts++;
+      response.statusCode = 400;
+      return { error: { message: 'Unsupported model. Private diagnostic detail.' } };
+    }, async base => {
+      vi.stubEnv('REV_DATA_DIR', path.join(tmpdir(), `rev-model-bad-request-${process.pid}`));
+      vi.stubEnv('REV_MODEL_PROVIDER', 'openai');
+      vi.stubEnv('REV_MODEL_BASE_URL', base);
+      vi.stubEnv('REV_MODEL_NAME', 'test-model');
+      await expect(callCore({ op: 'generate', sources: [{ ...source, text: source.text.repeat(1000) }] }))
+        .rejects.toThrow(/^The model provider rejected the request \(HTTP 400\)\. Check the model name and provider settings in ReV\.$/);
+    });
+    expect(attempts).toBe(1);
   } finally {
     vi.unstubAllEnvs();
   }

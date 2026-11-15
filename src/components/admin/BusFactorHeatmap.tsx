@@ -22,6 +22,7 @@ export default function BusFactorHeatmap({ runId, departingName }: BusFactorHeat
       const res = await fetch(`/api/runs/${runId}/risk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Rev-Request': '1' },
+        body: '{}',
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to analyze repository risk');

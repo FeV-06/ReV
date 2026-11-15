@@ -126,18 +126,24 @@ export async function getVersionedRun(id: string): Promise<{run: Run; version: n
   return row ? {run: row.payload, version: Number(row.version)} : null;
 }
 export async function getRun(id: string): Promise<Run | null> { return (await getVersionedRun(id))?.run ?? null; }
-export async function listRuns(): Promise<Pick<Run, 'id'|'createdAt'|'recipient'|'state'|'successorEmail'|'projectRoot'>[]> {
-  const db = await database();
-  const result = await db.query<{payload: Run}>('SELECT payload FROM runs ORDER BY created_at DESC LIMIT 50');
-  return result.rows.map(({payload}) => ({ id: payload.id, createdAt: payload.createdAt, recipient: payload.recipient, state: payload.state, successorEmail: payload.successorEmail, projectRoot: payload.projectRoot }));
+type RunSummary = Pick<Run, 'id' | 'createdAt' | 'recipient' | 'state' | 'successorEmail' | 'projectRoot' | 'departingPerson' | 'githubUsername' | 'targetRole'>;
+
+function summarizeRun({ id, createdAt, recipient, state, successorEmail, projectRoot, departingPerson, githubUsername, targetRole }: Run): RunSummary {
+  return { id, createdAt, recipient, state, successorEmail, projectRoot, departingPerson, githubUsername, targetRole };
 }
 
-export async function listRunsForAuthority(authority: RunAuthority): Promise<Pick<Run, 'id'|'createdAt'|'recipient'|'state'|'successorEmail'|'projectRoot'>[]> {
+export async function listRuns(): Promise<RunSummary[]> {
+  const db = await database();
+  const result = await db.query<{payload: Run}>('SELECT payload FROM runs ORDER BY created_at DESC LIMIT 50');
+  return result.rows.map(({ payload }) => summarizeRun(payload));
+}
+
+export async function listRunsForAuthority(authority: RunAuthority): Promise<RunSummary[]> {
   const db = await database();
   const result = await db.query<{payload: Run}>(`SELECT r.payload FROM runs r JOIN run_permissions p ON p.run_id=r.id
     WHERE p.team_id=$1 AND (p.owner_id=$2 OR ($3='leader' AND p.visibility='lead')) ORDER BY r.created_at DESC LIMIT 50`,
     [authority.teamId, authority.userId, authority.role]);
-  return result.rows.map(({payload}) => ({ id: payload.id, createdAt: payload.createdAt, recipient: payload.recipient, state: payload.state, successorEmail: payload.successorEmail, projectRoot: payload.projectRoot }));
+  return result.rows.map(({ payload }) => summarizeRun(payload));
 }
 
 export async function assertRunAuthority(id: string, authority: RunAuthority, action: 'read' | 'edit' | 'delete' = 'read'): Promise<void> {

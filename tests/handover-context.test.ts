@@ -2,13 +2,51 @@ import { describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { newRun, updateAction, readRun, deleteRun, exportMarkdown, refreshRun } from '@/lib/server/service';
+import { askHandover, newRun, updateAction, readRun, deleteRun, exportMarkdown, refreshRun } from '@/lib/server/service';
 import { runSchema } from '@/lib/contracts';
+import { answerSuccessor } from '@/lib/server/interview';
 import { readFile } from 'node:fs/promises';
 
 process.env.REV_DATA_DIR=path.join(tmpdir(),`rev-handover-context-${process.pid}`);
 
 describe('contributor and target role context',()=>{
+  it('builds and exports the guided demo from selected public ReV commits', async () => {
+    let run = await newRun({ recipient: 'Incoming engineer', departingPerson: 'FeV06', fixture: true, revDemo: true });
+    try {
+      expect(run.artifacts).toHaveLength(5);
+      expect(run.artifacts.every(source => source.url?.startsWith('https://github.com/FeV-06/ReV/'))).toBe(true);
+      const selected = [run.artifacts[0], run.artifacts[3], run.artifacts[4]];
+      const selectedIds = selected.map(source => source.id);
+      run = await updateAction(run.id, { action: 'scope', selectedIds });
+      run = await updateAction(run.id, { action: 'generate', selectedIds, acceptPartial: false, confirmAuthorisation: true, fixture: true });
+      expect(run.items.map(item => item.category)).toEqual(['next_action', 'risk', 'decision']);
+      expect(run.items.map(item => item.citations[0]?.quote)).toEqual(selected.map(source => source.text));
+      run = await updateAction(run.id, { action: 'approve', confirmAuthorisation: true });
+      expect(exportMarkdown(run)).toContain('cached ReV demo (prewritten draft)');
+      expect(exportMarkdown(run)).not.toContain(run.artifacts[1].sourceRef);
+      expect(await askHandover(run.id, { question: 'why laya' })).toMatchObject({
+        answer: expect.stringContaining('keep routine edits out of the draft'), followUp: null,
+        citations: [{ quote: expect.stringContaining('It can skip routine edits') }],
+      });
+      const oldDemo = { ...run, artifacts: run.artifacts.filter(source => source.kind !== 'git_document'), items: run.items.filter(item => item.category !== 'decision') };
+      expect(await answerSuccessor(oldDemo, 'What is Laya used for?')).toMatchObject({
+        answer: expect.stringContaining('keep routine edits out of the draft'), followUp: null,
+        citations: [{ label: 'Public ReV README' }],
+      });
+      const question = 'Who owns the production database?';
+      expect(await askHandover(run.id, { question })).toMatchObject({ answer: null, followUp: question });
+      const pending = (await readRun(run.id)).gaps?.find(gap => gap.question === question);
+      expect(pending).toMatchObject({ origin: 'successor', status: 'open' });
+      run = await updateAction(run.id, { action: 'answer_gap', gapId: pending?.id, selectedIds, author: 'FeV06', answer: 'The infrastructure lead owns it.' });
+      expect(run.state).toBe('approved');
+      expect(await askHandover(run.id, { question })).toMatchObject({ answer: null });
+      const answerId = run.gaps?.find(gap => gap.id === pending?.id)?.answerSourceId;
+      run = await updateAction(run.id, { action: 'approve', confirmAuthorisation: true, interviewAnswerIds: [answerId] });
+      expect(await askHandover(run.id, { question })).toMatchObject({ answer: 'The infrastructure lead owns it.', followUp: null });
+    } finally {
+      await deleteRun(run.id);
+    }
+  });
   it('persists, reopens, refreshes, and exports the exact context for a synthetic run',async()=>{
     let run=await newRun({recipient:'Incoming engineer',githubUsername:'MAYA',targetRole:'Platform engineer',fixture:true});
     expect(run.githubUsername).toBe('MAYA');

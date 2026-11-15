@@ -15,11 +15,11 @@ flowchart LR
     G --> H[Successor reads the handover or asks questions]
 ```
 
-1. **Import.** Choose a local checkout, a GitHub repository, or Slack sources. A local checkout lets ReV read commits and project files from your computer. GitHub provides remote material such as pull requests and review comments. Slack can provide discussion and decisions that never made it into a commit. **Instant Demo** uses fictional sources and a sample draft.
+1. **Import.** Choose a local checkout, a GitHub repository, or Slack sources. A local checkout lets ReV read commits and project files from your computer. GitHub provides remote material such as pull requests and review comments. Slack can provide discussion and decisions that never made it into a commit. **Instant Demo** uses a bundled snapshot of public ReV commits and a prepared draft.
 2. **Select sources.** Check the material the recipient can see. **Select all** works for runs with up to 500 sources. You confirm access and allow the selected text to go to your configured model before it writes a live draft.
 3. **Filter with Laya.** When enabled, Laya runs locally in Python and checks commit messages and available change details. It can skip routine cleanup from the draft input. The review screen shows how many commits it skipped. If you see `Skipped 0 of 47`, all 47 evaluated commits stayed available to the draft writer.
 4. **Generate and check the draft.** ReV asks your configured AI provider to write decisions, risks, open work, and next steps. Rust checks that each cited quote appears in the selected source. A **validated reference** confirms the quote exists. You still need to check what the draft claims about it. A commit that says a fix shipped, for example, supports asking the successor to verify it, while calling it unfinished would need more evidence.
-5. **Review and share.** Edit wording, exclude low-value claims, or flag something for clarification. If a deployment step or owner is missing, use the departure interview to ask the outgoing engineer and review their answer. Approve the current version before exporting Markdown or sharing it with a successor. Changes to the approved draft or its source selection can require another review.
+5. **Review and share.** Expand a claim category to edit wording, exclude low-value claims, or flag something for clarification. You can set the successor email during Import. Approve the current version before exporting Markdown or sharing it with a successor. Changes to the approved draft or its source selection can require another review.
 
 ## What runs when you click Generate draft
 

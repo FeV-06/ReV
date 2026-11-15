@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 
 const guidance = {
   studio: ['Start a handover', 'Click “New Handover Studio” to start the demo.'],
-  launch: ['Launch the demo', 'Click “Launch Instant Demo Run” to import sample evidence.'],
+  launch: ['Launch the demo', 'Click “Launch Instant Demo Run” to load the saved ReV commits.'],
   sources: ['Choose evidence', 'Check a source to include it in the handover.'],
   authorise: ['Confirm recipient access', 'Check “I confirm the recipient may receive all selected material.”'],
   generate: ['Generate a draft', 'Click “Generate draft” to turn the selected evidence into a handover.'],
@@ -25,20 +25,17 @@ const chapters: Record<string, Topic[]> = {
     { title: 'Browse projects and previous runs', anchor: 'projects', text: 'Open a run to check its status or read its approved handover.' },
   ],
   launch: [
-    { title: 'Connect Slack', anchor: 'slack', text: 'Sign in to Slack and pick up to five channels to import messages and replies. The demo uses sample messages.' },
     { title: 'Assign a successor', anchor: 'setup', text: 'Click Assign successor and enter their sign-in email. To try the demo reader later, use alex.vance@team.internal.' },
   ],
   sources: [
     { title: 'Scope the handover', anchor: 'scope', text: 'Describe what the successor is taking over, then select the sources they can receive.' },
   ],
   review: [
-    { title: 'Review claims and citations', anchor: 'claims', text: 'Check the source excerpts. Edit or exclude anything that needs changing, then click Save review.' },
-    { title: 'Try the Departure Interview', anchor: 'interview', text: 'Click Prepare interview questions to ask the departing teammate about missing details. Choose which answers to share.' },
-    { title: 'Save the successor assignment', anchor: 'assignment', text: 'Save the successor’s sign-in email so they can find this handover. Leave it blank if you only need a download.' },
+    { title: 'Review claims and citations', anchor: 'claims', text: 'Open a claim category to check the source excerpts. Edit or exclude items, then click Save review.' },
     { title: 'Inspect evidence gaps', anchor: 'gaps', text: 'Click Detect Evidence Gaps to find details worth checking before you approve.' },
   ],
   download: [
-    { title: 'Inspect ownership and churn', anchor: 'risk', text: 'For a local Git run, see which frequently changed files depend heavily on one contributor.' },
+    { title: 'Continue in VS Code', anchor: 'next-steps', text: 'ReV MCP brings your local handovers into VS Code Chat. Connect it in Settings, then try Live Engine for a real import and draft.' },
     { title: 'Choose where the handover is stored', anchor: 'storage', text: 'Keep the handover on this computer or use your configured team database.' },
     { title: 'Publish the approved handover', anchor: 'publish', text: 'Click Publish to Successor Portal. Try the Successor Reader Demo to see the handover and Day 1 checklist.' },
     { title: 'Try MCP in VS Code', text: 'With ReV enabled in Copilot, paste this prompt into Agent chat.', prompt: 'Use rev_admin_list_active_projects to list my ReV runs. Include each full run ID, recipient, and status.' },
@@ -79,7 +76,7 @@ function positionGuide(panel: HTMLElement, section: Element, anchor: Element) {
   panel.style.bottom = 'auto';
 }
 
-export default function DemoSpotlightTour({ target }: { target: DemoTourTarget | null }) {
+export default function DemoSpotlightTour({ target, docked = false }: { target: DemoTourTarget | null; docked?: boolean }) {
   const { evalMode, tourActive, setTourActive } = useAuth();
   const active = evalMode === 'demo' && tourActive;
   const panelRef = useRef<HTMLElement>(null);
@@ -105,8 +102,9 @@ export default function DemoSpotlightTour({ target }: { target: DemoTourTarget |
     for (let parent: Element | null = element; parent; parent = parent.parentElement) {
       if (parent instanceof HTMLDetailsElement) parent.open = true;
     }
-    section.setAttribute('data-tour-current', topic ? 'info' : 'action');
+    element.setAttribute('data-tour-current', topic ? 'info' : 'action');
     element.scrollIntoView({ block: 'center', behavior: 'instant' });
+    if (docked) return () => element.removeAttribute('data-tour-current');
     const update = () => {
       if (!panel.dataset.docked) positionGuide(panel, section, element);
     };
@@ -125,11 +123,11 @@ export default function DemoSpotlightTour({ target }: { target: DemoTourTarget |
       observer.disconnect();
       window.removeEventListener('resize', resize);
       window.removeEventListener('scroll', update, true);
-      section.removeAttribute('data-tour-current');
+      element.removeAttribute('data-tour-current');
       delete panel.dataset.docked;
       for (const property of ['left', 'top', 'right', 'bottom']) panel.style.removeProperty(property);
     };
-  }, [active, target, topic]);
+  }, [active, docked, target, topic]);
 
   if (evalMode !== 'demo') return null;
   if (!active) {
@@ -142,7 +140,7 @@ export default function DemoSpotlightTour({ target }: { target: DemoTourTarget |
   const step = target ? guidance[target] : null;
 
   return (
-    <aside ref={panelRef} className="m3-tour-banner" data-requires-action={Boolean(target && !topic)} aria-label="Guided demo">
+    <aside ref={panelRef} className="m3-tour-banner" data-review-docked={docked ? 'true' : undefined} data-requires-action={Boolean(target && !topic)} aria-label="Guided demo">
       <div className="m3-tour-header">
         <div className="m3-tour-pill"><Zap size={16} aria-hidden="true" /> Guided demo</div>
         <button type="button" className="m3-tour-dismiss" onClick={() => setTourActive(false)} aria-label="Close guided demo">

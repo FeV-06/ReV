@@ -11,7 +11,7 @@ QUESTIONS = {
         'type': 'choice',
         'instructions': 'Does this commit contain information a successor needs?',
         'criteria': {
-            'cosmetic': 'Only routine cleanup such as formatting, spelling, visual polish, generated files, or housekeeping. Behavior and instructions stay the same.',
+            'cosmetic': 'Routine cleanup or paperwork: formatting, spelling, visuals, generated output, or a project report update. Behavior and operating instructions stay the same.',
             'retain': 'Changes behavior, procedures, or technical decisions, documents risks or unfinished work, or there is insufficient evidence to tell.',
         },
     },

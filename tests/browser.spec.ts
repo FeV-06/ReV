@@ -19,74 +19,63 @@ test('registers a local Git project and shows capture is not active',async({page
  } finally {await rm(root,{recursive:true,force:true});}
 });
 
-test('synthetic source selection, review, approval and scoped export', async ({page}) => {
+test('guided ReV snapshot opens claim categories and exports the selected evidence', async ({ page }) => {
   await page.goto(url);
-  await page.locator('#btn-login-superuser-admin').click();
-  await page.getByRole('button', {name:'New Handover Studio'}).click();
-  await page.getByRole('button', {name:'Assign successor', exact:true}).click();
-  await page.getByLabel('Successor email').fill('Alex.Vance@team.internal');
-  await page.getByRole('button', {name:'Try synthetic example'}).click();
-  await expect(page.getByLabel('What are you taking over?')).toHaveValue('');
-  await expect(page.locator('.stage-step[aria-current="step"]')).toContainText('Select sources');
-  const sources=page.locator('label.source'); await expect(sources).toHaveCount(9);
-  await expect(page.getByText(/^GitHub-linked contributor match: @maya$/)).toHaveCount(4);
-  await expect(sources.filter({hasText:'Document cache recovery procedure'})).toContainText('GitHub-linked contributor match: @Maya');
-  await sources.filter({hasText:'Add Redis session cache and fallback'}).locator('input').check();
-  await sources.filter({hasText:'Decision: use Redis for sessions. The fallback still needs tests.'}).locator('input').check();
-  await page.getByLabel('I confirm the recipient may receive all selected material.').check();
-  await page.getByRole('button', {name:'Generate draft'}).click();
-  await expect(page.getByRole('heading',{name:'Make it yours'})).toBeVisible();
-  await expect(page.getByText('Assigned to alex.vance@team.internal', {exact:true})).toBeVisible();
-  await expect(page.locator('.stage-step[aria-current="step"]')).toContainText('Review');
-  await expect(page.locator('.review-item')).toHaveCount(2);
-  await expect(page.getByRole('heading', { name: 'Start here' })).toBeVisible();
-  await expect(page.locator('.notice').filter({hasText:'Start here'})).toContainText('Add a test for the Redis session fallback.');
-  const graphResult=await page.evaluate(async()=>{
-    const headers={'X-Rev-Request':'1','Content-Type':'application/json'};
-    const list=await (await fetch('/api/runs',{headers})).json();const id=list.runs[0].id;
-    const graph=await (await fetch(`/api/runs/${id}/graph`,{headers})).json();
-    const edge=graph.graph.edges[0];
-    const reviewed=await fetch(`/api/runs/${id}`,{method:'PATCH',headers,body:JSON.stringify({action:'graph_review',edgeId:edge.id,decision:'confirmed'})});
-    return {id,edges:graph.graph.edges.length,status:reviewed.status};
-  });
-  expect(graphResult.edges).toBeGreaterThan(0);expect(graphResult.status).toBe(200);
-  const interview = page.locator('.departure-interview');
-  await interview.getByRole('button', { name: 'Prepare interview questions' }).click();
-  await expect(interview.getByRole('status')).toContainText(/new interview questions? ready/);
-  const questions = interview.getByRole('list', { name: 'Interview questions' });
-  await expect(questions.getByRole('textbox')).toHaveCount(0);
-  await expect(interview.getByText('0 of 2 answered')).toBeVisible();
-  await interview.getByRole('button', { name: 'Prepare interview questions' }).click();
-  await expect(interview.getByRole('status')).toContainText('No new questions found');
-  await page.getByLabel('Exclude', { exact: true }).first().check();
-  await page.getByRole('button',{name:'Save review'}).click();
-  await expect(page.getByRole('button',{name:'Approve current revision'})).toBeDisabled();
-  await page.getByLabel('I confirm the selected sources are authorised for this recipient.').check();
-  await page.getByRole('button',{name:'Approve current revision'}).click();
-  await expect(page.locator('.stage-step[aria-current="step"]')).toContainText('Export');
-  await expect(page.getByRole('button',{name:'Download Markdown'})).toBeEnabled();
-  const run=await page.evaluate(async()=>{ const list=await (await fetch('/api/runs',{headers:{'X-Rev-Request':'1'}})).json(); return list.runs[0]; });
-  const output=await page.evaluate(async(id)=>await (await fetch(`/api/runs/${id}/export`,{headers:{'X-Rev-Request':'1'}})).text(),run.id);
-  expect(output).toContain('Decision: use Redis for sessions');
-  expect(output).toContain('Contributor: maya');expect(output).toContain('Target role: Platform engineer');
-  expect(output).not.toContain('RESTRICTED_FIXTURE');
-  expect(output).not.toContain('Add Redis session cache and fallback');
-  await page.reload();
-  await expect(page.getByRole('button',{name:/Incoming engineer.*approved/}).first()).toBeVisible();
-  await page.getByRole('button',{name:/Incoming engineer.*approved/}).first().click();
-  await expect(page.locator('.m3-assignment-card').getByText('Contributor: @maya')).toBeVisible();
-  await expect(page.locator('.m3-assignment-card').getByText('Target role: Platform engineer')).toBeVisible();
-  await expect(page.getByRole('button',{name:'Download Markdown'})).toBeEnabled();
-  await page.evaluate(async id => {
-    const response = await fetch(`/api/runs/${id}`, {
-      method: 'PATCH', headers: {'X-Rev-Request':'1','Content-Type':'application/json'},
-      body: JSON.stringify({action:'scope',selectedIds:[]}),
-    });
-    if (!response.ok) throw new Error((await response.json()).error);
-  }, run.id);
-  await expect(page.getByRole('heading',{name:'Make it yours'})).toHaveCount(0);
-  await expect.poll(()=>page.evaluate(async(id)=>(await fetch(`/api/runs/${id}/export`,{headers:{'X-Rev-Request':'1'}})).status,run.id)).toBe(400);
-  const cross=await page.request.get(new URL('/api/runs', url).href,{headers:{origin:'https://evil.example','X-Rev-Request':'1'}}); expect(cross.status()).toBe(403);
+  await page.locator('#btn-eval-demo-admin').click();
+  await page.getByRole('button', { name: 'New Handover Studio' }).click();
+  const setup = page.locator('details[data-tour-detail="setup"]');
+  if (await setup.getAttribute('open') === null) await setup.locator('summary').click();
+  const assign = page.getByRole('button', { name: 'Assign successor', exact: true });
+  await expect(assign).toHaveAttribute('data-tour-current', 'info');
+  await expect(setup).not.toHaveAttribute('data-tour-current');
+  expect(await assign.evaluate(button => parseFloat(getComputedStyle(button).borderTopLeftRadius))).toBeGreaterThan(0);
+  await assign.click();
+  await page.getByLabel('Successor email').fill('judge-demo@example.invalid');
+  const created = page.waitForResponse(response => response.url().endsWith('/api/runs') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: /Launch Instant Demo Run/ }).click();
+  const { run } = await (await created).json();
+  try {
+    expect(run.successorEmail).toBe('judge-demo@example.invalid');
+    const sources = page.locator('label.source');
+    await expect(sources).toHaveCount(5);
+    await expect(page.locator('.source-list')).not.toContainText(/@[0-9a-f]{40}/);
+    await sources.filter({ hasText: 'verify vscode e2e flow' }).locator('input').check();
+    await sources.filter({ hasText: 'workspace data leak' }).locator('input').check();
+    await page.getByLabel('I confirm the recipient may receive all selected material.').check();
+    await page.getByRole('button', { name: 'Generate draft' }).click();
+    await expect(page.getByRole('heading', { name: 'Make it yours' })).toBeVisible();
+    await page.getByRole('button', { name: 'Select sources', exact: true }).click();
+    await expect(sources.locator('input:checked')).toHaveCount(2);
+    await page.getByRole('button', { name: 'Return to review' }).click();
+    const guide = page.getByRole('complementary', { name: 'Guided demo' });
+    await expect(guide).toHaveAttribute('data-review-docked', 'true');
+    const risk = page.locator('.review-claim-group').filter({ has: page.locator('.claim-category--risk') });
+    await expect(risk.locator('textarea')).toBeHidden();
+    await risk.locator('summary').click();
+    await expect(risk.locator('textarea')).toBeVisible();
+    const verification = page.locator('summary').filter({ hasText: 'Verification Tools' });
+    if (!(await page.getByRole('button', { name: 'Inspect Knowledge Graph' }).isVisible())) await verification.click();
+    await page.getByRole('button', { name: 'Inspect Knowledge Graph' }).click();
+    const riskLink = page.locator('.evidence-link').filter({ hasText: 'workspace data leak' });
+    await expect(riskLink).toContainText('From · Source');
+    await expect(riskLink).toContainText('To · Claim');
+    await expect(riskLink).toContainText('recheck workspace data isolation');
+    await expect(page.getByRole('heading', { name: 'Departure interview' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Assign successor' })).toHaveCount(0);
+    await page.getByLabel('I confirm the selected sources are authorised for this recipient.').check();
+    await page.getByRole('button', { name: 'Approve current revision' }).click();
+    await expect(page.getByRole('heading', { name: 'Handover approved & ready' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Download Markdown' })).toBeEnabled();
+    const markdown = await page.evaluate(async id => (await fetch('/api/runs/' + id + '/export', {
+      headers: { 'X-Rev-Request': '1' },
+    })).text(), run.id);
+    expect(markdown).toContain('cached ReV demo (prewritten draft)');
+    expect(markdown).toContain('The claims were prepared in advance');
+    expect(markdown).toContain('workspace data leak');
+    expect(markdown).not.toContain('tree-sitter ast symbol extraction');
+  } finally {
+    await page.evaluate(id => fetch('/api/runs/' + id, { method: 'DELETE', headers: { 'X-Rev-Request': '1' } }), run.id);
+  }
 });
 
 test('gap answer becomes a new unselected source and invalidates approval', async({page})=>{

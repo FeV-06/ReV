@@ -193,7 +193,7 @@ export default function LoginView() {
                   </div>
                   <h3>Guided demo</h3>
                   <p>
-                    Walk through evidence selection, citation review, and export with a sample project.
+                    Walk through evidence selection, citation review, and export with a saved snapshot of ReV.
                   </p>
                   <div className="m3-eval-actions">
                     <button
@@ -216,12 +216,12 @@ export default function LoginView() {
                     </button>
                     <button
                       type="button"
-                      className="m3-eval-btn m3e-button m3e-button--tonal"
+                      className="m3-eval-btn m3e-button m3e-button--outlined"
                       onClick={() => loginAsSuperuser('departing', 'demo')}
                       id="btn-eval-demo-departing"
                     >
-                      <span><Pencil size={16} aria-hidden="true" /> Launch Departing Teammate Demo</span>
-                      <span className="arrow">→</span>
+                      <span><Pencil size={16} aria-hidden="true" /> Departing Teammate Profile</span>
+                      <span className="arrow" aria-hidden="true">→</span>
                     </button>
                   </div>
                 </div>

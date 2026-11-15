@@ -455,8 +455,9 @@ async fn generate_with_instructions(
                 anyhow::anyhow!("Model request failed")
             }
         })?;
-    if !resp.status().is_success() {
-        bail!("Model provider returned HTTP {}", resp.status().as_u16());
+    let status = resp.status();
+    if !status.is_success() && status.as_u16() != 400 {
+        bail!("Model provider returned HTTP {}", status.as_u16());
     }
     if resp.content_length().is_some_and(|size| size > 2_000_000) {
         bail!("Model response exceeds size limit");
@@ -471,6 +472,26 @@ async fn generate_with_instructions(
             bail!("Model response exceeds size limit");
         }
         body_bytes.extend_from_slice(&chunk);
+    }
+    if status.as_u16() == 400 {
+        if let Ok(body) = serde_json::from_slice::<Value>(&body_bytes) {
+            let message = field(&body, "/error/message")
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            if field(&body, "/error/code") == Some("context_length_exceeded")
+                || [
+                    "prompt is too long",
+                    "maximum context length",
+                    "exceeds the context window",
+                    "reduce the length of the messages or completion",
+                ]
+                .iter()
+                .any(|phrase| message.contains(phrase))
+            {
+                bail!("Model input exceeded the provider context limit");
+            }
+        }
+        bail!("The model provider rejected the request (HTTP 400). Check the model name and provider settings in ReV.");
     }
     let body: Value = serde_json::from_slice(&body_bytes)
         .map_err(|_| anyhow::anyhow!("Model provider returned invalid JSON"))?;

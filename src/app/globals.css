@@ -228,6 +228,18 @@ button:not(.m3e-button):disabled { opacity: 0.48; cursor: not-allowed; }
 .stage-step.completed {
   color: var(--green);
 }
+.m3-stage-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+.m3-stage-link:not(:disabled) { cursor: pointer; }
+.m3-stage-link:hover:not(:disabled) { text-decoration: underline; }
 
 .grid {
   display: grid;
@@ -585,6 +597,31 @@ button.danger:not(.m3e-button):hover:not(:disabled) {
   font-size: 11px;
   margin-bottom: 8px;
 }
+.review-claims { margin-top: 16px; }
+.evidence-link { padding: 10px; background: #fff; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; }
+.evidence-link dl { display: grid; gap: 6px; margin: 8px 0; }
+.evidence-link dt { font-weight: 700; }
+.evidence-link dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.review-claim-group { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; padding: 0 10px; }
+.review-claim { margin: 0; padding: 10px 4px; }
+.review-claim-summary { cursor: pointer; padding: 10px 2px; }
+.review-claim-count { margin-inline-start: 8px; font-size: 12px; }
+.claim-category {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eef1ef;
+  color: #384c43;
+  font-size: 11px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.claim-category--decision { background: #e5efff; color: #1e4886; }
+.claim-category--risk { background: #fff0d9; color: #794400; }
+.claim-category--next_action { background: #e4f3ed; color: #125a42; }
+.claim-category--open_work { background: #f0e8fb; color: #5e347c; }
+.claim-category--dependency { background: #e8ecfa; color: #3c4281; }
+.claim-category--contact { background: #e0f2f2; color: #23565c; }
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -2213,8 +2250,17 @@ footer span { padding: 0 6px; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-bottom: 24px;
 }
+.m3-reader-views { margin: 0; }
+.question-inbox { max-width: 64rem; margin-inline: auto; }
+.question-inbox-header, .question-inbox-actions { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.question-inbox-header { justify-content: space-between; align-items: start; margin-bottom: 16px; }
+.question-inbox-header :is(h1, p) { margin: 0 0 8px; }
+.question-inbox-actions { align-items: center; }
+.question-inbox-actions button { width: auto; }
 
 .m3-download-button {
   display: inline-flex;
@@ -3285,7 +3331,7 @@ footer span { padding: 0 6px; }
   scroll-margin-top: 80px;
 }
 
-.m3-tour-banner[data-docked="true"] {
+.m3-tour-banner:is([data-docked="true"], [data-review-docked="true"]) {
   position: relative;
   inset: auto !important;
   width: 100%;
@@ -3294,37 +3340,37 @@ footer span { padding: 0 6px; }
 }
 
 @media (min-width: 1100px) {
-  .m3-guided-workspace:has(> .m3-tour-banner[data-docked="true"]) {
+  .m3-guided-workspace:has(> .m3-tour-banner:is([data-docked="true"], [data-review-docked="true"])) {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
     gap: 20px;
     align-items: start;
   }
 
-  .m3-guided-workspace > .m3-tour-banner[data-docked="true"] {
+  .m3-guided-workspace > .m3-tour-banner:is([data-docked="true"], [data-review-docked="true"]) {
     grid-area: 1 / 2;
     position: sticky;
     inset: 80px auto auto !important;
   }
 
-  .m3-guided-workspace > .m3-tour-banner[data-docked="true"] + * {
+  .m3-guided-workspace > .m3-tour-banner:is([data-docked="true"], [data-review-docked="true"]) + * {
     grid-area: 1 / 1;
   }
 }
 
 .m3-tour-banner[data-requires-action="true"] {
-  background: #752526;
-  border-color: #a75554;
-  box-shadow: 0 10px 30px rgba(117, 37, 38, 0.3);
+  background: #183e79;
+  border-color: #456da9;
+  box-shadow: 0 10px 30px rgba(24, 62, 121, 0.3);
 }
 
 .m3-tour-banner[data-requires-action="true"] :is(.m3-tour-pill, .m3-tour-dismiss, .m3-tour-instruction) {
-  color: #ffe5e2;
+  color: #e4efff;
 }
 
 [data-tour-current="action"] {
-  outline: 3px solid #c73535;
-  box-shadow: 0 0 0 8px rgba(199, 53, 53, 0.2);
+  outline: 3px solid #2862bc;
+  box-shadow: 0 0 0 8px rgba(40, 98, 188, 0.2);
 }
 
 .m3-tour-controls {

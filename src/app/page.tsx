@@ -12,13 +12,15 @@ import AboutView from '@/components/about/AboutView';
 import TeamSyncPanel from '@/components/team/TeamSyncPanel';
 
 function MainApp() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('projects');
+  const [requestedTab, setActiveTab] = useState<ActiveTab>('projects');
   const { user, role } = useAuth();
 
   // If user is not logged in, render the standalone full-bleed LoginView (no top nav, header, or footer)
   if (!user) {
     return <LoginView />;
   }
+  const activeTab = requestedTab === 'questions' && role !== 'admin'
+    ? 'projects' : requestedTab;
 
   return (
     <AppShell activeTab={activeTab} onTabChange={setActiveTab}>
@@ -26,6 +28,7 @@ function MainApp() {
         role === 'admin' ? <AdminWorkspace /> : role === 'departing' ? <DepartingWorkspace /> : <DevDashboard />
       )}
       {activeTab === 'settings' && (role === 'departing' ? <DepartingWorkspace /> : <><TeamSyncPanel endpoint="/api/team-sync" /><SettingsView /></>)}
+      {activeTab === 'questions' && <DepartingWorkspace lead />}
       {activeTab === 'about' && <AboutView />}
     </AppShell>
   );

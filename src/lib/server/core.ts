@@ -8,8 +8,10 @@ const providerOperations = new Set(['generate', 'prepare_interview', 'answer_suc
 
 export async function callCore(op: { op: string; sources?: { text: string }[]; [key: string]: unknown }): Promise<unknown> {
   const env = await getEffectiveCoreEnv();
-  const isOversize = (error: unknown) =>
-    error instanceof Error && error.message === 'Model provider returned HTTP 413';
+  const isOversize = (error: unknown) => error instanceof Error && [
+    'Model provider returned HTTP 413',
+    'Model input exceeded the provider context limit',
+  ].includes(error.message);
   const isDraftFormatError = (error: unknown) => op.op === 'generate' && error instanceof Error && [
     'Model did not return the requested JSON object',
     'Model response has no items array',
@@ -29,7 +31,7 @@ export async function callCore(op: { op: string; sources?: { text: string }[]; [
   let previousSize = Buffer.byteLength(JSON.stringify(op.sources));
   for (const [budget, excerptLength] of [[24_000, 2800], [10_000, 1200], [4_000, 480]]) {
     const sources = [];
-    let bytes = 2;
+    let bytes = 1;
     for (const source of op.sources) {
       const excerpt = { ...source, text: source.text.slice(0, excerptLength).replace(/[\uD800-\uDBFF]$/, '') };
       const size = Buffer.byteLength(JSON.stringify(excerpt)) + 1;

@@ -4,9 +4,9 @@ ReV helps engineers hand a project to the next maintainer. It turns selected loc
 
 ## Try the handover
 
-1. Open ReV and choose **Instant Demo** in the handover studio. It uses sample data and works without a model account.
+1. Open **Guided demo**, then choose **Launch Instant Demo Run** in the handover studio. It uses a bundled snapshot of public ReV commits and a prepared draft. GitHub, Slack, and a model account are unnecessary for this walkthrough.
 2. Select a few sources, confirm the recipient can see them, and generate a draft.
-3. Open a quote under a claim to see the evidence. Edit or exclude anything that the successor does not need.
+3. Expand a claim category to check its quotes. Edit or exclude anything that the successor does not need.
 4. Save the review, approve the current version, and download the Markdown.
 
 For a real draft, switch to **Live Engine**, choose a local checkout or GitHub under **Git source**, and configure a model. Try a small set of sources first so you can compare the claims to the quotes. A `validated_reference` badge means ReV found the quote in the source. The reviewer decides whether it supports the claim.

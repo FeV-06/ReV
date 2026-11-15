@@ -8,11 +8,12 @@ interface Props {
   savesEditsOnPrepare?: boolean;
   patch: (body: object, onError?: (message: string) => void) => Promise<Run | undefined>;
   role?: 'lead' | 'departing';
+  reviewReplies?: boolean;
   shareIds?: string[];
   toggleShare?: (id: string) => void;
 }
 
-export default function DepartureInterview({ run, busy, hasUnsavedEdits, savesEditsOnPrepare, patch, role = 'lead', shareIds = [], toggleShare }: Props) {
+export default function DepartureInterview({ run, busy, hasUnsavedEdits, savesEditsOnPrepare, patch, role = 'lead', reviewReplies = false, shareIds = [], toggleShare }: Props) {
   const isLead = role === 'lead';
   const [remote, setRemote] = useState(false);
   const [author, setAuthor] = useState(run.departingPerson ?? run.githubUsername ?? '');
@@ -42,11 +43,11 @@ export default function DepartureInterview({ run, busy, hasUnsavedEdits, savesEd
   }
 
   return (
-    <div className="notice departure-interview">
-      <h3>Departure interview</h3>
-      <p>{isLead ? 'Prepare questions for the departing person. Review their saved replies here before sharing them.'
-        : 'Answer the questions below in any order. Your lead will review each reply before sharing it.'}</p>
-      {isLead && <>
+    <div className={reviewReplies ? 'departure-interview' : 'notice departure-interview'}>
+      <h3>{reviewReplies ? 'Questions and replies' : 'Departure interview'}</h3>
+      {!reviewReplies && <p>{isLead ? 'Prepare questions for the departing person. Review their saved replies here before sharing them.'
+        : 'Answer the questions below in any order. Your lead will review each reply before sharing it.'}</p>}
+      {isLead && !reviewReplies && <>
       {run.mode !== 'fixture' && <label className="check">
         <input type="checkbox" checked={remote} onChange={event => setRemote(event.target.checked)} />
         Allow selected sources and handover context to be sent to the configured AI provider
@@ -71,13 +72,13 @@ export default function DepartureInterview({ run, busy, hasUnsavedEdits, savesEd
         </div>
         <ol className="interview-questions" aria-label="Interview questions">
           {gaps.map((gap, index) => {
-            if (isLead && gap.status === 'open') return null;
+            if (isLead && !reviewReplies && gap.status === 'open') return null;
             const answer = run.artifacts.find(source => source.id === gap.answerSourceId);
             const shared = answer && run.selectedIds.includes(answer.id);
             return <li key={gap.id} className="interview-question">
               <div className="interview-question-meta">
                 <span>{gap.origin === 'successor' ? 'From the successor' : 'From the handover'}</span>
-                <span className={answer ? 'status-pill valid' : 'status-pill'}>{shared ? 'Shared' : answer ? 'Answered' : 'Open'}</span>
+                <span className={answer ? 'status-pill valid' : 'status-pill uncertain'}>{shared ? 'Shared' : answer ? 'Answered' : 'Waiting for reply'}</span>
               </div>
               <h4>{gap.question}</h4>
               {gap.sourceIds.length > 0 && <details className="interview-evidence">
@@ -100,7 +101,7 @@ export default function DepartureInterview({ run, busy, hasUnsavedEdits, savesEd
                     onChange={() => toggleShare?.(answer.id)} />
                   Share this answer when approving the handover
                 </label>}
-              </> : <>
+              </> : !isLead && <>
                 <label>Your answer to question {index + 1}
                   <textarea value={answers[gap.id] ?? ''} maxLength={4000}
                     onChange={event => setAnswers(old => ({ ...old, [gap.id]: event.target.value }))} />

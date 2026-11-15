@@ -11,6 +11,13 @@ const verdictsSchema = z.array(z.object({
 
 const importantTerms = /\b(?:security|cve|vulnerability|auth|authentication|authorization|passwords?|tokens?|permissions?|breaking|migrations?|rollback|deploy(?:ment)?|runbooks?|recovery|incidents?|schemas?|risks?|todo|follow.up|fixme|adr|rfc|decisions?|regressions?|data loss|race condition)\b/i;
 const routineChange = /\b(?:typos?|spelling|punctuation|format(?:ting)?|prettier|whitespace|regenerate|generated files?|cosmetic|icon spacing|no (?:logic|behavior|source) changes|dev dependency bump)\b/i;
+const reportUpdate = /\b(?:technical report|report pdf|submission pdf)\b/i;
+const reportFile = /(?:^|\/)(?:[\w.-]*technical[-_ ]report[\w.-]*|[\w.-]*submission[-_ ]report[\w.-]*)\.(?:html|pdf)$/i;
+
+function changedPath(source: Artifact) {
+  if (source.paths?.length === 1) return source.paths[0];
+  if (source.kind === 'github_commit_patch') return source.externalId.split(/:(.*)/s, 2)[1];
+}
 
 function commitKey(source: Artifact) {
   const sha = source.externalId.split(':', 1)[0];
@@ -57,17 +64,21 @@ export async function triageDraftSources(sources: Artifact[], takeoverScope?: st
   const candidates = sources.flatMap(source => {
     if (source.kind !== 'git_commit' && source.kind !== 'github_commit') return [];
     const evidence = related.get(commitKey(source)!) ?? [];
+    const evidencePaths = evidence.map(changedPath);
+    const paths = [...new Set([...(source.paths ?? []), ...evidencePaths.filter((file): file is string => Boolean(file))])];
+    const reportOnly = reportUpdate.test(source.text) && paths.length > 0 && paths.every(file => reportFile.test(file)) &&
+      evidence.every(change => change.kind === 'github_commit_patch' && Boolean(changedPath(change)));
     const summary = JSON.stringify({
       message: source.text.trim(),
-      paths: source.paths,
-      changes: evidence.map(change => ({ ref: change.sourceRef, text: change.text })),
+      paths,
+      changes: reportOnly ? undefined : evidence.map(change => ({ ref: change.sourceRef, text: change.text })),
       takeoverScope,
     });
     // Large changes stay in synthesis when the classifier cannot see the full evidence.
     if (!source.text.trim() || summary.length > 6_000 || source.paths?.length === 100) return [];
-    const protectedChange = importantTerms.test([source.text, ...(source.paths ?? []),
-      ...evidence.flatMap(change => [change.sourceRef, change.text])].join('\n'));
-    const threshold = routineChange.test(source.text) ? 0.75 : 0.95;
+    const protectedChange = importantTerms.test([source.text, ...paths,
+      ...(reportOnly ? [] : evidence.flatMap(change => [change.sourceRef, change.text]))].join('\n'));
+    const threshold = reportOnly ? 0.60 : routineChange.test(source.text) ? 0.75 : 0.95;
     return [{ source, evidence, summary, protectedChange, threshold }];
   });
   if (!candidates.length) return { sources, notice: 'Skipped 0 commits. No selected commit summaries could be classified.' };

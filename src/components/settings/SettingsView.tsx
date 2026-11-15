@@ -64,6 +64,25 @@ export default function SettingsView() {
   const [syncingRuns, setSyncingRuns] = useState(false);
   const [syncResult, setSyncResult] = useState<{ success: boolean; message: string } | null>(null);
   const [copiedMcp, setCopiedMcp] = useState(false);
+  const [mcpSetup, setMcpSetup] = useState<{ installUrl: string; chatUrl: string; configuration: string } | null>(null);
+  const [preparingMcp, setPreparingMcp] = useState(false);
+  const [mcpError, setMcpError] = useState('');
+
+  async function prepareVsCodeMcp() {
+    setPreparingMcp(true);
+    setMcpError('');
+    try {
+      const response = await fetch('/api/settings/vscode-mcp', { method: 'POST', headers: { 'X-Rev-Request': '1' } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not prepare VS Code MCP.');
+      setMcpSetup(data);
+    } catch (error) {
+      setMcpError(error instanceof Error ? error.message : 'Could not prepare VS Code MCP.');
+    } finally {
+      setPreparingMcp(false);
+    }
+  }
+
 
   useEffect(() => {
     async function load() {
@@ -293,26 +312,15 @@ export default function SettingsView() {
     }
   }
 
-  const mcpConfigJson = JSON.stringify(
-    {
-      mcpServers: {
-        rev: {
-          command: 'npx',
-          args: ['-y', 'tsx', 'src/lib/server/mcp-server.ts'],
-          env: {
-            REV_DATA_DIR: '.rev-data',
-          },
-        },
-      },
-    },
-    null,
-    2
-  );
-
-  function handleCopyMcp() {
-    void navigator.clipboard.writeText(mcpConfigJson);
-    setCopiedMcp(true);
-    setTimeout(() => setCopiedMcp(false), 2500);
+  async function handleCopyMcp() {
+    if (!mcpSetup) return;
+    try {
+      await navigator.clipboard.writeText(mcpSetup.configuration);
+      setCopiedMcp(true);
+      setTimeout(() => setCopiedMcp(false), 2500);
+    } catch {
+      setMcpError('Could not copy the MCP configuration. Select and copy it below.');
+    }
   }
 
   return (
@@ -882,6 +890,20 @@ export default function SettingsView() {
           {adminTab === 'mcp' && (
             <div className="grid">
               <div className="column">
+                <section className="card m3e-card m3e-card--outlined compact">
+                  <h2>VS Code MCP</h2>
+                  <p>Connect VS Code Chat to your local ReV workspace to ask about handovers and use ReV tools.</p>
+                  <div className="button-row">
+                    {mcpSetup ? <>
+                      <a className="secondary m3e-button m3e-button--tonal" href={mcpSetup.installUrl}>Install ReV in VS Code</a>
+                      <a className="secondary m3e-button m3e-button--tonal" href={mcpSetup.chatUrl}>Open VS Code Chat</a>
+                    </> : <button type="button" className="secondary m3e-button m3e-button--tonal" disabled={preparingMcp} onClick={prepareVsCodeMcp}>
+                      {preparingMcp ? 'Preparing setup…' : 'Set up VS Code MCP'}
+                    </button>}
+                  </div>
+                  {mcpSetup && <p role="status">Finish installing in VS Code, then open Chat to try the prepared prompt.</p>}
+                  {mcpError && <p role="alert">{mcpError}</p>}
+                </section>
                 <section className="card m3e-card m3e-card--outlined">
                   <div className="card-head">
                     <div>
@@ -894,7 +916,7 @@ export default function SettingsView() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '14px 0', padding: '10px 14px', background: '#f8faf9', borderRadius: '10px', border: '1px solid var(--line)' }}>
                     <span className="status-dot" style={{ background: '#22c55e' }} />
                     <span style={{ fontSize: '13px', fontWeight: 600, color: '#174a3d' }}>
-                      Active · Stdio & JSON-RPC 2.0 Transport
+                      {mcpSetup ? 'Setup ready · Stdio transport' : 'Stdio transport · setup required'}
                     </span>
                   </div>
 
@@ -912,7 +934,7 @@ export default function SettingsView() {
                         marginTop: '8px',
                       }}
                     >
-                      {mcpConfigJson}
+                      {mcpSetup?.configuration ?? 'Prepare the local MCP server to get your configuration.'}
                     </pre>
                   </label>
 
@@ -921,6 +943,7 @@ export default function SettingsView() {
                       type="button"
                       className="secondary m3e-button m3e-button--tonal"
                       onClick={handleCopyMcp}
+                      disabled={!mcpSetup}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
                     >
                       {copiedMcp ? <Check size={15} /> : <Copy size={15} />}
@@ -934,10 +957,10 @@ export default function SettingsView() {
                 <section className="card m3e-card m3e-card--outlined compact">
                   <h3>MCP Server Tools Provided</h3>
                   <ul style={{ fontSize: '12.5px', color: '#4b6d5c', paddingLeft: '18px', margin: '10px 0', lineHeight: 1.6 }}>
-                    <li><code>list_handovers</code>: List published runs</li>
-                    <li><code>get_handover_claims</code>: Fetch verified claims with citations</li>
-                    <li><code>query_citations</code>: Retrieve source commits & discussions</li>
-                    <li><code>evaluate_risk</code>: Run Rust-backed departure risk bridge</li>
+                    <li><code>rev_admin_list_active_projects</code>: List handover runs</li>
+                    <li><code>rev_successor_get_project_info</code>: Read an approved handover and its citations</li>
+                    <li><code>rev_successor_raise_question</code>: Ask a question about a handover</li>
+                    <li><code>rev_admin_get_bus_factor_risk</code>: Analyze ownership and churn</li>
                   </ul>
                 </section>
               </div>

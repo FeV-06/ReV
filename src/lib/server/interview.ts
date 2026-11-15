@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { draftSchema, type Artifact, type Gap, type Run } from '@/lib/contracts';
 import { callCore } from '@/lib/server/core';
+import { isRevDemo, publicLayaAnswer } from './rev-demo';
 
 export function visibleGaps(run: Run): Gap[] {
   const selected = new Set(run.selectedIds);
@@ -11,7 +12,7 @@ export function visibleGaps(run: Run): Gap[] {
 }
 
 const normalize = (text: string) => text.toLowerCase().replace(/[\p{P}\s]+/gu, ' ').trim();
-const stopWords = new Set('what when where which why how the and for with from does did can could should would was are who about this that'.split(' '));
+const stopWords = new Set('what when where which why how the and for with from does did can could should would was are who about this that use used tell explain'.split(' '));
 function keywords(text: string) {
   return [...new Set(normalize(text).split(' ').filter(word => word.length > 2 && !stopWords.has(word)))];
 }
@@ -91,6 +92,18 @@ export async function answerSuccessor(run: Run, question: string) {
 
   if (run.mode === 'fixture') {
     const terms = keywords(question);
+    if (isRevDemo(run) && terms.length) {
+      for (const item of run.items) {
+        if (item.excluded || item.verification !== 'validated_reference') continue;
+        const citations = item.citations.flatMap(reference => {
+          const source = sources.find(candidate => candidate.id === reference.sourceId);
+          return source && source.text.includes(reference.quote) ? [cite(source, reference.quote)] : [];
+        });
+        const words = new Set(keywords([item.text, ...citations.map(citation => citation.quote)].join(' ')));
+        if (citations.length && terms.every(term => words.has(term))) return { answer: item.text, citations, followUp: null };
+      }
+      if (terms.length === 1 && terms[0] === 'laya') return publicLayaAnswer;
+    }
     const match = terms.length >= 2 && sources.find(source =>
       terms.every(term => normalize(source.text).includes(term)));
     return match
@@ -113,6 +126,6 @@ export async function answerSuccessor(run: Run, question: string) {
       return source && reference.quote.trim() && source.text.includes(reference.quote)
         ? [cite(source, reference.quote)] : [];
     }),
-    followUp: missing?.text ?? (supported ? null : question),
+    followUp: supported ? missing?.text ?? null : question,
   };
 }

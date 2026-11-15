@@ -7,7 +7,6 @@ import { useAuth } from '@/lib/auth-context';
 import { dayOneItems, generationFailurePrefix, layaNoticePrefix, sourceWarnings, suggestedAreas } from '@/lib/handover';
 import { successorEmailSchema, type Item, type Run } from '@/lib/contracts';
 import ContributorField from '@/components/ContributorField';
-import DepartureInterview from '@/components/DepartureInterview';
 import BusFactorHeatmap from '@/components/admin/BusFactorHeatmap';
 import ProjectDashboard from '@/components/ProjectDashboard';
 import MarkdownDocumentViewer from '@/components/MarkdownDocumentViewer';
@@ -32,6 +31,10 @@ function fileAsBase64(file: File): Promise<string> {
     reader.onerror = () => reject(new Error('Could not read file'));
     reader.readAsDataURL(file);
   });
+}
+
+function sourceLabel(sourceRef: string): string {
+  return sourceRef.replace(/@[0-9a-f]{40}(?:[0-9a-f]{24})?\b/i, '');
 }
 
 function normalizeGitHubRepo(input: string): string {
@@ -108,7 +111,7 @@ interface HandoverWizardProps {
 }
 
 export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail, initialRunId }: HandoverWizardProps) {
-  const { evalMode, tourActive, setTourActive } = useAuth();
+  const { evalMode, tourActive, setTourActive, setEvalMode } = useAuth();
   const [busyPhase, setBusyPhase] = useState<'idle' | 'importing' | 'generating'>('idle');
   const [elapsedTime, setElapsedTime] = useState(0);
   const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -124,6 +127,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
   const [projectSelection, setProjectSelection] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
+  const [sourceViewRunId, setSourceViewRunId] = useState<string | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [authorised, setAuthorised] = useState(false);
   const [remote, setRemote] = useState(false);
@@ -161,10 +165,6 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
       if (timer) clearInterval(timer);
     };
   }, [busy]);
-  const [shareAnswers, setShareAnswers] = useState<string[]>([]);
-  function toggleShare(id: string) {
-    setShareAnswers(previous => previous.includes(id) ? previous.filter(value => value !== id) : [...previous, id]);
-  }
   const [error, setError] = useState('');
   const [successorEmail, setSuccessorEmail] = useState('');
   const [showSuccessor, setShowSuccessor] = useState(false);
@@ -307,8 +307,9 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
   }
 
   function display(r: Run) {
+    if (r.id !== run?.id || r.graphEpoch !== run.graphEpoch) setGraphEdges(null);
     if (r.id !== run?.id) {
-      setShareAnswers([]);
+      setSourceViewRunId(null);
       setSyncTarget('local');
     }
     setSuccessorEmail(r.successorEmail ?? '');
@@ -363,11 +364,12 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
         body: JSON.stringify({
           recipient: recipient.trim() || undefined,
           successorEmail: email.data,
-          departingPerson: fixture ? 'maya' : departingPerson.trim() || undefined,
+          departingPerson: fixture ? 'FeV06' : departingPerson.trim() || undefined,
           targetRole: fixture ? 'Platform engineer' : targetRole.trim() || undefined,
           repo: fixture ? undefined : cleanRepo || undefined,
           zipBase64,
           fixture,
+          revDemo: fixture,
           projectRoot: !fixture && useLocalGit ? projectRoot : undefined,
           localGit: !fixture && useLocalGit,
           localDocs: !fixture && useLocalGit,
@@ -383,15 +385,12 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
     if (!run) return;
     const action = (body as { action?: string }).action;
     if (action === 'generate') {
+      setSourceViewRunId(null);
       setBusyPhase('generating');
     }
     let updated: Run | undefined;
     await perform(async () => {
       const endpoint = `/api/runs/${run.id}`;
-      if (action === 'prepare_interview' && run.mode === 'fixture' && hasPendingEdits) {
-        const saved = await api(endpoint, { method: 'PATCH', body: JSON.stringify({ action: 'save', items }) });
-        display(saved.run);
-      }
       const data = await api(endpoint, { method: 'PATCH', body: JSON.stringify(body) });
       updated = data.run;
       display(data.run);
@@ -415,6 +414,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
         body: JSON.stringify({ action: 'scope', selectedIds: next }),
       });
       setRun(d.run);
+      setGraphEdges(null);
       setSelected(d.run.selectedIds);
       setItems(d.run.items);
       await refresh();
@@ -515,13 +515,13 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
   const generationFailure = run?.warnings.filter(warning => warning.startsWith(generationFailurePrefix)).at(-1);
   const areas = run ? suggestedAreas(run) : [];
   const actions = run ? dayOneItems(run, items.filter(item => run.items.find(saved => saved.id === item.id)?.text === item.text)) : [];
-  const pendingShareIds = shareAnswers.filter(id =>
-    !run?.selectedIds.includes(id) && run?.gaps?.some(gap => gap.answerSourceId === id));
+  const claimCategories = [...new Set(items.map(item => item.category || 'unknown'))];
   const scopeChanged = Boolean((run?.departingPerson || run?.githubUsername) && takeoverScope.trim() !== (run.takeoverScope ?? ''));
 
   function getActiveStage(): number {
     if (!run || run.state === 'importing') return 1;
-    if (run.state === 'awaiting_scope_confirmation' || run.state === 'reconstructing') return 2;
+    if (run.state === 'awaiting_scope_confirmation' || run.state === 'reconstructing' ||
+      run.id === sourceViewRunId || (run.state === 'failed' && run.artifacts.length > 0)) return 2;
     if (run.state === 'needs_review') return 3;
     if (run.state === 'approved') return 4;
     return 1;
@@ -536,25 +536,9 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
     if (activeStage === 3) tourTarget = hasPendingEdits ? 'save-review' : authorised ? 'approve' : 'review-access';
     if (activeStage === 4) tourTarget = 'download';
   }
-  const assignment = run && (
-    <form className="notice" data-tour-detail="assignment" onSubmit={event => {
-      event.preventDefault();
-      void patch({ action: 'assign_successor', email: successorEmail.trim() || null });
-    }}>
-      <h3>Assign successor</h3>
-      <label>Successor email<input data-tour-control type="email" value={successorEmail} maxLength={254}
-        placeholder="alex.vance@team.internal" onChange={event => setSuccessorEmail(event.target.value)} /></label>
-      <p className="footnote">Use the email they sign in with. Leave it blank to clear the assignment.</p>
-      <button type="submit" className="secondary m3e-button m3e-button--tonal" disabled={busy || JSON.stringify(items) !== JSON.stringify(run.items) || successorEmail.trim().toLowerCase() === (run.successorEmail ?? '')}>
-        Save successor assignment
-      </button>
-      {run.successorEmail && <p role="status">Assigned to {run.successorEmail}</p>}
-    </form>
-  );
-
-
   function resetToNewRun() {
     setRun(null);
+    setSourceViewRunId(null);
     setSuccessorEmail('');
     setShowSuccessor(false);
     setSelected([]);
@@ -565,7 +549,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
 
   return (
     <div className="m3-guided-workspace">
-      <DemoSpotlightTour target={tourTarget} />
+      <DemoSpotlightTour target={tourTarget} docked={activeStage === 3} />
       <div className="m3-wizard-layout">
       {/* Studio Header & Stepper */}
       <section className="hero">
@@ -595,8 +579,12 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
           className={`stage-step ${activeStage > 2 ? 'completed' : ''}`}
           aria-current={activeStage === 2 ? 'step' : undefined}
         >
-          <span className="stage-step-num">{activeStage > 2 ? <Check size={14} aria-hidden="true" /> : '2'}</span>
-          <span>Select sources</span>
+          {run && activeStage > 2 ? (
+            <button type="button" className="m3-stage-link" disabled={busy} onClick={() => setSourceViewRunId(run.id)}>
+              <span className="stage-step-num"><Check size={14} aria-hidden="true" /></span>
+              Select sources
+            </button>
+          ) : <><span className="stage-step-num">2</span><span>Select sources</span></>}
         </li>
         <li
           className={`stage-step ${activeStage > 3 ? 'completed' : ''}`}
@@ -724,9 +712,9 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
               ) : (
                 /* DEMO MODE HERO CARD */
                 <div className="m3-demo-hero-card">
-                  <h3>Try a sample handover</h3>
+                  <h3>Try a ReV handover</h3>
                   <p>
-                    Use a sample project to select sources, review a draft, and prepare a departure interview.
+                    Select real ReV commits, review a prepared draft, and export it. The snapshot loads locally.
                   </p>
                   {busy ? (
                     <LiveProcessingCard phase={busyPhase} elapsed={elapsedTime} />
@@ -745,7 +733,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                 </div>
               )}
 
-              <section className="slack-source-panel" data-tour-detail="slack" aria-labelledby="slack-source-heading">
+              {evalMode === 'live' && <section className="slack-source-panel" aria-labelledby="slack-source-heading">
                 <div className="slack-source-header">
                   <div>
                     <h3 id="slack-source-heading">Slack</h3>
@@ -780,11 +768,11 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     /> Import from configured Slack channels
                   </label>
                 )}
-              </section>
+              </section>}
 
               <details data-tour-detail="setup" style={{ marginTop: '16px' }}>
                 <summary style={{ cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: '#5c6f66' }}>
-                  Advanced options (successor and Slack ZIP)
+                  {evalMode === 'live' ? 'Advanced options (successor and Slack ZIP)' : 'Advanced options (successor)'}
                 </summary>
                 <div style={{ paddingTop: '12px' }}>
                   <div className="button-row">
@@ -801,14 +789,14 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     <p className="footnote">Use their sign-in email. The assignment is saved when you start the run.</p>
                   </div>
 
-                  <label>
+                  {evalMode === 'live' && <label>
                     Slack export ZIP <span className="muted">optional · max 10 MiB</span>
                     <input
                       type="file"
                       accept=".zip,application/zip"
                       onChange={e => setFile(e.target.files?.[0] || null)}
                     />
-                  </label>
+                  </label>}
                 </div>
               </details>
               {evalMode === 'live' && (
@@ -855,10 +843,16 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
 
               {run.mode === 'fixture' && (
                 <div className="notice">
-                  Synthetic fixture · generation uses deterministic example output, not an AI model.
+                  Offline demo · draft claims are prewritten for the bundled sources.
                 </div>
               )}
               {generationFailure && <div className="warning" role="status">{generationFailure}</div>}
+              {(run.state === 'needs_review' || run.state === 'approved') && (
+                <button type="button" className="secondary m3e-button m3e-button--tonal" disabled={busy}
+                  onClick={() => setSourceViewRunId(null)}>
+                  {run.state === 'approved' ? 'Return to export' : 'Return to review'}
+                </button>
+              )}
               {coverageWarnings.length > 0 && (
                 <div className="warning">
                   <strong>Incomplete coverage</strong>
@@ -948,7 +942,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     />
                     <span>
                       <b>{a.kind.replaceAll('_', ' ')}</b>
-                      <small>{a.sourceRef}{a.author ? ` · ${a.author}` : ''}</small>
+                      <small>{sourceLabel(a.sourceRef)}{a.author ? ` · ${a.author}` : ''}</small>
                       {(run.githubUsername || run.departingPerson) &&
                         (a.githubLogin?.toLowerCase() === (run.githubUsername || run.departingPerson)?.toLowerCase() ||
                           a.author?.toLowerCase() === (run.githubUsername || run.departingPerson)?.toLowerCase()) && (
@@ -1052,9 +1046,9 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                           return (
                             <li key={id}>
                               {source.url?.startsWith('https://github.com/') ? (
-                                <a href={source.url}>{source.sourceRef}</a>
+                                <a href={source.url}>{sourceLabel(source.sourceRef)}</a>
                               ) : (
-                                source.sourceRef
+                                sourceLabel(source.sourceRef)
                               )}
                             </li>
                           );
@@ -1077,14 +1071,16 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                 </div>
               )}
 
-              {assignment}
-              <div data-tour-detail="interview">
-                <DepartureInterview key={run.id} run={run} busy={busy} hasUnsavedEdits={hasPendingEdits} savesEditsOnPrepare={run.mode === 'fixture'} patch={patch} shareIds={shareAnswers} toggleShare={toggleShare} />
-              </div>
-              {items.map((item, index) => (
-                <div className="review-item" key={item.id} data-tour-detail={index === 0 ? "claims" : undefined}>
+              {claimCategories.length > 0 && <div className="review-claims" role="region" aria-label="Handover claims" data-tour-detail="claims">
+              {claimCategories.map((category, index) => {
+                const claims = items.filter(item => (item.category || 'unknown') === category);
+                return <details className="review-claim-group" key={category} open={index === 0}>
+                  <summary className="review-claim-summary">
+                    <strong className={`claim-category claim-category--${category}`}>{category.replaceAll('_', ' ')}</strong>
+                    <span className="review-claim-count">{claims.length} {claims.length === 1 ? 'claim' : 'claims'}</span>
+                  </summary>
+                  {claims.map(item => <div className="review-item review-claim" key={item.id}>
                   <div className="review-meta">
-                    <strong>{(item.category || 'unknown').replaceAll('_', ' ')}</strong>
                     <span className={`status-pill ${item.verification === 'validated_reference' ? 'valid' : 'uncertain'}`}>
                       {(item.verification || 'unverified').replaceAll('_', ' ')}
                     </span>
@@ -1100,7 +1096,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     const src = (run.artifacts || []).find(s => s.id === c.sourceId);
                     return (
                       <div className="citation" key={i}>
-                        <small>↳ {src?.sourceRef || 'Missing source'}</small>
+                        <small>↳ {src ? sourceLabel(src.sourceRef) : 'Missing source'}</small>
                         <p>“{c.quote}”</p>
                       </div>
                     );
@@ -1123,8 +1119,10 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                       Needs clarification
                     </label>
                   </div>
-                </div>
-              ))}
+                  </div>)}
+                </details>;
+              })}
+              </div>}
 
               {/* Verification Tools: Gaps, Divergence & Evidence Graph */}
               <details style={{ marginTop: '16px', marginBottom: '16px', padding: '12px 14px', borderRadius: '12px', background: '#f8faf8', border: '1px solid #d9e6dc' }}>
@@ -1206,16 +1204,27 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                 {graphEdges && (
                   <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <small style={{ color: '#475569', fontWeight: 600 }}>
-                      Evidence Graph Edges ({graphEdges.length})
+                      Evidence links ({graphEdges.length})
                     </small>
                     {graphEdges.length === 0 ? (
                       <small className="footnote">No graph relationships recorded for this revision yet.</small>
                     ) : (
-                      graphEdges.slice(0, 10).map(edge => (
-                        <div key={edge.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}>
+                      graphEdges.map(edge => (
+                        <div key={edge.id} className="evidence-link">
                           <span>
-                            <strong>{edge.type}</strong> · <span className={`status-pill ${edge.status === 'confirmed' ? 'valid' : 'uncertain'}`}>{edge.status}</span>
+                            <strong>{edge.type.replaceAll('_', ' ')}</strong> · <span className={`status-pill ${edge.status === 'confirmed' ? 'valid' : 'uncertain'}`}>{edge.status}</span>
                           </span>
+                          <dl>
+                            {[['From', edge.fromId], ['To', edge.toId]].map(([label, id]) => {
+                              const source = run.artifacts.find(artifact => artifact.id === id);
+                              const claim = run.items.find(item => item.id === id);
+                              const sourceTitle = source?.text.trim().split(/\r?\n/, 1)[0];
+                              return <div key={label}>
+                                <dt>{label} · {source ? 'Source' : 'Claim'}</dt>
+                                <dd>{source ? sourceTitle || sourceLabel(source.sourceRef) : claim?.text ?? 'Unavailable'}</dd>
+                              </div>;
+                            })}
+                          </dl>
                           {edge.status === 'proposed' && (
                             <div style={{ display: 'flex', gap: '6px' }}>
                               <button
@@ -1286,7 +1295,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                       className={canApprove ? 'primary-action m3e-button' : 'secondary m3e-button m3e-button--tonal'}
                       data-demo-spotlight={tourTarget === 'approve' ? tourTarget : undefined}
                       disabled={busy || !canApprove}
-                      onClick={() => patch({ action: 'approve', confirmAuthorisation: true, interviewAnswerIds: pendingShareIds })}
+                      onClick={() => patch({ action: 'approve', confirmAuthorisation: true })}
                     >
                       Approve current revision
                     </button>
@@ -1313,16 +1322,17 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                 <span className="status-pill valid">APPROVED</span>
               </div>
 
-              {assignment}
-              <DepartureInterview key={run.id} run={run} busy={busy} patch={patch} shareIds={shareAnswers} toggleShare={toggleShare} />
-              <div data-tour-detail="risk">
+              {run.mode !== 'fixture' && <div data-tour-detail="risk">
                 <BusFactorHeatmap runId={run.id} departingName={run.departingPerson || run.githubUsername} />
-              </div>
-
-              {pendingShareIds.length > 0 && <button type="button" className="primary-action m3e-button" disabled={busy}
-                onClick={() => patch({ action: 'approve', confirmAuthorisation: true, interviewAnswerIds: pendingShareIds })}>
-                Approve and share selected interview answers
-              </button>}
+              </div>}
+              {run.mode === 'fixture' && <div className="notice" data-tour-detail="next-steps">
+                <h3>Try a live handover next</h3>
+                <p>Use Live Engine to import a real Git project and generate a draft with your configured model. For editor onboarding, open Settings → MCP Server &amp; Tools and choose Set up VS Code MCP on this computer.</p>
+                <button type="button" className="secondary m3e-button m3e-button--tonal" disabled={busy} onClick={() => {
+                  resetToNewRun();
+                  setEvalMode('live');
+                }}>Try Live Engine</button>
+              </div>}
 
               <div className="m3-assignment-card" data-tour-detail="storage">
                 <div className="m3-assignment-grid">
@@ -1449,7 +1459,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                         />
                         <span>
                           <b>{a.kind.replaceAll('_', ' ')}</b>
-                          <small>{a.sourceRef}{a.author ? ` · ${a.author}` : ''}</small>
+                          <small>{sourceLabel(a.sourceRef)}{a.author ? ` · ${a.author}` : ''}</small>
                           <span className="source-text">{a.text}</span>
                         </span>
                       </label>

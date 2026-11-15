@@ -44,8 +44,8 @@ it('queues an unanswered question and only uses the reply after the lead shares 
     });
     expect(run.items).toEqual(originalItems);
     expect(run.selectedIds).toEqual(selectedIds);
+    expect(run.state).toBe('approved');
     const answerId = run.gaps![0].answerSourceId!;
-    run = await updateAction(id, { action: 'approve', confirmAuthorisation: true });
     expect(exportMarkdown(run)).not.toContain('incident commander');
     expect(await askHandover(id, { question })).toMatchObject({ answer: null });
     run = await readRun(id);

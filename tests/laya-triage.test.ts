@@ -69,6 +69,20 @@ describe('Laya draft triage', () => {
     expect((await triageDraftSources(sources)).sources).toEqual(sources);
   });
 
+  it('can skip report-only changes with long patches and keeps a mixed report and code change', async () => {
+    vi.stubEnv('REV_LAYA_PYTHON', 'python');
+    const report = { ...commit('checkpoint: update technical report pdf with dual-mode deliverables'), kind: 'github_commit' as const, paths: undefined };
+    const patch = { ...commit('report content and architecture decisions '.repeat(500)), kind: 'github_commit_patch' as const,
+      paths: undefined, externalId: `${report.externalId}:docs/ROUND2_TECHNICAL_REPORT.html` };
+    const mixed = commit('Update technical report and extend the launcher', ['docs/ROUND2_TECHNICAL_REPORT.html', 'src/launch.ts']);
+    const initial = [report, patch, mixed];
+    const end = reply([{ ...omit, confidence: 0.72 }, { ...omit, confidence: 0.72 }]);
+    const result = await triageDraftSources(initial);
+    expect(result.sources).toEqual([mixed]);
+    expect(result.notice).toContain(report.text);
+    expect(end.mock.calls[0][0]).not.toContain(patch.text);
+  });
+
   it('leaves triage disabled without an explicit Python path', async () => {
     vi.stubEnv('REV_LAYA_PYTHON', '');
     const sources = [commit('fix typo in docs')];

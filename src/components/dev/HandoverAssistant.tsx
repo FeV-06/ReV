@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { Run } from '@/lib/contracts';
 
 interface Reply {
@@ -8,12 +8,17 @@ interface Reply {
   citations: { sourceId: string; label: string; quote: string; url: string | null; author: string | null; timestamp: string | null }[];
 }
 
-export default function HandoverAssistant({ run }: { run: Run }) {
+export default function HandoverAssistant({ run, active = false }: { run: Run; active?: boolean }) {
   const [question, setQuestion] = useState('');
   const [replies, setReplies] = useState<Reply[]>([]);
   const [remote, setRemote] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (active) inputRef.current?.focus();
+  }, [active]);
 
   async function ask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,7 +46,7 @@ export default function HandoverAssistant({ run }: { run: Run }) {
   return <section className="card m3e-card m3e-card--outlined handover-assistant" aria-labelledby="handover-assistant">
     <h2 id="handover-assistant">Ask your handover assistant</h2>
     <p>Ask about decisions, next steps, or how something works. The assistant uses the approved project snapshot and shared interview answers.</p>
-    {run.mode === 'fixture' && <p className="footnote">Synthetic demo. Replies are drawn from fixture records without AI inference.</p>}
+    {run.mode === 'fixture' && <p className="footnote">The demo answers from approved evidence or linked public ReV documentation without calling a model.</p>}
     <div role="log" aria-label="Handover conversation">
       {replies.map((reply, index) => <div className="review-item" key={index}>
         <strong>You · {reply.question}</strong>
@@ -56,7 +61,7 @@ export default function HandoverAssistant({ run }: { run: Run }) {
       </div>)}
     </div>
     <form onSubmit={ask}>
-      <label>Ask a question<input placeholder="Ask about a decision, a file, or what to do next…" value={question} maxLength={1000} disabled={busy}
+      <label>Ask a question<input ref={inputRef} placeholder="Ask about a decision, a file, or what to do next…" value={question} maxLength={1000} disabled={busy}
         onChange={event => setQuestion(event.target.value)} /></label>
       {run.mode !== 'fixture' && <label className="check">
         <input type="checkbox" checked={remote} onChange={event => setRemote(event.target.checked)} />

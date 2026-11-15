@@ -675,7 +675,15 @@ pub fn analyze_git_commit_symbols(repo: &Path, commit_sha: &str) -> Result<Commi
 
         let diff_res = run_git(
             repo,
-            &["show", "--root", "--format=", "--patch", sha_clean, "--", file_path],
+            &[
+                "show",
+                "--root",
+                "--format=",
+                "--patch",
+                sha_clean,
+                "--",
+                file_path,
+            ],
             5_000_000,
         );
         let diff = diff_res.unwrap_or_default();

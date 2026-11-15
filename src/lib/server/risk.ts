@@ -1,7 +1,11 @@
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import type { Run } from '@/lib/contracts';
 import { z } from 'zod';
 import { callCore } from './core';
+
+const exec = promisify(execFile);
 
 export const moduleRiskSchema = z.object({
   path: z.string(),
@@ -56,25 +60,30 @@ export async function analyzeRunRisk(run: Run, input: unknown) {
   }
 
   const identities = [run.departingPerson, run.githubUsername].flatMap(value => value ? [value.trim().toLowerCase()] : []);
+  const repoPath = path.resolve(parsed.repoPath || run.projectRoot || process.env.REV_GIT_DIR || process.cwd());
   const emails = new Set(parsed.emails?.length ? parsed.emails : identities.filter(value => /^[^\s<>@]+@[^\s<>@]+$/.test(value)));
   if (!parsed.emails?.length) {
+    const matchingCommits = new Set<string>();
     for (const artifact of localCommits) {
       const match = /^(.*?)\s*<([^<>]+)>$/.exec(artifact.author ?? '');
-      if (!match) continue;
-      const [, name, email] = match;
+      const [, name, email] = match ?? [];
       if ([name, email, artifact.author, artifact.githubLogin].some(value => value && identities.includes(value.trim().toLowerCase()))) {
-        emails.add(email);
+        if (email) emails.add(email);
+        else if (/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i.test(artifact.externalId)) matchingCommits.add(artifact.externalId);
       }
+    }
+    if (matchingCommits.size) {
+      const { stdout } = await exec('git', ['-C', repoPath, 'log', '--no-walk', '--format=%ae', ...matchingCommits, '--'], { timeout: 15_000 })
+        .catch(() => { throw new Error('Could not read the imported commits. Check that the original local Git checkout is available.'); });
+      for (const email of stdout.split(/\r?\n/).map(line => line.trim()).filter(Boolean)) emails.add(email);
     }
   }
   if (!emails.size) {
     throw new Error('No Git author email matched the departing contributor. Set the contributor to their Git author name or email.');
   }
 
-  const repoPath = parsed.repoPath || run.projectRoot || process.cwd();
-
   const analysis = await analyzeRepositoryRisk({
-    repoPath: path.resolve(repoPath),
+    repoPath,
     emails: [...emails],
     maxFiles: parsed.maxFiles || 100,
   });

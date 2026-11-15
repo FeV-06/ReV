@@ -1,10 +1,10 @@
 'use client';
 
-import { Crown, Folder, Info, Menu, Pencil, Settings, UserRound } from 'lucide-react';
+import { Crown, Folder, Info, Menu, MessageSquare, Pencil, Settings, UserRound } from 'lucide-react';
 import React, { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 
-export type ActiveTab = 'projects' | 'settings' | 'about';
+export type ActiveTab = 'projects' | 'settings' | 'about' | 'questions';
 
 interface AppShellProps {
   activeTab: ActiveTab;
@@ -15,6 +15,7 @@ interface AppShellProps {
 export default function AppShell({ activeTab, onTabChange, children }: AppShellProps) {
   const { user, logout, evalMode, setEvalMode } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const workTab = user?.role === 'admin' ? { id: 'questions' as const, text: 'Questions' } : null;
 
   return (
     <div className="m3-shell">
@@ -45,6 +46,9 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
               Projects
             </button>
 
+            {workTab && <button type="button" role="tab" aria-selected={activeTab === workTab.id}
+              className={`m3-nav-pill ${activeTab === workTab.id ? 'active' : ''}`}
+              onClick={() => { onTabChange(workTab.id); setMobileMenuOpen(false); }}>{workTab.text}</button>}
             {user.role !== 'departing' && (
               <button
                 type="button"
@@ -135,6 +139,10 @@ export default function AppShell({ activeTab, onTabChange, children }: AppShellP
                 >
                   <Folder size={16} aria-hidden="true" /> Projects
                 </button>
+                {workTab && <button type="button" className={`m3-mobile-nav-item ${activeTab === workTab.id ? 'active' : ''}`}
+                  onClick={() => { onTabChange(workTab.id); setMobileMenuOpen(false); }}>
+                  <MessageSquare size={16} aria-hidden="true" /> {workTab.text}
+                </button>}
                 {user.role !== 'departing' && (
                   <button
                     type="button"
