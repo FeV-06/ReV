@@ -143,7 +143,7 @@ export default function DemoSpotlightTour({ target, docked = false }: { target: 
     <aside ref={panelRef} className="m3-tour-banner" data-review-docked={docked ? 'true' : undefined} data-requires-action={Boolean(target && !topic)} aria-label="Guided demo">
       <div className="m3-tour-header">
         <div className="m3-tour-pill"><Zap size={16} aria-hidden="true" /> Guided demo</div>
-        <button type="button" className="m3-tour-dismiss" onClick={() => setTourActive(false)} aria-label="Close guided demo">
+        <button type="button" className="m3-tour-dismiss" onClick={() => setTourActive(false)} title="Dismiss and don't show again" aria-label="Close guided demo">
           <X size={16} aria-hidden="true" />
         </button>
       </div>

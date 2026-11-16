@@ -13,6 +13,7 @@ import {
   KeyRound,
   Laptop,
   MessageSquare,
+  Network,
   Pencil,
   RefreshCw,
   Save,
@@ -24,13 +25,37 @@ import {
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import TeamSyncPanel from '@/components/team/TeamSyncPanel';
+
+type AdminTab = 'ai' | 'connectors' | 'database' | 'mcp' | 'team-sync';
+type DevTab = 'workspace' | 'citations' | 'export';
+
+interface NavItem<T extends string> {
+  id: T;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+}
+
+const ADMIN_NAV_ITEMS: NavItem<AdminTab>[] = [
+  { id: 'ai', label: 'AI Inference', icon: Zap },
+  { id: 'connectors', label: 'Connectors (Git & Slack)', icon: KeyRound },
+  { id: 'database', label: 'Database & Persistence', icon: Database },
+  { id: 'mcp', label: 'MCP Server & Tools', icon: Cpu },
+  { id: 'team-sync', label: 'Team sync', icon: Network },
+];
+
+const DEV_NAV_ITEMS: NavItem<DevTab>[] = [
+  { id: 'workspace', label: 'Workspace & Local IDE', icon: Laptop },
+  { id: 'citations', label: 'Citations & Diffs', icon: FolderGit2 },
+  { id: 'export', label: 'Export Defaults & Alerts', icon: Save },
+];
 
 export default function SettingsView() {
   const { role, user, logout } = useAuth();
 
   // Navigation Sub-Tabs
-  const [adminTab, setAdminTab] = useState<'ai' | 'connectors' | 'database' | 'mcp'>('ai');
-  const [devTab, setDevTab] = useState<'workspace' | 'citations' | 'export'>('workspace');
+  const [adminTab, setAdminTab] = useState<AdminTab>('ai');
+  const [devTab, setDevTab] = useState<DevTab>('workspace');
 
   // Admin Configuration State
   const [provider, setProvider] = useState<'openai' | 'anthropic' | 'ollama' | 'groq'>('openai');
@@ -324,110 +349,123 @@ export default function SettingsView() {
   }
 
   return (
-    <div className="m3-settings-container m3-slide-in">
-      <section className="hero">
-        <div>
-          <h1>Workspace settings</h1>
-          <p>
-            {role === 'admin'
-              ? 'Configure AI inference providers, connector credentials, MCP server integration, and persistence options.'
-              : 'User preferences, local IDE integration, and citation display options for your successor account.'}
+    <div className="flex w-full bg-[#f5f7f2] overflow-hidden fx-settings-layout">
+      {/* Left Sidebar (Navigation) */}
+      <aside className="w-72 h-full flex flex-col border-r border-[#dce6df] p-6 bg-[#f5f7f2] fx-settings-sidebar">
+        <div className="mb-6">
+          <h1 className="font-serif text-2xl font-normal text-[#152b2a] fx-settings-title">
+            Workspace settings
+          </h1>
+          <p className="text-xs text-[#526a64] mt-1 fx-settings-subtitle">
+            Configure models, connectors & storage
           </p>
         </div>
-        <div className="m3-role-tag">
-          {role === 'admin' ? 'Admin workspace' : 'Successor workspace'}
-        </div>
-      </section>
 
-      {savedSuccess && (
-        <div role="status" className="notice" style={{ marginBottom: '24px' }}>
-          <Check size={16} aria-hidden="true" /> Configuration settings saved and synchronized with local backend.
-        </div>
-      )}
-      {saveError && (
-        <div role="alert" className="error" style={{ marginBottom: '24px' }}>
-          <TriangleAlert size={16} aria-hidden="true" /> {saveError}
-        </div>
-      )}
+        <nav className="flex flex-col gap-1.5 flex-1 fx-sidebar-nav" aria-label="Settings navigation">
+          {role === 'admin' ? (
+            ADMIN_NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const isActive = adminTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setAdminTab(item.id)}
+                  className={`fx-sidebar-item w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-left transition-colors ${
+                    isActive
+                      ? 'active bg-[#d9ebda] text-[#0f352b] font-medium shadow-sm'
+                      : 'text-[#48635c] hover:bg-[#e8eee8] hover:text-[#152b2a]'
+                  }`}
+                >
+                  <Icon size={18} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })
+          ) : (
+            DEV_NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const isActive = devTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setDevTab(item.id)}
+                  className={`fx-sidebar-item w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-left transition-colors ${
+                    isActive
+                      ? 'active bg-[#d9ebda] text-[#0f352b] font-medium shadow-sm'
+                      : 'text-[#48635c] hover:bg-[#e8eee8] hover:text-[#152b2a]'
+                  }`}
+                >
+                  <Icon size={18} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })
+          )}
+        </nav>
 
-      {/* Sub-Navigation Tabs */}
-      <div className="m3-settings-tabs" role="tablist">
-        {role === 'admin' ? (
-          <>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={adminTab === 'ai'}
-              className={`m3-settings-tab-btn ${adminTab === 'ai' ? 'active' : ''}`}
-              onClick={() => setAdminTab('ai')}
-            >
-              <Zap size={15} aria-hidden="true" /> AI Inference
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={adminTab === 'connectors'}
-              className={`m3-settings-tab-btn ${adminTab === 'connectors' ? 'active' : ''}`}
-              onClick={() => setAdminTab('connectors')}
-            >
-              <KeyRound size={15} aria-hidden="true" /> Connectors (Git & Slack)
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={adminTab === 'database'}
-              className={`m3-settings-tab-btn ${adminTab === 'database' ? 'active' : ''}`}
-              onClick={() => setAdminTab('database')}
-            >
-              <Database size={15} aria-hidden="true" /> Database & Persistence
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={adminTab === 'mcp'}
-              className={`m3-settings-tab-btn ${adminTab === 'mcp' ? 'active' : ''}`}
-              onClick={() => setAdminTab('mcp')}
-            >
-              <Cpu size={15} aria-hidden="true" /> MCP Server & Tools
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={devTab === 'workspace'}
-              className={`m3-settings-tab-btn ${devTab === 'workspace' ? 'active' : ''}`}
-              onClick={() => setDevTab('workspace')}
-            >
-              <Laptop size={15} aria-hidden="true" /> Workspace & Local IDE
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={devTab === 'citations'}
-              className={`m3-settings-tab-btn ${devTab === 'citations' ? 'active' : ''}`}
-              onClick={() => setDevTab('citations')}
-            >
-              <FolderGit2 size={15} aria-hidden="true" /> Citations & Diffs
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={devTab === 'export'}
-              className={`m3-settings-tab-btn ${devTab === 'export' ? 'active' : ''}`}
-              onClick={() => setDevTab('export')}
-            >
-              <Save size={15} aria-hidden="true" /> Export Defaults & Alerts
-            </button>
-          </>
-        )}
-      </div>
+        <div className="pt-4 border-t border-[#dce6df] flex items-center justify-between text-xs text-[#6e857f] fx-sidebar-footer">
+          <span>ReV v0.1.0</span>
+          <span className="capitalize px-2 py-0.5 rounded bg-[#e8eee8] text-[#24614a] font-medium fx-role-badge">
+            {role}
+          </span>
+        </div>
+      </aside>
 
-      {role === 'admin' ? (
-        <form onSubmit={handleSave} className="m3-settings-form">
-          {/* TAB 1: AI INFERENCE */}
-          {adminTab === 'ai' && (
+      {/* Right Content Area */}
+      <div className="flex-1 overflow-y-auto p-8 lg:p-12 fx-settings-content">
+        <main className="max-w-5xl fx-settings-main">
+          {savedSuccess && (
+            <div role="status" className="notice" style={{ marginBottom: '24px' }}>
+              <Check size={16} aria-hidden="true" /> Configuration settings saved and synchronized with local backend.
+            </div>
+          )}
+          {saveError && (
+            <div role="alert" className="error" style={{ marginBottom: '24px' }}>
+              <TriangleAlert size={16} aria-hidden="true" /> {saveError}
+            </div>
+          )}
+
+          {/* Contextual Tab Header */}
+          <div className="fx-tab-header">
+            <h2>
+              {role === 'admin'
+                ? ADMIN_NAV_ITEMS.find(i => i.id === adminTab)?.label
+                : DEV_NAV_ITEMS.find(i => i.id === devTab)?.label}
+            </h2>
+            <p>
+              {role === 'admin'
+                ? adminTab === 'ai'
+                  ? 'Manage persistent configuration, API integrations, and storage.'
+                  : adminTab === 'connectors'
+                  ? 'Configure GitHub personal tokens and Slack workspace connectors.'
+                  : adminTab === 'database'
+                  ? 'Configure local embedded PGlite storage or remote Supabase instance.'
+                  : adminTab === 'mcp'
+                  ? 'Direct Model Context Protocol server configuration for IDE agents.'
+                  : 'Synchronize active handovers and verify signatures across team peers.'
+                : devTab === 'workspace'
+                ? 'Local workspace repository mapping and preferred editor hooks.'
+                : devTab === 'citations'
+                ? 'Configure citation source links and diff visualization preference.'
+                : 'Audit handover export formats and automated email alerts.'}
+            </p>
+          </div>
+
+          {role === 'admin' ? (
+            adminTab === 'team-sync' ? (
+              <div className="space-y-6">
+                <TeamSyncPanel endpoint="/api/team-sync" />
+              </div>
+            ) : (
+              <form onSubmit={handleSave} className="m3-settings-form">
+                {/* TAB 1: AI INFERENCE */}
+                {adminTab === 'ai' && (
             <div className="grid">
               <div className="column">
                 <section className="card m3e-card m3e-card--outlined">
@@ -439,119 +477,119 @@ export default function SettingsView() {
                     <span className="step-icon"><Zap size={16} aria-hidden="true" /></span>
                   </div>
 
-                    <div className="m3-provider-options">
-                      <label className={`m3-provider-card ${provider === 'openai' ? 'selected' : ''}`}>
-                        <input
-                          type="radio"
-                          name="provider"
-                          value="openai"
-                          checked={provider === 'openai'}
-                          onChange={() => {
-                            setProvider('openai');
-                            setModelName('gpt-4o');
-                            setBaseUrl('https://api.openai.com/v1');
-                          }}
-                        />
-                        <div>
-                          <strong>OpenAI</strong>
-                          <small>GPT-4o, GPT-4o-mini</small>
-                        </div>
-                      </label>
-
-                      <label className={`m3-provider-card ${provider === 'groq' ? 'selected' : ''}`}>
-                        <input
-                          type="radio"
-                          name="provider"
-                          value="groq"
-                          checked={provider === 'groq'}
-                          onChange={() => {
-                            setProvider('groq');
-                            setApiKey('');
-                            setModelName('openai/gpt-oss-120b');
-                            setBaseUrl('https://api.groq.com/openai/v1');
-                          }}
-                        />
-                        <div>
-                          <strong>Groq</strong>
-                          <small>GPT-OSS 120B / Fast Inference</small>
-                        </div>
-                      </label>
-
-                      <label className={`m3-provider-card ${provider === 'anthropic' ? 'selected' : ''}`}>
-                        <input
-                          type="radio"
-                          name="provider"
-                          value="anthropic"
-                          checked={provider === 'anthropic'}
-                          onChange={() => {
-                            setProvider('anthropic');
-                            setModelName('claude-3-5-sonnet-20241022');
-                            setBaseUrl('https://api.anthropic.com/v1');
-                          }}
-                        />
-                        <div>
-                          <strong>Anthropic</strong>
-                          <small>Claude 3.5 Sonnet</small>
-                        </div>
-                      </label>
-
-                      <label className={`m3-provider-card ${provider === 'ollama' ? 'selected' : ''}`}>
-                        <input
-                          type="radio"
-                          name="provider"
-                          value="ollama"
-                          checked={provider === 'ollama'}
-                          onChange={() => {
-                            setProvider('ollama');
-                            setModelName('llama3.1:70b');
-                            setBaseUrl('http://127.0.0.1:11434/v1');
-                          }}
-                        />
-                        <div>
-                          <strong>Local (Ollama / vLLM)</strong>
-                          <small>Runs offline on local hardware</small>
-                        </div>
-                      </label>
-                    </div>
-
-                    <label style={{ marginTop: '14px' }}>
-                      API Key / Secret Token
-                      <div className="m3-input-with-button">
-                        <input
-                          type={showKey ? 'text' : 'password'}
-                          value={apiKey}
-                          onChange={e => setApiKey(e.target.value)}
-                          placeholder={provider === 'ollama' ? 'Optional for local Ollama' : provider === 'groq' ? 'gsk_…' : 'sk-…'}
-                        />
-                        <button
-                          type="button"
-                          className="secondary m3-inline-btn m3e-button m3e-button--tonal"
-                          onClick={() => setShowKey(!showKey)}
-                        >
-                          {showKey ? 'Hide' : 'Show'}
-                        </button>
+                  <div className="m3-provider-options">
+                    <label className={`m3-provider-card ${provider === 'openai' ? 'selected' : ''}`}>
+                      <input
+                        type="radio"
+                        name="provider"
+                        value="openai"
+                        checked={provider === 'openai'}
+                        onChange={() => {
+                          setProvider('openai');
+                          setModelName('gpt-4o');
+                          setBaseUrl('https://api.openai.com/v1');
+                        }}
+                      />
+                      <div>
+                        <strong>OpenAI</strong>
+                        <small>GPT-4o, GPT-4o-mini</small>
                       </div>
                     </label>
 
-                    <div className="m3-two-col-inputs">
-                      <label>
-                        Model Identifier
-                        <input
-                          value={modelName}
-                          onChange={e => setModelName(e.target.value)}
-                          placeholder="e.g. gpt-4o"
-                        />
-                      </label>
-                      <label>
-                        Base API URL
-                        <input
-                          value={baseUrl}
-                          readOnly={provider === 'groq'}
-                          onChange={e => setBaseUrl(e.target.value)}
-                          placeholder="e.g. https://api.openai.com/v1"
-                        />
-                      </label>
+                    <label className={`m3-provider-card ${provider === 'groq' ? 'selected' : ''}`}>
+                      <input
+                        type="radio"
+                        name="provider"
+                        value="groq"
+                        checked={provider === 'groq'}
+                        onChange={() => {
+                          setProvider('groq');
+                          setApiKey('');
+                          setModelName('openai/gpt-oss-120b');
+                          setBaseUrl('https://api.groq.com/openai/v1');
+                        }}
+                      />
+                      <div>
+                        <strong>Groq</strong>
+                        <small>GPT-OSS 120B / Fast Inference</small>
+                      </div>
+                    </label>
+
+                    <label className={`m3-provider-card ${provider === 'anthropic' ? 'selected' : ''}`}>
+                      <input
+                        type="radio"
+                        name="provider"
+                        value="anthropic"
+                        checked={provider === 'anthropic'}
+                        onChange={() => {
+                          setProvider('anthropic');
+                          setModelName('claude-3-5-sonnet-20241022');
+                          setBaseUrl('https://api.anthropic.com/v1');
+                        }}
+                      />
+                      <div>
+                        <strong>Anthropic</strong>
+                        <small>Claude 3.5 Sonnet</small>
+                      </div>
+                    </label>
+
+                    <label className={`m3-provider-card ${provider === 'ollama' ? 'selected' : ''}`}>
+                      <input
+                        type="radio"
+                        name="provider"
+                        value="ollama"
+                        checked={provider === 'ollama'}
+                        onChange={() => {
+                          setProvider('ollama');
+                          setModelName('llama3.1:70b');
+                          setBaseUrl('http://127.0.0.1:11434/v1');
+                        }}
+                      />
+                      <div>
+                        <strong>Local (Ollama / vLLM)</strong>
+                        <small>Runs offline on local hardware</small>
+                      </div>
+                    </label>
+                  </div>
+
+                  <label style={{ marginTop: '14px' }}>
+                    API Key / Secret Token
+                    <div className="m3-input-with-button">
+                      <input
+                        type={showKey ? 'text' : 'password'}
+                        value={apiKey}
+                        onChange={e => setApiKey(e.target.value)}
+                        placeholder={provider === 'ollama' ? 'Optional for local Ollama' : provider === 'groq' ? 'gsk_…' : 'sk-…'}
+                      />
+                      <button
+                        type="button"
+                        className="secondary m3-inline-btn m3e-button m3e-button--tonal"
+                        onClick={() => setShowKey(!showKey)}
+                      >
+                        {showKey ? 'Hide' : 'Show'}
+                      </button>
                     </div>
+                  </label>
+
+                  <div className="m3-two-col-inputs">
+                    <label>
+                      Model Identifier
+                      <input
+                        value={modelName}
+                        onChange={e => setModelName(e.target.value)}
+                        placeholder="e.g. gpt-4o"
+                      />
+                    </label>
+                    <label>
+                      Base API URL
+                      <input
+                        value={baseUrl}
+                        readOnly={provider === 'groq'}
+                        onChange={e => setBaseUrl(e.target.value)}
+                        placeholder="e.g. https://api.openai.com/v1"
+                      />
+                    </label>
+                  </div>
 
                   <div className="button-row" style={{ marginTop: '16px', gap: '8px' }}>
                     <button
@@ -966,8 +1004,9 @@ export default function SettingsView() {
               </div>
             </div>
           )}
-        </form>
-      ) : (
+              </form>
+            )
+          ) : (
         /* DEVELOPER PREFERENCES */
         <form onSubmit={handleSave} className="m3-settings-form">
           {devTab === 'workspace' && (
@@ -1153,6 +1192,8 @@ export default function SettingsView() {
           )}
         </form>
       )}
+        </main>
+      </div>
     </div>
   );
 }

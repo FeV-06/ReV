@@ -340,7 +340,7 @@ textarea { min-height: 80px; resize: vertical; }
 }
 
 /* Material 3 Action Buttons */
-button:not(.run-row):not(.m3e-button):not([class*="m3-"]) {
+button:not(.run-row):not(.m3e-button):not([class*="m3-"]):not(.fx-sidebar-item) {
   border: 0;
   border-radius: 9999px;
   padding: 12px 22px;
@@ -350,14 +350,14 @@ button:not(.run-row):not(.m3e-button):not([class*="m3-"]) {
   font-weight: 700;
   box-shadow: 0 2px 6px rgba(23, 74, 61, 0.12);
 }
-button:not(.run-row):not(.m3e-button):not([class*="m3-"]):hover:not(:disabled) {
+button:not(.run-row):not(.m3e-button):not([class*="m3-"]):not(.fx-sidebar-item):hover:not(:disabled) {
   background: #113c31;
 }
-button:not(.run-row):not(.m3e-button):not([class*="m3-"]):focus-visible {
+button:not(.run-row):not(.m3e-button):not([class*="m3-"]):not(.fx-sidebar-item):focus-visible {
   outline: 2px solid var(--green);
   outline-offset: 2px;
 }
-button:not(.m3e-button) span { margin-left: 10px; }
+button:not(.m3e-button):not(.fx-sidebar-item) span { margin-left: 10px; }
 
 button.secondary:not(.m3e-button):not([class*="m3-"]) {
   background: #edf5ee;
@@ -3863,3 +3863,209 @@ button.m3e-button:active:not(:disabled),
   button.m3e-button:active, .m3-nav-pill:active,
   .m3-admin-tab:active, .m3-mini-tab:active { scale: 1; }
 }
+
+/* ==========================================================================
+   Firefox-Style Vertical Settings Layout & Utilities
+   ========================================================================== */
+
+.m3-shell:has(.fx-settings-layout) {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+}
+
+.m3-shell:has(.fx-settings-layout) .m3-footer {
+  display: none !important;
+}
+
+.m3-viewport:has(.fx-settings-layout) {
+  max-width: 100% !important;
+  width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: flex !important;
+  flex: 1 !important;
+  height: calc(100vh - 64px) !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.fx-settings-layout {
+  display: flex !important;
+  width: 100% !important;
+  height: calc(100vh - 64px) !important;
+  max-height: calc(100vh - 64px) !important;
+  background-color: #f5f7f2 !important;
+  color: #152b2a !important;
+  overflow: hidden !important;
+}
+
+.fx-settings-sidebar {
+  width: 18rem !important; /* w-72 */
+  min-width: 18rem !important;
+  max-width: 18rem !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  border-right: 1px solid #dce6df !important;
+  padding: 1.5rem !important;
+  background-color: #f5f7f2 !important;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+  overflow-y: auto !important;
+}
+
+.fx-settings-title {
+  font-family: var(--rev-font-display), 'DM Serif Display', Georgia, serif !important;
+  font-size: 1.5rem !important;
+  line-height: 1.25 !important;
+  font-weight: 500 !important;
+  color: #152b2a !important;
+  margin: 0 0 0.25rem 0 !important;
+}
+
+.fx-settings-subtitle {
+  font-size: 0.8125rem !important;
+  color: #526a64 !important;
+  margin: 0 0 1.5rem 0 !important;
+  line-height: 1.4 !important;
+}
+
+.fx-sidebar-nav {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.375rem !important;
+  flex: 1 !important;
+  overflow-y: auto !important;
+}
+
+.fx-sidebar-item {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+  width: 100% !important;
+  padding: 0.625rem 1rem !important;
+  border-radius: 8px !important;
+  border: 1px solid transparent !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  line-height: 1.25rem !important;
+  color: #48635c !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  cursor: pointer !important;
+  text-align: left !important;
+  text-decoration: none !important;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease !important;
+  outline: none !important;
+  box-sizing: border-box !important;
+}
+
+.fx-sidebar-item span {
+  margin-left: 0 !important;
+}
+
+.fx-sidebar-item svg {
+  flex-shrink: 0 !important;
+  color: #48635c !important;
+  stroke: #48635c !important;
+}
+
+.fx-sidebar-item:hover {
+  background-color: #e8eee8 !important;
+  color: #152b2a !important;
+}
+
+.fx-sidebar-item:hover svg {
+  color: #152b2a !important;
+  stroke: #152b2a !important;
+}
+
+.fx-sidebar-item.active,
+.fx-sidebar-item[aria-selected="true"] {
+  background-color: #d9ebda !important;
+  color: #0f352b !important;
+  font-weight: 600 !important;
+  border-color: rgba(15, 53, 43, 0.08) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03) !important;
+}
+
+.fx-sidebar-item.active svg,
+.fx-sidebar-item[aria-selected="true"] svg {
+  color: #0f352b !important;
+  stroke: #0f352b !important;
+}
+
+.fx-sidebar-footer {
+  padding-top: 1rem !important;
+  border-top: 1px solid #dce6df !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  font-size: 0.75rem !important;
+  color: #6e857f !important;
+  margin-top: auto !important;
+}
+
+.fx-role-badge {
+  text-transform: uppercase !important;
+  font-size: 0.6875rem !important;
+  font-weight: 600 !important;
+  padding: 0.125rem 0.5rem !important;
+  border-radius: 4px !important;
+  background-color: #e8eee8 !important;
+  color: #24614a !important;
+  letter-spacing: 0.04em !important;
+}
+
+.fx-settings-content {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  padding: 2rem 2.5rem !important;
+  background-color: #f5f7f2 !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.fx-settings-main {
+  max-width: 64rem !important;
+  width: 100% !important;
+  margin: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1.5rem !important;
+}
+
+.fx-tab-header {
+  margin-bottom: 0.5rem !important;
+}
+
+.fx-tab-header h2 {
+  font-family: var(--rev-font-display), 'DM Serif Display', Georgia, serif !important;
+  font-size: 1.625rem !important;
+  font-weight: 500 !important;
+  color: #152b2a !important;
+  margin: 0 0 0.375rem 0 !important;
+  letter-spacing: -0.015em !important;
+}
+
+.fx-tab-header p {
+  font-size: 0.875rem !important;
+  color: #526a64 !important;
+  margin: 0 !important;
+}
+
+/* Tailwind utility support for non-Tailwind runtime */
+.bg-\[\#f5f7f2\] { background-color: #f5f7f2; }
+.text-\[\#152b2a\] { color: #152b2a; }
+.border-\[\#dce6df\] { border-color: #dce6df; }
+.bg-\[\#d9ebda\] { background-color: #d9ebda; }
+.text-\[\#0f352b\] { color: #0f352b; }
+.text-\[\#48635c\] { color: #48635c; }
+.text-\[\#526a64\] { color: #526a64; }
+.text-\[\#6e857f\] { color: #6e857f; }
+.text-\[\#24614a\] { color: #24614a; }
+.hover\:bg-\[\#e8eee8\]:hover { background-color: #e8eee8; }
+.hover\:text-\[\#152b2a\]:hover { color: #152b2a; }
+

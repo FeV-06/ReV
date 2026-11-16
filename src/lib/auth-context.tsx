@@ -45,15 +45,30 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [evalMode, setEvalModeState] = useState<EvalMode>('demo');
-  const [tourActive, setTourActive] = useState<boolean>(true);
+  const [tourActive, setTourActiveState] = useState<boolean>(false);
   const [initialized, setInitialized] = useState(false);
+
+  function setTourActive(active: boolean) {
+    setTourActiveState(active);
+    try {
+      if (!active) {
+        localStorage.setItem('rev_tour_seen', 'true');
+      } else {
+        localStorage.removeItem('rev_tour_seen');
+      }
+    } catch {}
+  }
 
   useEffect(() => {
     try {
       const savedMode = localStorage.getItem('rev_eval_mode') as EvalMode | null;
+      const tourSeen = localStorage.getItem('rev_tour_seen') === 'true';
+
       if (savedMode === 'demo' || savedMode === 'live') {
         setEvalModeState(savedMode);
-        setTourActive(savedMode === 'demo');
+        setTourActiveState(savedMode === 'demo' && !tourSeen);
+      } else {
+        setTourActiveState(!tourSeen);
       }
 
       // Check query parameter for automated testing / fast dev link
@@ -61,7 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const modeParam = params.get('mode');
       if (modeParam === 'live' || modeParam === 'demo') {
         setEvalModeState(modeParam);
-        setTourActive(modeParam === 'demo');
+        setTourActiveState(modeParam === 'demo' && !tourSeen);
         localStorage.setItem('rev_eval_mode', modeParam);
       }
 
@@ -98,7 +113,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   function setEvalMode(mode: EvalMode) {
     setEvalModeState(mode);
-    setTourActive(mode === 'demo');
+    const tourSeen = typeof window !== 'undefined' && localStorage.getItem('rev_tour_seen') === 'true';
+    setTourActiveState(mode === 'demo' && !tourSeen);
     try {
       localStorage.setItem('rev_eval_mode', mode);
     } catch {}
@@ -109,7 +125,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(profile);
     if (mode) {
       setEvalModeState(mode);
-      setTourActive(mode === 'demo');
+      const tourSeen = typeof window !== 'undefined' && localStorage.getItem('rev_tour_seen') === 'true';
+      setTourActiveState(mode === 'demo' && !tourSeen);
       try {
         localStorage.setItem('rev_eval_mode', mode);
       } catch {}
