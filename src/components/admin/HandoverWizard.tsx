@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { dayOneItems, generationFailurePrefix, layaNoticePrefix, sourceWarnings, suggestedAreas } from '@/lib/handover';
 import { successorEmailSchema, type Item, type Run } from '@/lib/contracts';
+import type { GenerationProgress } from '@/lib/generation-progress';
 import ContributorField from '@/components/ContributorField';
 import BusFactorHeatmap from '@/components/admin/BusFactorHeatmap';
 import ProjectDashboard from '@/components/ProjectDashboard';
@@ -46,56 +47,21 @@ function normalizeGitHubRepo(input: string): string {
   return trimmed.replace(/\.git$/i, '');
 }
 
-function LiveProcessingCard({ phase, elapsed }: { phase: string; elapsed: number }) {
+function LiveProcessingCard({ phase, progress }: { phase: string; progress: GenerationProgress | null }) {
   const isImport = phase === 'importing';
+  const labels = { collecting: 'Collecting selected evidence', triage: 'Classifying selected commit evidence', synthesis: 'Preparing draft', verification: 'Checking candidate citation excerpts' };
   return (
     <div className="m3-processing-card" role="status" aria-live="polite">
       <div className="m3-processing-header">
         <div className="m3-processing-spinner" aria-hidden="true" />
         <div>
           <h4>
-            {isImport ? 'Analyzing Public Repository & AST Symbols' : 'Synthesizing Grounded Handover with AI'}
+            {isImport ? 'Importing selected sources' : phase === 'generating' ? (progress ? labels[progress.phase] : 'Waiting for generation status') : 'Processing request'}
           </h4>
-          <span className="m3-processing-timer">Elapsed: {elapsed}s · Deep reasoning in progress</span>
+          {progress?.triage && <span className="m3-processing-timer">Laya: {progress.triage.status} · evaluated {progress.triage.evaluated} · retained {progress.triage.retained} · skipped {progress.triage.skipped} · not evaluated {progress.triage.unevaluated} commits</span>}
         </div>
       </div>
-      <div className="m3-processing-steps">
-        {isImport ? (
-          <>
-            <div className={`m3-step-line ${elapsed >= 2 ? 'done' : 'active'}`}>
-              <span className="step-bullet">{elapsed >= 2 ? <Check size={14} aria-hidden="true" /> : <Circle size={10} fill="currentColor" aria-hidden="true" />}</span>
-              <span>Connecting to public GitHub API &amp; fetching commit history</span>
-            </div>
-            <div className={`m3-step-line ${elapsed >= 8 ? 'done' : elapsed >= 2 ? 'active' : ''}`}>
-              <span className="step-bullet">{elapsed >= 8 ? <Check size={14} aria-hidden="true" /> : <Circle size={10} fill="currentColor" aria-hidden="true" />}</span>
-              <span>Running Tree-Sitter AST parser on changed files &amp; diff hunks</span>
-            </div>
-            <div className={`m3-step-line ${elapsed >= 15 ? 'active' : ''}`}>
-              <span className="step-bullet">●</span>
-              <span>Filtering code symbols &amp; mapping attribution to contributor</span>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className={`m3-step-line ${elapsed >= 4 ? 'done' : 'active'}`}>
-              <span className="step-bullet">{elapsed >= 4 ? <Check size={14} aria-hidden="true" /> : <Circle size={10} fill="currentColor" aria-hidden="true" />}</span>
-              <span>Loading audited AST code symbols &amp; commit diffs into context</span>
-            </div>
-            <div className={`m3-step-line ${elapsed >= 18 ? 'done' : elapsed >= 4 ? 'active' : ''}`}>
-              <span className="step-bullet">{elapsed >= 18 ? <Check size={14} aria-hidden="true" /> : <Circle size={10} fill="currentColor" aria-hidden="true" />}</span>
-              <span>Extracting architectural decisions, risks, and next actions</span>
-            </div>
-            <div className={`m3-step-line ${elapsed >= 35 ? 'done' : elapsed >= 18 ? 'active' : ''}`}>
-              <span className="step-bullet">{elapsed >= 35 ? <Check size={14} aria-hidden="true" /> : <Circle size={10} fill="currentColor" aria-hidden="true" />}</span>
-              <span>Enforcing mathematical substring quote verification on all citations</span>
-            </div>
-            <div className={`m3-step-line ${elapsed >= 35 ? 'active' : ''}`}>
-              <span className="step-bullet">●</span>
-              <span>Finalizing review candidate items and compiling departure interview gaps</span>
-            </div>
-          </>
-        )}
-      </div>
+
       <div className="m3-processing-reassurance">
         Check cited excerpts against their sources before approving.
       </div>
@@ -113,7 +79,7 @@ interface HandoverWizardProps {
 export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail, initialRunId }: HandoverWizardProps) {
   const { evalMode, tourActive, setTourActive, setEvalMode } = useAuth();
   const [busyPhase, setBusyPhase] = useState<'idle' | 'importing' | 'generating'>('idle');
-  const [elapsedTime, setElapsedTime] = useState(0);
+  const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [run, setRun] = useState<Run | null>(null);
   const [recipient, setRecipient] = useState('Incoming engineer');
@@ -151,19 +117,31 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    let timer: NodeJS.Timeout | undefined;
-    if (busy) {
-      setElapsedTime(0);
-      timer = setInterval(() => {
-        setElapsedTime(prev => prev + 1);
-      }, 1000);
-    } else {
-      setElapsedTime(0);
-      setBusyPhase('idle');
+    if (!run || (busyPhase !== 'generating' && run.state !== 'reconstructing')) {
+      setGenerationProgress(null);
+      return;
     }
-    return () => {
-      if (timer) clearInterval(timer);
-    };
+    let cancelled = false;
+    let observedProcessing = run.state === 'reconstructing';
+    async function poll() {
+      try {
+        const data = await api(`/api/runs/${run!.id}/progress`);
+        if (cancelled) return;
+        setGenerationProgress(data.progress ?? null);
+        if (data.state === 'reconstructing') observedProcessing = true;
+        else if (observedProcessing) {
+          const latest = await api(`/api/runs/${run!.id}`);
+          if (!cancelled) display(latest.run);
+        }
+      } catch { if (!cancelled) setGenerationProgress(null); }
+    }
+    void poll();
+    const timer = setInterval(() => void poll(), 2000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [run?.id, run?.state, busyPhase]);
+
+  useEffect(() => {
+    if (!busy) setBusyPhase('idle');
   }, [busy]);
   const [error, setError] = useState('');
   const [successorEmail, setSuccessorEmail] = useState('');
@@ -717,7 +695,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
                     Select real ReV commits, review a prepared draft, and export it. The snapshot loads locally.
                   </p>
                   {busy ? (
-                    <LiveProcessingCard phase={busyPhase} elapsed={elapsedTime} />
+                    <LiveProcessingCard phase={busyPhase} progress={generationProgress} />
                   ) : (
                     <div className="button-row" style={{ marginTop: '14px' }}>
                       <button
@@ -801,7 +779,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
               </details>
               {evalMode === 'live' && (
                 busy ? (
-                  <LiveProcessingCard phase={busyPhase} elapsed={elapsedTime} />
+                  <LiveProcessingCard phase={busyPhase} progress={generationProgress} />
                 ) : (
                   <div className="button-row" style={{ marginTop: '16px' }}>
                     <button
@@ -977,7 +955,7 @@ export default function HandoverWizard({ onBackToProjects, onSelectRunForDetail,
               </div>
 
               {busy ? (
-                <LiveProcessingCard phase={busyPhase} elapsed={elapsedTime} />
+                <LiveProcessingCard phase={busyPhase} progress={generationProgress} />
               ) : (
                 <div className="button-row">
                   <button

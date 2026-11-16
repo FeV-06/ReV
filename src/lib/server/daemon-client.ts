@@ -38,7 +38,9 @@ export async function requestDaemon(route:string,options:{method?:string;body?:u
   if(!/^\/v1(?:\/|$)/.test(route)||route.includes('?')||route.includes('#'))throw new Error('Invalid daemon route');
   const { port, token } = await resolveDaemonState();
   try {
-    return await fetch(`http://127.0.0.1:${port}${route}`,{method:options.method||'GET',headers:{authorization:`Bearer ${token}`,'content-type':'application/json',...(options.userSession?{'x-rev-user-session':options.userSession}:{})},body:options.body===undefined?undefined:JSON.stringify(options.body),cache:'no-store',signal:AbortSignal.timeout(160_000),redirect:'error'});
+    const isGeneration = /^\/v1\/runs\/[^/]+(?:\/actions)?$/.test(route) &&
+      typeof options.body === 'object' && options.body !== null && 'action' in options.body && options.body.action === 'generate';
+    return await fetch(`http://127.0.0.1:${port}${route}`,{method:options.method||'GET',headers:{authorization:`Bearer ${token}`,'content-type':'application/json',...(options.userSession?{'x-rev-user-session':options.userSession}:{})},body:options.body===undefined?undefined:JSON.stringify(options.body),cache:'no-store',signal:AbortSignal.timeout(isGeneration ? 1_500_000 : 160_000),redirect:'error'});
   } catch {throw new Error('ReV daemon is unavailable; start the local daemon first');}
 }
 export async function forwardDaemon(route:string,options:{method?:string;body?:unknown;userSession?:string}={}):Promise<Response>{

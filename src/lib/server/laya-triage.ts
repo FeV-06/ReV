@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { z } from 'zod';
 import type { Artifact } from '@/lib/contracts';
+import type { TriageStats } from '@/lib/generation-progress';
 
 const verdictsSchema = z.array(z.object({
   choice: z.enum(['cosmetic', 'retain']),
@@ -9,10 +10,8 @@ const verdictsSchema = z.array(z.object({
   truncated: z.boolean().nullish(),
 }));
 
-const importantTerms = /\b(?:security|cve|vulnerability|auth|authentication|authorization|passwords?|tokens?|permissions?|breaking|migrations?|rollback|deploy(?:ment)?|runbooks?|recovery|incidents?|schemas?|risks?|todo|follow.up|fixme|adr|rfc|decisions?|regressions?|data loss|race condition)\b/i;
+export const importantTerms = /\b(?:security|cve|vulnerabilit(?:y|ies)|auth|authentication|authorization|passwords?|tokens?|permissions?|credentials?|secrets?|encrypt(?:ion|ed)?|access[ -]control|privileges?|bypass|breaking|migrations?|rollback|deploy(?:ment)?|runbooks?|recovery|incidents?|schemas?|risks?|todo|follow.up|fixme|adr|rfc|decisions?|regressions?|data loss|race condition)\b/i;
 const routineChange = /\b(?:typos?|spelling|punctuation|format(?:ting)?|prettier|whitespace|regenerate|generated files?|cosmetic|icon spacing|no (?:logic|behavior|source) changes|dev dependency bump)\b/i;
-const reportUpdate = /\b(?:technical report|report pdf|submission pdf)\b/i;
-const reportFile = /(?:^|\/)(?:[\w.-]*technical[-_ ]report[\w.-]*|[\w.-]*submission[-_ ]report[\w.-]*)\.(?:html|pdf)$/i;
 
 function changedPath(source: Artifact) {
   if (source.paths?.length === 1) return source.paths[0];
@@ -50,7 +49,15 @@ function classify(python: string, summaries: string[]) {
 
 export async function triageDraftSources(sources: Artifact[], takeoverScope?: string) {
   const python = process.env.REV_LAYA_PYTHON?.trim();
-  if (!python) return { sources };
+  const commits = sources.filter(source => source.kind === 'git_commit' || source.kind === 'github_commit');
+  const stats = (status: TriageStats['status'], evaluated = 0, skipped = 0): TriageStats => ({
+    status, evaluated, skipped, retained: commits.length - skipped, unevaluated: commits.length - evaluated,
+  });
+  const counts = (result: TriageStats) => `Evaluated ${result.evaluated} commits; retained ${result.retained}, skipped ${result.skipped}, not evaluated ${result.unevaluated}.`;
+  if (!python) {
+    const result = stats('disabled');
+    return { sources, stats: result, notice: `Laya is not configured; all selected sources were retained. ${counts(result)}` };
+  }
 
   const related = new Map<string, Artifact[]>();
   for (const source of sources) {
@@ -61,27 +68,35 @@ export async function triageDraftSources(sources: Artifact[], takeoverScope?: st
     related.set(key, siblings);
   }
 
-  const candidates = sources.flatMap(source => {
-    if (source.kind !== 'git_commit' && source.kind !== 'github_commit') return [];
+  const candidates = commits.flatMap(source => {
     const evidence = related.get(commitKey(source)!) ?? [];
     const evidencePaths = evidence.map(changedPath);
     const paths = [...new Set([...(source.paths ?? []), ...evidencePaths.filter((file): file is string => Boolean(file))])];
-    const reportOnly = reportUpdate.test(source.text) && paths.length > 0 && paths.every(file => reportFile.test(file)) &&
-      evidence.every(change => change.kind === 'github_commit_patch' && Boolean(changedPath(change)));
     const summary = JSON.stringify({
       message: source.text.trim(),
       paths,
-      changes: reportOnly ? undefined : evidence.map(change => ({ ref: change.sourceRef, text: change.text })),
+      changes: evidence.map(change => ({ ref: change.sourceRef, text: change.text })),
       takeoverScope,
     });
     // Large changes stay in synthesis when the classifier cannot see the full evidence.
     if (!source.text.trim() || summary.length > 6_000 || source.paths?.length === 100) return [];
-    const protectedChange = importantTerms.test([source.text, ...paths,
-      ...(reportOnly ? [] : evidence.flatMap(change => [change.sourceRef, change.text]))].join('\n'));
-    const threshold = reportOnly ? 0.60 : routineChange.test(source.text) ? 0.75 : 0.95;
+    // A symbol contains a signature, not a complete behavioural diff. Never drop
+    // selected symbols (or their parent) on an uncertain cosmetic verdict.
+    const protectedChange = evidence.some(change => change.kind === 'code_symbol') ||
+      // Messages and path names alone do not establish that code or dependency
+      // changes are cosmetic. A selected patch must cover every changed path.
+      !paths.length || paths.some(file => !/\.(?:md|txt)$/i.test(file) &&
+        !evidence.some(change => change.kind === 'github_commit_patch' && changedPath(change) === file)) ||
+      importantTerms.test([
+      source.text, ...paths, ...evidence.flatMap(change => [change.sourceRef, change.text]),
+    ].join('\n'));
+    const threshold = routineChange.test(source.text) ? 0.75 : 0.95;
     return [{ source, evidence, summary, protectedChange, threshold }];
   });
-  if (!candidates.length) return { sources, notice: 'Skipped 0 commits. No selected commit summaries could be classified.' };
+  if (!candidates.length) {
+    const result = stats('no_candidates');
+    return { sources, stats: result, notice: `No selected commits could be classified; all sources were retained. ${counts(result)}` };
+  }
 
   try {
     const verdicts = await classify(python, candidates.map(candidate => candidate.summary));
@@ -97,15 +112,19 @@ export async function triageDraftSources(sources: Artifact[], takeoverScope?: st
     const omittedIds = new Set(omitted.flatMap(({ source, evidence }) => [source.id,
       ...(retainedKeys.has(commitKey(source)) ? [] : evidence.map(change => change.id))]));
     if (omittedIds.size === sources.length) {
-      return { sources, notice: `Skipped 0 of ${candidates.length} evaluated commits. Kept all selected evidence so the draft would have sources.` };
+      const result = stats('available', candidates.length);
+      return { sources, stats: result, notice: `Kept all selected evidence so the draft would have sources. ${counts(result)}` };
     }
-    const examples = omitted.slice(0, 5).map(({ source }) => `“${source.text.trim().split(/\r?\n/, 1)[0].slice(0, 120)}”`);
+    const result = stats('available', candidates.length, omitted.length);
+    const examples = omitted.slice(0, 5).map(({ source }) => `${source.sourceRef.slice(0, 120)}: “${source.text.trim().split(/\r?\n/, 1)[0].slice(0, 120)}”`);
     const summary = examples.length ? ` Skipped commits include ${examples.join(', ')}.` : '';
     return {
       sources: sources.filter(source => !omittedIds.has(source.id)),
-      notice: `Skipped ${omitted.length} of ${candidates.length} evaluated commits from draft generation.${summary}`,
+      stats: result,
+      notice: `${counts(result)} Original selected sources remain available for review.${summary}`,
     };
   } catch {
-    return { sources, notice: 'Classification unavailable. Draft generation used the selected sources.' };
+    const result = stats('unavailable');
+    return { sources, stats: result, notice: `Classification unavailable. Draft generation retained all selected sources. ${counts(result)}` };
   }
 }

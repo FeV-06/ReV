@@ -1,8 +1,11 @@
 'use client';
 
-import { Crown, Microscope, Pencil, Rocket, UserRound, Zap } from 'lucide-react';
+import { BookOpen, Crown, Microscope, Pencil, Rocket, UserRound, Zap } from 'lucide-react';
 import React, { useState } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { resolveJudgeGuideUrl } from '@/lib/judge-guide';
+
+const guideUrl = resolveJudgeGuideUrl(process.env.NEXT_PUBLIC_JUDGE_GUIDE_URL, process.env.NODE_ENV === 'development');
 
 /**
  * Technical DAG Background
@@ -247,6 +250,22 @@ export default function LoginView() {
                     </button>
                   </div>
                 </div>
+              </div>
+
+              <div className="m3-guide-wrap">
+                {guideUrl ? (
+                  <a className="m3-guide-link" href={guideUrl} target="_blank" rel="noopener noreferrer">
+                    <span><BookOpen size={16} aria-hidden="true" /> Guided walkthrough</span>
+                    <span aria-hidden="true">↗</span>
+                    <span className="m3-guide-sr"> (opens in a new tab)</span>
+                  </a>
+                ) : (
+                  <button className="m3-guide-link" type="button" disabled title="The guide URL is not configured">
+                    <span><BookOpen size={16} aria-hidden="true" /> Guided walkthrough</span>
+                    <span>Unavailable</span>
+                  </button>
+                )}
+                <p>Explore how ReV works before opening a workspace.</p>
               </div>
 
               {/* Switch to Team Credentials Form */}

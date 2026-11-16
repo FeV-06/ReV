@@ -18,6 +18,11 @@ describe('git ownership analysis on a real local repository',()=>{
    const out=JSON.parse(res.stdout);expect(out.ok).toBe(true);const modules=out.data.modules;
    const solo=modules.find((m:{path:string})=>m.path==='alice.txt');const shared=modules.find((m:{path:string})=>m.path==='shared.txt');
    expect(out.data.revision).toMatch(/^[0-9a-f]{40,64}$/);expect(out.data.warnings).toEqual([]);expect(modules.some((m:{path:string})=>m.path==='staged-not-committed.txt')).toBe(false);expect(solo.ownershipFraction).toBe(1);expect(shared.ownershipFraction).toBe(0.5);expect(solo.testCoverage).toBeNull();expect(shared.churnLines).toBeGreaterThan(0);expect(solo.explanation).toContain('not supplied');
+   expect(shared.contributors).toHaveLength(2);
+   expect(shared.contributors.map((c:{email:string;lines:number})=>[c.email,c.lines])).toEqual([['alice@example.invalid',1],['bob@example.invalid',1]]);
+   expect(shared.contributors[0].isDeparting).toBe(true);
+   expect(shared.busFactor50).toBe(1);
+   expect(solo.contributors[0].lines).toBe(2);
   } finally {await rm(dir,{recursive:true,force:true});}
  });
 });

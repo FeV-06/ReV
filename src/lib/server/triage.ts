@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Artifact } from '@/lib/contracts';
+import { importantTerms } from './laya-triage';
 
 export type TriageCategory = 'architectural_decision' | 'open_work' | 'risk' | 'cosmetic_churn' | 'other';
 
@@ -13,9 +14,8 @@ export const triageResultSchema = z.object({
 export type TriageResult = z.infer<typeof triageResultSchema>;
 
 /**
- * Fast, deterministic triage heuristics based on the verified Laya classification baseline rules.
- * Automatically identifies and prunes cosmetic churn (formatting, version bumps, typos, style-only)
- * before heavy LLM reasoning payloads are prepared.
+ * Legacy deterministic labels. They are not Laya predictions, and cannot safely
+ * establish whether a commit is cosmetic from a message and path alone.
  */
 export function triageArtifact(artifact: Pick<Artifact, 'kind' | 'text' | 'paths'>): TriageResult {
   const text = (artifact.text || '').toLowerCase();
@@ -45,7 +45,9 @@ export function triageArtifact(artifact: Pick<Artifact, 'kind' | 'text' | 'paths
     'lint fix',
   ];
 
-  if (isCosmeticPath || cosmeticKeywords.some((kw) => text.includes(kw))) {
+  if ((artifact.kind === 'git_commit' || artifact.kind === 'github_commit') &&
+      !importantTerms.test([text, ...paths].join('\n')) &&
+      (isCosmeticPath || cosmeticKeywords.some((kw) => text.includes(kw)))) {
     return {
       category: 'cosmetic_churn',
       confidence: 0.95,
@@ -138,17 +140,8 @@ export function triageArtifact(artifact: Pick<Artifact, 'kind' | 'text' | 'paths
 export function pruneCosmeticArtifacts<T extends Pick<Artifact, 'kind' | 'text' | 'paths'>>(
   artifacts: T[]
 ): { significant: T[]; pruned: { artifact: T; triage: TriageResult }[] } {
-  const significant: T[] = [];
-  const pruned: { artifact: T; triage: TriageResult }[] = [];
-
-  for (const artifact of artifacts) {
-    const triage = triageArtifact(artifact);
-    if (triage.isSignificant) {
-      significant.push(artifact);
-    } else {
-      pruned.push({ artifact, triage });
-    }
-  }
-
-  return { significant, pruned };
+  // Scope selection happens before complete change evidence is established.
+  // A lockfile or formatting message can hide a security or behaviour change.
+  // Keep all material for explicit review and optional evidence-aware Laya triage.
+  return { significant: [...artifacts], pruned: [] };
 }

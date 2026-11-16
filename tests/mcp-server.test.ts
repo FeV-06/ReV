@@ -106,12 +106,13 @@ describe('ReV MCP Server Tool Registration & Execution (Option A+)', () => {
         method: 'POST',
         body: JSON.stringify({
           action: 'scope',
-          selectedIds: ['art-arch'],
+          selectedIds: ['art-arch', 'art-chore'],
           confirmAuthorisation: true,
         }),
       })
     );
-    expect(result.content[0].text).toContain('selectedCount": 1');
+    expect(result.content[0].text).toContain('selectedCount": 2');
+    expect(result.content[0].text).toContain('All artifacts retained');
   });
 
   it('admin_generate_handover and admin_approve_handover advance run lifecycle', async () => {

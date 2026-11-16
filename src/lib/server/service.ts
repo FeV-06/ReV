@@ -13,6 +13,8 @@ import { approveRun, assertRunAuthority, compareAndUpdate, createRefreshedRun, c
 
 import { dayOneItems, generationFailurePrefix, layaNoticePrefix, sourceWarnings } from '@/lib/handover';
 import { triageDraftSources } from '@/lib/server/laya-triage';
+import { clearGenerationProgress, getGenerationProgress, setGenerationProgress } from '@/lib/server/generation-progress';
+import type { TriageStats } from '@/lib/generation-progress';
 import { buildRevDemoDraft, isRevDemo, revDemoSources } from '@/lib/server/rev-demo';
 import { slackChannelId } from '@/lib/server/slack';
 import { importLocalDocs, importLocalGit, importSlackChannels } from '@/lib/server/sources';
@@ -245,9 +247,13 @@ export async function updateAction(id: string, raw: unknown, authority?: RunAuth
     run.takeoverScope = takeoverScope;
     run.warnings = coverageWarnings;
     run.items = []; run.graphEpoch = randomUUID(); run.approvedRevision = null; run.revision++; run.state = 'reconstructing'; run.acceptedPartial = args.acceptPartial; version = await compareAndUpdate(run, version, authority);
+    setGenerationProgress(id, { phase: 'collecting' });
     try {
       const selected = run.artifacts.filter(a => args.selectedIds.includes(a.id)).map(a => artifactSchema.parse(a));
-      const { sources, notice } = args.fixture ? { sources: selected, notice: undefined } : await triageDraftSources(selected, takeoverScope);
+      const commitCount = selected.filter(source => source.kind === 'git_commit' || source.kind === 'github_commit').length;
+      setGenerationProgress(id, { phase: 'triage' });
+      const fixtureStats: TriageStats = { status: 'fixture', evaluated: 0, retained: commitCount, skipped: 0, unevaluated: commitCount };
+      const { sources, notice, stats } = args.fixture ? { sources: selected, notice: undefined, stats: fixtureStats } : await triageDraftSources(selected, takeoverScope);
       if (notice) run.warnings.push(`${layaNoticePrefix}${notice}`);
       const handoverContext = {
         githubUsername: run.githubUsername,
@@ -256,16 +262,20 @@ export async function updateAction(id: string, raw: unknown, authority?: RunAuth
         takeoverScope,
         incomingRole: run.recipient,
       };
+      setGenerationProgress(id, { phase: 'synthesis', triage: stats });
       const generatedItems = args.fixture && isRevDemo(run) ? buildRevDemoDraft(run, sources) : draftSchema.parse(await callCore({
         op: args.fixture ? 'fixture_generate' : 'generate',
         sources,
         handover: (run.departingPerson || run.githubUsername || takeoverScope) ? handoverContext : undefined,
         context: handoverContext,
-      })).items;
+      }, phase => setGenerationProgress(id, { phase, triage: stats }))).items;
       const derivationSourceIds = sources.length === selected.length ? run.selectedIds : sources.map(source => source.id);
       run.items = generatedItems.map(item => ({...item, derivationSourceIds: item.derivationSourceIds ?? [...derivationSourceIds]})); run.mode = args.fixture ? 'fixture' : 'model'; run.state = 'needs_review';
       run.graphEvents=[...(run.graphEvents||[]),...suggestEvidenceEdges(run)];
+      await compareAndUpdate(run, version, authority);
+      return publicRun(run);
     } catch (error) { run.state = 'failed'; run.warnings.push(`${generationFailurePrefix}${error instanceof Error ? error.message : 'Unknown error'}`); await compareAndUpdate(run, version, authority); throw error; }
+    finally { clearGenerationProgress(id); }
   } else if (args.action === 'save') {
     if (!['needs_review','approved'].includes(run.state)) throw new Error('Generate a draft before reviewing');
     if (args.items.length !== run.items.length || new Set(args.items.map(i => i.id)).size !== run.items.length) throw new Error('Review must contain every draft item exactly once');
@@ -381,6 +391,10 @@ export async function askHandover(id: string, raw: unknown, authority?: RunAutho
   return response;
 }
 export async function readRun(id: string, authority?: RunAuthority): Promise<Run> { if (authority) await assertRunAuthority(id, authority); return publicRun(await readRawRun(id)); }
+export async function readGenerationProgress(id: string, authority?: RunAuthority) {
+  const run = await readRun(id, authority);
+  return { state: run.state, progress: run.state === 'reconstructing' ? getGenerationProgress(id) : null };
+}
 export async function readGraph(id: string, authority?: RunAuthority) { if (authority) await assertRunAuthority(id, authority); return buildGraph(await readRawRun(id)); }
 export async function refreshRun(id:string,raw:unknown,authority?: RunAuthority):Promise<Run>{
   if (authority) await assertRunAuthority(id, authority, 'edit');

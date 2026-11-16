@@ -3075,6 +3075,31 @@ footer span { padding: 0 6px; }
   color: #5c6f66;
 }
 
+/* An explanatory guide, separate from the demo and live workspaces. */
+.m3-guide-wrap { margin-top: 16px; }
+.m3-guide-link {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border: 1px solid #b8d2c1;
+  border-radius: 999px;
+  background: #f0f7f0;
+  color: #174a3d;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-decoration: none;
+}
+.m3-guide-link > span:first-child { display: inline-flex; align-items: center; gap: 8px; }
+.m3-guide-link:not(:disabled):hover { background: #e4f0e5; border-color: #174a3d; }
+.m3-guide-link:disabled { opacity: .6; cursor: not-allowed; }
+.m3-guide-wrap p { margin: 7px 8px 0; color: #526b5f; font-size: 12px; }
+.m3-guide-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
 /* Credentials Switch & Card */
 .m3-credentials-switch-wrap {
   margin-top: 16px;

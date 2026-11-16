@@ -137,13 +137,14 @@ export function registerAdminTools(server: any, client: DaemonApiClient) {
       inputSchema: z.object({
         runId: z.string().describe('Handover run ID'),
         selectedSourceIds: z.array(z.string()).optional().describe('Array of source artifact IDs approved for inclusion (or ["*"] for all)'),
-        preset: z.enum(['all', 'non_cosmetic']).optional().describe('Smart selection preset: "all" selects every artifact; "non_cosmetic" prunes lockfile/formatting churn via Laya triage heuristics'),
+        preset: z.enum(['all', 'non_cosmetic']).optional().describe('Selection preset. Both retain all artifacts for review; non_cosmetic no longer prunes on message-only heuristics.'),
         confirmAuthorisation: z.boolean().describe('Explicit confirmation that the recipient is authorized to receive selected data'),
       }),
     },
     async (args: any) => {
       try {
         let finalIds: string[] = args.selectedSourceIds || [];
+        let presetNotice: string | undefined;
 
         // If a smart preset or wildcard is requested, inspect the run's artifacts
         if (args.preset || finalIds.includes('*') || finalIds.includes('all') || finalIds.includes('non_cosmetic')) {
@@ -153,6 +154,7 @@ export function registerAdminTools(server: any, client: DaemonApiClient) {
           if (args.preset === 'non_cosmetic' || finalIds.includes('non_cosmetic')) {
             const { significant } = pruneCosmeticArtifacts(rawArtifacts);
             finalIds = significant.map((a) => a.id);
+            presetNotice = 'All artifacts retained: message-only cosmetic heuristics cannot rule out important changes. Optional Laya triage runs during generation.';
           } else {
             // 'all' or '*'
             finalIds = rawArtifacts.map((a) => a.id);
@@ -178,6 +180,7 @@ export function registerAdminTools(server: any, client: DaemonApiClient) {
                   runId: args.runId,
                   state: res.run?.state,
                   selectedCount: finalIds.length,
+                  presetNotice,
                   message: 'Scope configured and authorized. Ready for LLM synthesis.',
                 },
                 null,

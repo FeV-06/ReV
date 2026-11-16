@@ -16,6 +16,11 @@ export const moduleRiskSchema = z.object({
   testCoverage: z.number().min(0).max(1).nullable().optional(),
   score: z.number().nonnegative(),
   explanation: z.string(),
+  contributors: z.array(z.object({
+    name: z.string(), email: z.string(), lines: z.number().int().nonnegative(),
+    ownershipFraction: z.number().min(0).max(1), isDeparting: z.boolean(),
+  })).optional(),
+  busFactor50: z.number().int().nonnegative().optional(),
 });
 
 export const riskAnalysisSchema = z.object({

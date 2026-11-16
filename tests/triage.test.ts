@@ -37,7 +37,7 @@ describe('Laya Semantic Triage & Noise Pruning (Milestone 5)', () => {
     expect(triage.isSignificant).toBe(true);
   });
 
-  it('prunes noise from a mixed collection of artifacts', () => {
+  it('retains uncertain artifacts for review instead of heuristic pruning', () => {
     const items = [
       { kind: 'git_commit' as const, text: 'fix typo in docs', paths: ['README.md'] },
       { kind: 'git_commit' as const, text: 'bump version to 0.2.0', paths: ['package.json'] },
@@ -46,9 +46,7 @@ describe('Laya Semantic Triage & Noise Pruning (Milestone 5)', () => {
     ];
 
     const { significant, pruned } = pruneCosmeticArtifacts(items);
-    expect(significant).toHaveLength(2);
-    expect(pruned).toHaveLength(2);
-    expect(significant[0].text).toContain('ADR: Migrate to Tree-sitter');
-    expect(significant[1].text).toContain('TODO: Create rollback');
+    expect(significant).toEqual(items);
+    expect(pruned).toHaveLength(0);
   });
 });

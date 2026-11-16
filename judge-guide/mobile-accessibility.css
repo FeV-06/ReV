@@ -1,0 +1,7 @@
+
+/* Small labels remain readable on the compact system map. */
+@media(max-width:700px){
+  .overline,.section-index,.panel-verb,.panel-top,.panel-bottom,.map-header,.map-caption,.map-link,.map-footer,.detail-eyebrow,.detail-label,.journey-caption,.hero-foot{font-size:11px;letter-spacing:.04em}
+  .node small,.orbit-label,.artifact-type,.artifact-ref,.artifact-proof{font-size:11px}
+  .panel-controls button{width:44px;height:44px}
+}

@@ -564,6 +564,11 @@ async fn generate_with_instructions(
             })
         });
     }
+    if mode == CandidateMode::Standard {
+        // A bounded, content-free phase marker for the parent process. stdout
+        // remains reserved for the operation result; source/model text is never logged.
+        eprintln!("REV_PROGRESS:verification");
+    }
     validate_candidates(items, sources)
 }
 

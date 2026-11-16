@@ -6,7 +6,7 @@ import { getEffectiveCoreEnv } from '@/lib/server/settings';
 const resultSchema = z.discriminatedUnion('ok', [z.object({ok: z.literal(true), data: z.unknown()}), z.object({ok: z.literal(false), error: z.string()})]);
 const providerOperations = new Set(['generate', 'prepare_interview', 'answer_successor', 'detect_divergence']);
 
-export async function callCore(op: { op: string; sources?: { text: string }[]; [key: string]: unknown }): Promise<unknown> {
+export async function callCore(op: { op: string; sources?: { text: string }[]; [key: string]: unknown }, onPhase?: (phase: 'synthesis' | 'verification') => void): Promise<unknown> {
   const env = await getEffectiveCoreEnv();
   const isOversize = (error: unknown) => error instanceof Error && [
     'Model provider returned HTTP 413',
@@ -21,7 +21,8 @@ export async function callCore(op: { op: string; sources?: { text: string }[]; [
   const formatError = 'The model could not produce a complete handover draft after retrying. Try selecting fewer sources or choosing a different model.';
   let retryingFormatError = false;
   try {
-    return await runCore(op, env);
+    onPhase?.('synthesis');
+    return await runCore(op, env, onPhase);
   } catch (error) {
     if ((!isOversize(error) && !isDraftFormatError(error)) || !providerOperations.has(op.op) || !op.sources?.length) throw error;
     retryingFormatError = isDraftFormatError(error);
@@ -42,7 +43,8 @@ export async function callCore(op: { op: string; sources?: { text: string }[]; [
     if (sources.length < minimumSources || bytes >= previousSize) continue;
     previousSize = bytes;
     try {
-      return await runCore({ ...op, sources, ...(retryingFormatError ? { compactDraft: true } : {}) }, env);
+      onPhase?.('synthesis');
+      return await runCore({ ...op, sources, ...(retryingFormatError ? { compactDraft: true } : {}) }, env, onPhase);
     } catch (error) {
       if (isDraftFormatError(error)) {
         if (retryingFormatError) throw new Error(formatError);
@@ -53,7 +55,8 @@ export async function callCore(op: { op: string; sources?: { text: string }[]; [
   if (retryingFormatError) {
     if (previousSize < Buffer.byteLength(JSON.stringify(op.sources))) throw new Error(formatError);
     try {
-      return await runCore({ ...op, compactDraft: true }, env);
+      onPhase?.('synthesis');
+      return await runCore({ ...op, compactDraft: true }, env, onPhase);
     } catch (error) {
       if (!isDraftFormatError(error) && !isOversize(error)) throw error;
       throw new Error(formatError);
@@ -62,15 +65,23 @@ export async function callCore(op: { op: string; sources?: { text: string }[]; [
   throw new Error('The model provider rejected the request size even with fewer sources. Select fewer sources or use a model endpoint that accepts larger requests.');
 }
 
-async function runCore(op: object, env: NodeJS.ProcessEnv): Promise<unknown> {
+async function runCore(op: object, env: NodeJS.ProcessEnv, onPhase?: (phase: 'synthesis' | 'verification') => void): Promise<unknown> {
   const bin = process.env.REV_CORE_BIN || path.join(process.cwd(), 'target', 'debug', 'rev-core');
   return new Promise((resolve, reject) => {
-    const child = spawn(/*turbopackIgnore: true*/ bin, [], { stdio: ['pipe', 'pipe', 'ignore'], env });
+    const child = spawn(/*turbopackIgnore: true*/ bin, [], { stdio: ['pipe', 'pipe', 'pipe'], env });
     let output = ''; let finished = false;
     const timer = setTimeout(() => { child.kill(); finish(new Error('Core operation timed out')); }, 330_000);
     function finish(error?: Error, value?: unknown) { if (finished) return; finished = true; clearTimeout(timer); if (error) reject(error); else resolve(value); }
     child.on('error', () => finish(new Error('Rust core unavailable. Run cargo build first.')));
     child.stdin.on('error', () => finish(new Error('Rust core closed its input unexpectedly')));
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk: string) => {
+      stderr += chunk;
+      const lines = stderr.split('\n');
+      stderr = (lines.pop() ?? '').slice(-256);
+      for (const line of lines) if (line === 'REV_PROGRESS:verification') onPhase?.('verification');
+    });
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => { output += chunk; if (output.length > 20_000_000) { child.kill(); finish(new Error('Core response exceeded limit')); } });
     child.on('close', (code) => {

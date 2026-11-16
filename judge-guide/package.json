@@ -1,0 +1,11 @@
+{
+  "name": "rev-judge-guide",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.16.1",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node dev.mjs"
+  }
+}

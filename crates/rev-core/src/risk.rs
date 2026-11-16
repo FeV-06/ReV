@@ -15,6 +15,18 @@ pub struct ModuleRisk {
     pub test_coverage: Option<f64>,
     pub score: f64,
     pub explanation: String,
+    pub contributors: Vec<Contributor>,
+    pub bus_factor50: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Contributor {
+    pub name: String,
+    pub email: String,
+    pub lines: usize,
+    pub ownership_fraction: f64,
+    pub is_departing: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -126,7 +138,12 @@ pub fn analyze(repo: &Path, emails: &[String], max_files: usize) -> Result<RiskA
         };
         let mut total = 0;
         let mut owned = 0;
+        let mut authors: HashMap<String, (String, usize)> = HashMap::new();
+        let mut author_name = String::new();
         for line in blame.lines() {
+            if let Some(name) = line.strip_prefix("author ") {
+                author_name = name.to_owned();
+            }
             if let Some(email) = line.strip_prefix("author-mail ") {
                 total += 1;
                 let email = email
@@ -136,6 +153,8 @@ pub fn analyze(repo: &Path, emails: &[String], max_files: usize) -> Result<RiskA
                 if normalized.contains(&email) {
                     owned += 1;
                 }
+                let entry = authors.entry(email).or_insert_with(|| (author_name.clone(), 0));
+                entry.1 += 1;
             }
         }
         if total == 0 {
@@ -143,7 +162,17 @@ pub fn analyze(repo: &Path, emails: &[String], max_files: usize) -> Result<RiskA
         }
         let recent = *churn.get(path).unwrap_or(&0);
         let value = score(owned, total, recent, None).context("Invalid score inputs")?;
-        result.push(ModuleRisk{path:path.into(),total_lines:total,departing_lines:owned,ownership_fraction:owned as f64/total as f64,churn_lines:recent,test_coverage:None,score:value,explanation:"Ownership is current HEAD blame; churn counts added/deleted lines in the last 90 days. Test coverage was not supplied and is not assumed.".into()});
+        let mut contributors: Vec<Contributor> = authors.into_iter().map(|(email, (name, lines))| Contributor {
+            is_departing: normalized.contains(&email), name, email, lines,
+            ownership_fraction: lines as f64 / total as f64,
+        }).collect();
+        contributors.sort_by(|a, b| b.lines.cmp(&a.lines).then_with(|| a.email.cmp(&b.email)));
+        let mut cumulative = 0;
+        let bus_factor50 = contributors.iter().position(|contributor| {
+            cumulative += contributor.lines;
+            cumulative * 2 >= total
+        }).map_or(0, |index| index + 1);
+        result.push(ModuleRisk{path:path.into(),total_lines:total,departing_lines:owned,ownership_fraction:owned as f64/total as f64,churn_lines:recent,test_coverage:None,score:value,explanation:"Ownership is current HEAD blame; churn counts added/deleted lines in the last 90 days. Test coverage was not supplied and is not assumed.".into(),contributors,bus_factor50});
     }
     result.sort_by(|a, b| {
         b.score
